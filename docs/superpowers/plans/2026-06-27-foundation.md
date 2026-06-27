@@ -359,7 +359,7 @@ export const STORAGE_KEYS = {
 - [ ] **Step 2: Write the failing test `src/context/ThemeContext.test.tsx`**
 
 ```tsx
-import { act, render, renderHook, screen } from '@testing-library/react'
+import { act, render, renderHook } from '@testing-library/react'
 import { ThemeProvider, useTheme } from './ThemeContext'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -395,9 +395,6 @@ function BareConsumer() {
   useTheme()
   return <div>x</div>
 }
-
-// guard against unused-import lint in this test file
-void screen
 ```
 
 - [ ] **Step 3: Run the test to verify it fails**
