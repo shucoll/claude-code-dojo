@@ -20,3 +20,27 @@
   from { opacity: 0.6; }
   to { opacity: 0.95; }
 }
+
+.intro-crawl-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  perspective: 320px;
+  -webkit-mask-image: linear-gradient(to top, transparent 0%, black 20%, black 68%, transparent 96%);
+  mask-image: linear-gradient(to top, transparent 0%, black 20%, black 68%, transparent 96%);
+}
+
+.intro-crawl {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: min(92vw, 48rem);
+  transform-origin: 50% 0%;
+  transform: translateX(-50%) rotateX(28deg);
+  animation: intro-crawl-scroll var(--intro-crawl-duration, 24s) linear forwards;
+}
+
+@keyframes intro-crawl-scroll {
+  from { top: 100%; }
+  to { top: -180%; }
+}
