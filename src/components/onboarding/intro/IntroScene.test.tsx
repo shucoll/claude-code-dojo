@@ -18,6 +18,11 @@ function renderScene() {
   )
 }
 
+test('renders the scene as a self-contained dark surface', () => {
+  const { container } = renderScene()
+  expect(container.querySelector('main')).toHaveClass('dark')
+})
+
 test('plays the crawl with Skip and Skip & Continue controls', () => {
   renderScene()
   expect(screen.getByRole('heading', { name: INTRO_CONTENT.title })).toBeInTheDocument()

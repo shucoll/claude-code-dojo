@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { curriculum } from '../../../content/curriculum'
 import { useLevel } from '../../../context/LevelContext'
@@ -19,6 +19,11 @@ export function IntroScene() {
   const { level } = useLevel()
   const reduce = useReducedMotion()
   const [phase, setPhase] = useState<Phase>(reduce ? 'done' : 'playing')
+  const continueRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (phase === 'done') continueRef.current?.focus()
+  }, [phase])
 
   const handleContinue = () => {
     setOnboarded()
@@ -27,6 +32,8 @@ export function IntroScene() {
   }
 
   return (
+    // `dark` and `bg-background` intentionally live on the same element — this
+    // scene is a self-contained dark surface; do not hoist `dark` to a wrapper.
     <motion.main
       className="dark fixed inset-0 z-[var(--z-modal)] flex flex-col overflow-hidden bg-background"
       initial={{ opacity: reduce ? 1 : 0 }}
@@ -54,7 +61,7 @@ export function IntroScene() {
             </Button>
           </>
         ) : (
-          <Button onClick={handleContinue}>Continue</Button>
+          <Button ref={continueRef} onClick={handleContinue}>Continue</Button>
         )}
       </div>
     </motion.main>
