@@ -1,0 +1,62 @@
+import { motion, useReducedMotion } from 'framer-motion'
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { curriculum } from '../../../content/curriculum'
+import { useLevel } from '../../../context/LevelContext'
+import { resolveLandingPath } from '../../../lib/landing'
+import { setOnboarded } from '../../../lib/onboarding'
+import { Button } from '../../ui/Button'
+import { Crawl } from './Crawl'
+import { Starfield } from './Starfield'
+import { StaticIntro } from './StaticIntro'
+import { INTRO_CONTENT } from './introContent'
+import './intro.css'
+
+type Phase = 'playing' | 'done'
+
+export function IntroScene() {
+  const navigate = useNavigate()
+  const { level } = useLevel()
+  const reduce = useReducedMotion()
+  const [phase, setPhase] = useState<Phase>(reduce ? 'done' : 'playing')
+
+  const handleContinue = () => {
+    setOnboarded()
+    const path = resolveLandingPath(curriculum, { onboarded: true, level, lastLesson: null }) ?? '/'
+    navigate(path, { replace: true })
+  }
+
+  return (
+    <motion.main
+      className="dark fixed inset-0 z-[var(--z-modal)] flex flex-col overflow-hidden bg-background"
+      initial={{ opacity: reduce ? 1 : 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: reduce ? 0 : 0.6, ease: 'easeInOut' }}
+    >
+      <Starfield />
+
+      <div className="relative flex flex-1 items-center justify-center">
+        {phase === 'playing' ? (
+          <Crawl content={INTRO_CONTENT} onComplete={() => setPhase('done')} />
+        ) : (
+          <StaticIntro content={INTRO_CONTENT} />
+        )}
+      </div>
+
+      <div className="relative z-20 flex justify-center gap-3 p-6">
+        {phase === 'playing' ? (
+          <>
+            <Button variant="ghost" onClick={() => setPhase('done')}>
+              Skip
+            </Button>
+            <Button variant="secondary" onClick={handleContinue}>
+              Skip &amp; Continue
+            </Button>
+          </>
+        ) : (
+          <Button onClick={handleContinue}>Continue</Button>
+        )}
+      </div>
+    </motion.main>
+  )
+}
