@@ -36,3 +36,15 @@ test('onboarded, no lastLesson, no level → global first lesson', () => {
 test('onboarded but no lessons exist → null', () => {
   expect(resolveLandingPath([], { onboarded: true, level: null, lastLesson: null })).toBeNull()
 })
+
+test('onboarded with a stale lastLesson (not in curriculum) falls through to the level first lesson', () => {
+  expect(
+    resolveLandingPath(levels, { onboarded: true, level: 'intermediate', lastLesson: '/learn/gone/x/y' }),
+  ).toBe('/learn/intermediate/workflows/slash-commands')
+})
+
+test('onboarded with a stale lastLesson and no level falls through to the global first lesson', () => {
+  expect(
+    resolveLandingPath(levels, { onboarded: true, level: null, lastLesson: '/learn/gone/x/y' }),
+  ).toBe('/learn/beginner/basics/what-is-cc')
+})

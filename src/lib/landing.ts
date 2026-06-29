@@ -9,7 +9,10 @@ export interface LandingInput {
 
 export function resolveLandingPath(levels: Level[], input: LandingInput): string | null {
   if (!input.onboarded) return '/onboarding'
-  if (input.lastLesson) return input.lastLesson
+  if (input.lastLesson) {
+    const stillExists = flattenLessons(levels).some((l) => lessonPath(l) === input.lastLesson)
+    if (stillExists) return input.lastLesson
+  }
   if (input.level) {
     const loc = flattenLessons(levels).find((l) => l.levelId === input.level)
     if (loc) return lessonPath(loc)
