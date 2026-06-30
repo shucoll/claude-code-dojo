@@ -1,5 +1,6 @@
 import type { Level } from '../content/curriculum'
-import { findLesson, firstLesson, flattenLessons, lessonPath, nextLesson } from './curriculumNav'
+import { curriculum } from '../content/curriculum'
+import { findLesson, firstLesson, flattenLessons, lessonPath, nextLesson, prevLesson } from './curriculumNav'
 
 const noop = () => Promise.resolve({ default: () => null })
 const levels: Level[] = [
@@ -35,4 +36,15 @@ test('nextLesson returns the following lesson across module/level boundaries', (
 
 test('lessonPath builds the /learn route for a location', () => {
   expect(lessonPath(flattenLessons(levels)[0])).toBe('/learn/l1/m1/a')
+})
+
+test('prevLesson returns the preceding lesson in curriculum order', () => {
+  // stub order: what-is-cc -> first-edit -> slash-commands -> subagents
+  expect(prevLesson(curriculum, 'first-edit')?.lesson.id).toBe('what-is-cc')
+  expect(prevLesson(curriculum, 'slash-commands')?.lesson.id).toBe('first-edit')
+})
+
+test('prevLesson returns undefined for the first lesson and unknown ids', () => {
+  expect(prevLesson(curriculum, 'what-is-cc')).toBeUndefined()
+  expect(prevLesson(curriculum, 'nope')).toBeUndefined()
 })
