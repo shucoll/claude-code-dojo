@@ -21,6 +21,6 @@ test('renders the node MDX (including a Snippet) inside the popup', async () => 
     </LanguageProvider>,
   )
   expect(await screen.findByRole('heading', { name: 'Bash' })).toBeInTheDocument()
-  // the bash popup embeds <Snippet id="hello-world" />, whose JS pack contains `export function add`
+  // bash.mdx embeds <Snippet id="edit-function" />; its JS pack code is `export function add(a, b)`
   expect(await screen.findByText(/export function add/)).toBeInTheDocument()
 })
