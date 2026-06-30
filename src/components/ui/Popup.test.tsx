@@ -51,3 +51,41 @@ test('restores focus to the trigger on close', async () => {
   await user.keyboard('{Escape}')
   expect(trigger).toHaveFocus()
 })
+
+test('tab cycle wraps focus through focusables', async () => {
+  const user = userEvent.setup()
+  render(
+    <Popup open onClose={() => {}} title="Title">
+      <button>one</button>
+      <button>two</button>
+    </Popup>
+  )
+
+  const dialog = screen.getByRole('dialog')
+  const closeBtn = screen.getByRole('button', { name: /close/i })
+  const buttonOne = screen.getByRole('button', { name: 'one' })
+  const buttonTwo = screen.getByRole('button', { name: 'two' })
+
+  // Dialog gets initial focus on open
+  expect(dialog).toHaveFocus()
+
+  // Tab from dialog goes to first focusable (close button)
+  await user.keyboard('{Tab}')
+  expect(closeBtn).toHaveFocus()
+
+  // Tab continues to button one
+  await user.keyboard('{Tab}')
+  expect(buttonOne).toHaveFocus()
+
+  // Tab continues to button two
+  await user.keyboard('{Tab}')
+  expect(buttonTwo).toHaveFocus()
+
+  // Tab from last wraps to first (close button)
+  await user.keyboard('{Tab}')
+  expect(closeBtn).toHaveFocus()
+
+  // Shift+Tab from first focusable wraps to last
+  await user.keyboard('{Shift>}{Tab}{/Shift}')
+  expect(buttonTwo).toHaveFocus()
+})

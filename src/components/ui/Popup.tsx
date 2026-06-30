@@ -17,7 +17,12 @@ function CloseIcon() {
 
 export function Popup({ open, onClose, title, children }: PopupProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  const onCloseRef = useRef(onClose)
   const titleId = useId()
+
+  useEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!open) return
@@ -26,7 +31,7 @@ export function Popup({ open, onClose, title, children }: PopupProps) {
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
       if (e.key !== 'Tab') return
@@ -36,7 +41,7 @@ export function Popup({ open, onClose, title, children }: PopupProps) {
       if (!focusables || focusables.length === 0) return
       const first = focusables[0]
       const last = focusables[focusables.length - 1]
-      if (e.shiftKey && document.activeElement === first) {
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) {
         e.preventDefault()
         last.focus()
       } else if (!e.shiftKey && document.activeElement === last) {
@@ -50,7 +55,7 @@ export function Popup({ open, onClose, title, children }: PopupProps) {
       document.removeEventListener('keydown', onKeyDown)
       previouslyFocused?.focus()
     }
-  }, [open, onClose])
+  }, [open])
 
   if (!open) return null
 
