@@ -1,6 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useState } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { curriculum } from '../../content/curriculum'
 import { useProgress } from '../../context/ProgressContext'
@@ -33,6 +33,7 @@ function glyphFor(isActive: boolean, completed: boolean): GlyphStatus {
 export function Sidebar() {
   const { progress, getStatus } = useProgress()
   const reduce = useReducedMotion()
+  const { pathname } = useLocation()
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(curriculum.map((level) => [level.id, true])),
   )
@@ -80,6 +81,7 @@ export function Sidebar() {
                               <li key={lesson.id}>
                                 <NavLink
                                   to={`/learn/${level.id}/${mod.id}/${lesson.id}`}
+                                  state={{ from: pathname }}
                                   className={({ isActive }) =>
                                     cn(
                                       'flex items-center gap-2 rounded-control px-2 py-1.5 text-sm',

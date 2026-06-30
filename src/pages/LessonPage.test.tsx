@@ -50,3 +50,23 @@ test('records the lesson path to ccc:lastLesson on visit', async () => {
   await screen.findByRole('heading', { name: /your first edit/i })
   expect(JSON.parse(localStorage.getItem('ccc:lastLesson')!)).toBe('/learn/beginner/basics/first-edit')
 })
+
+test('shows a Back button that returns to state.from', async () => {
+  render(
+    <ThemeProvider><LanguageProvider><ProgressProvider>
+      <MemoryRouter initialEntries={[{ pathname: '/learn/beginner/basics/first-edit', state: { from: '/learn/advanced/power/subagents' } }]}>
+        <Routes>
+          <Route path="/learn/:levelId/:moduleId/:lessonId" element={<LessonPage />} />
+        </Routes>
+      </MemoryRouter>
+    </ProgressProvider></LanguageProvider></ThemeProvider>,
+  )
+  await screen.findByRole('heading', { name: /your first edit/i })
+  expect(screen.getByRole('button', { name: /back/i })).toBeInTheDocument()
+})
+
+test('hides the Back button on the first lesson with no origin', async () => {
+  renderAt('/learn/beginner/basics/what-is-cc')
+  await screen.findByRole('heading', { name: /what is claude code/i })
+  expect(screen.queryByRole('button', { name: /back/i })).toBeNull()
+})
