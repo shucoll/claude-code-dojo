@@ -189,8 +189,8 @@ The chart will render inline with automatic spacing and card activation wired to
 
 - **Single card row:** spans full width
 - **Two–three card row:** splits horizontally; stacks to full-width on mobile
-- **Connector row:** labeled pill; arrows automatically connect above and below
-- **Arrows:** auto-generated between all consecutive rows (responsive SVG)
+- **Connector row:** labeled pill; a centered connector line is rendered between consecutive rows
+- **Arrows:** simple centered connectors between consecutive rows (not SVG edge-routing)
 - **Reduced motion:** respects prefers-reduced-motion; disables animations
 
 ## Example: Full Chart
@@ -259,4 +259,4 @@ Then register in `index.ts` and embed with `<ChartEmbed id="levels" />`.
 
 ## Future: React Flow
 
-This card-flow renderer supports DAGs (directed acyclic graphs) of cards and connectors with automatic arrow routing. Genuinely graph-shaped charts—those with loops, multiple edges between nodes, or edge labels—are planned as a future React Flow renderer behind the same `ChartDef` contract and will not be supported by this card-flow implementation.
+This card-flow renderer is a linear vertical stack of rows with simple connectors. Genuinely graph-shaped charts—those with loops, multiple edges between nodes, or edge labels—are planned as a future React Flow renderer behind the same `ChartDef` contract and will not be supported by this linear stack implementation.

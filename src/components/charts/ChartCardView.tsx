@@ -32,7 +32,7 @@ export function ChartCardView({ card, onActivate }: ChartCardViewProps) {
     </>
   )
 
-  const surface = cn('block w-full rounded-card border-2 border-ink p-4 text-left shadow-hard', tone.surface)
+  const surface = cn('block w-full rounded-card border-2 p-4 text-left shadow-hard', tone.surface)
   const entrance = {
     initial: reduce ? false : { opacity: 0 },
     animate: { opacity: 1 },
@@ -41,7 +41,7 @@ export function ChartCardView({ card, onActivate }: ChartCardViewProps) {
 
   if (!interactive) {
     return (
-      <motion.div aria-hidden="true" className={surface} {...entrance}>
+      <motion.div className={surface} {...entrance}>
         {body}
       </motion.div>
     )
