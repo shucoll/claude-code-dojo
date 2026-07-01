@@ -31,6 +31,11 @@ Intermediate/Advanced pathways. Pure frontend, no backend.
 - All language-specific content lives in `src/content/snippets/*` (one file per
   language) and resolves with fallback to the default pack (JavaScript).
 
+## Adding a chart
+Charts are card-flow stacks (`src/content/charts/`), embedded in lessons via
+`<ChartEmbed id="…" />`. To add one: define a `ChartDef`, register it in
+`index.ts`, and embed it. Full guide: `src/content/charts/README.md`.
+
 ## Commands
 - `npm run dev` — dev server
 - `npm run build` — type-check + bundle

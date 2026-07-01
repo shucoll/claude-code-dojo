@@ -42,3 +42,9 @@ export function nextLesson(levels: Level[], lessonId: string): LessonLocation | 
   const idx = all.findIndex((l) => l.lesson.id === lessonId)
   return idx >= 0 ? all[idx + 1] : undefined
 }
+
+export function prevLesson(levels: Level[], lessonId: string): LessonLocation | undefined {
+  const all = flattenLessons(levels)
+  const idx = all.findIndex((l) => l.lesson.id === lessonId)
+  return idx > 0 ? all[idx - 1] : undefined
+}
