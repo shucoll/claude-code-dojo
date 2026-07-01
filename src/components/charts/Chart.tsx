@@ -1,93 +1,59 @@
-import { motion, useReducedMotion } from 'framer-motion'
-import type { KeyboardEvent } from 'react'
-import type { ChartDef, ChartNode } from '../../content/charts/types'
+import { cn } from '../../lib/cn'
+import type { ChartCard, ChartDef } from '../../content/charts/types'
+import { ChartCardView } from './ChartCardView'
 
-const NODE_W = 26
-const NODE_H = 14
+const COLS: Record<number, string> = {
+  1: 'sm:grid-cols-1',
+  2: 'sm:grid-cols-2',
+  3: 'sm:grid-cols-3',
+}
+
+function DownArrow() {
+  return (
+    <div data-testid="chart-arrow" className="flex justify-center py-2" aria-hidden="true">
+      <svg viewBox="0 0 16 16" className="h-5 w-5 text-muted-foreground" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 3v10M4 9l4 4 4-4" />
+      </svg>
+    </div>
+  )
+}
 
 interface ChartProps {
   def: ChartDef
-  onActivate: (node: ChartNode) => void
+  onActivate: (card: ChartCard) => void
 }
 
 export function Chart({ def, onActivate }: ChartProps) {
-  const reduce = useReducedMotion()
-  const byId = Object.fromEntries(def.nodes.map((n) => [n.id, n]))
-
-  function handleKeyDown(e: KeyboardEvent<SVGGElement>, node: ChartNode) {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onActivate(node)
-    }
-  }
-
   return (
-    <svg
-      viewBox="0 0 100 92"
-      role="group"
-      aria-label={def.title ?? 'Diagram'}
-      className="h-auto w-full max-w-xl"
-    >
-      {def.edges.map((edge, i) => {
-        const from = byId[edge.from]
-        const to = byId[edge.to]
-        if (!from || !to) return null
-        return (
-          <line
-            key={i}
-            x1={from.x}
-            y1={from.y}
-            x2={to.x}
-            y2={to.y}
-            className="stroke-border"
-            strokeWidth={0.8}
-          />
-        )
-      })}
+    <div role="group" aria-label={def.title ?? 'Diagram'} className="w-full max-w-2xl">
+      {(def.title || def.subtitle) && (
+        <header className="mb-6 text-center">
+          {def.title && <h2 className="font-mono text-xl font-bold text-foreground">{def.title}</h2>}
+          {def.subtitle && <p className="mt-1 text-sm text-muted-foreground">{def.subtitle}</p>}
+        </header>
+      )}
 
-      {def.nodes.map((node, i) => {
-        const interactive = node.target !== undefined
-        const x = node.x - NODE_W / 2
-        const y = node.y - NODE_H / 2
-        return (
-          <motion.g
-            key={node.id}
-            initial={reduce ? false : { opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: reduce ? 0 : 0.3, delay: reduce ? 0 : i * 0.08, ease: [0.16, 1, 0.3, 1] }}
-            {...(interactive
-              ? {
-                  role: 'button',
-                  tabIndex: 0,
-                  'aria-label': node.label,
-                  onClick: () => onActivate(node),
-                  onKeyDown: (e: KeyboardEvent<SVGGElement>) => handleKeyDown(e, node),
-                  className: 'cursor-pointer outline-none [&:hover_rect]:fill-accent-soft [&:focus-visible_rect]:fill-accent-soft',
-                }
-              : { 'aria-hidden': true })}
-          >
-            <rect
-              x={x}
-              y={y}
-              width={NODE_W}
-              height={NODE_H}
-              rx={2}
-              className={interactive ? 'fill-card stroke-ink' : 'fill-muted stroke-border'}
-              strokeWidth={1}
-            />
-            <text
-              x={node.x}
-              y={node.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              className="fill-foreground font-mono"
-              fontSize={5}
+      {def.rows.map((row, i) => (
+        <div key={i}>
+          {i > 0 && <DownArrow />}
+          {row.kind === 'connector' ? (
+            <div className="flex justify-center">
+              <div className="rounded-pill border-2 border-border bg-muted px-4 py-1.5 text-sm text-muted-foreground">
+                {row.label}
+              </div>
+            </div>
+          ) : (
+            <div
+              data-testid="chart-cards-row"
+              className={cn('grid grid-cols-1 gap-4', COLS[row.cards.length] ?? 'sm:grid-cols-1')}
             >
-              {node.label}
-            </text>
-          </motion.g>
-        )
-      })}
-    </svg>
+              {row.cards.map((card) => (
+                <ChartCardView key={card.id} card={card} onActivate={onActivate} />
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
   )
 }

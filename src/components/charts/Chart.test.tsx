@@ -1,40 +1,38 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { Chart } from './Chart'
 import type { ChartDef } from '../../content/charts/types'
 
 const def: ChartDef = {
   id: 't',
-  nodes: [
-    { id: 'a', label: 'A', x: 30, y: 20, target: { kind: 'popup', content: () => Promise.resolve({ default: () => null }) } },
-    { id: 'b', label: 'B', x: 70, y: 80 }, // targetless
+  title: 'Demo',
+  rows: [
+    { kind: 'cards', cards: [{ id: 'a', title: 'Solo' }] },
+    { kind: 'cards', cards: [
+      { id: 'b', title: 'Left', target: { kind: 'popup', content: () => Promise.resolve({ default: () => null }) } },
+      { id: 'c', title: 'Right' },
+    ] },
+    { kind: 'connector', label: 'unlock: next' },
   ],
-  edges: [{ from: 'a', to: 'b' }],
 }
 
-test('renders one control per interactive node and one line per edge', () => {
-  const { container } = render(<Chart def={def} onActivate={() => {}} />)
-  expect(screen.getByRole('button', { name: 'A' })).toBeInTheDocument()
-  expect(container.querySelectorAll('line')).toHaveLength(1)
-})
-
-test('a targetless node is inert (no button, not focusable)', () => {
+test('renders the header and every card + connector', () => {
   render(<Chart def={def} onActivate={() => {}} />)
-  expect(screen.queryByRole('button', { name: 'B' })).toBeNull()
-  expect(screen.getByText('B').closest('[tabindex]')).toBeNull()
+  expect(screen.getByRole('heading', { name: 'Demo' })).toBeInTheDocument()
+  expect(screen.getByText('Solo')).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Left' })).toBeInTheDocument()
+  expect(screen.getByText('Right')).toBeInTheDocument()
+  expect(screen.getByText('unlock: next')).toBeInTheDocument()
 })
 
-test('fires onActivate on click and on Enter/Space', async () => {
-  const user = userEvent.setup()
-  const onActivate = vi.fn()
-  render(<Chart def={def} onActivate={onActivate} />)
-  const node = screen.getByRole('button', { name: 'A' })
+test('a 1-card row is full-width and a 2-card row splits on sm+', () => {
+  const { container } = render(<Chart def={def} onActivate={() => {}} />)
+  const grids = container.querySelectorAll('[data-testid="chart-cards-row"]')
+  expect(grids[0].className).toContain('sm:grid-cols-1')
+  expect(grids[1].className).toContain('sm:grid-cols-2')
+})
 
-  await user.click(node)
-  expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }))
-
-  node.focus()
-  await user.keyboard('{Enter}')
-  await user.keyboard(' ')
-  expect(onActivate).toHaveBeenCalledTimes(3)
+test('renders one arrow between each pair of consecutive rows', () => {
+  const { container } = render(<Chart def={def} onActivate={() => {}} />)
+  // 3 rows => 2 gaps => 2 arrows
+  expect(container.querySelectorAll('[data-testid="chart-arrow"]')).toHaveLength(2)
 })
