@@ -17,8 +17,8 @@ function renderAt(entry: { pathname: string; state?: unknown }) {
 }
 
 test('prefers state.from when present', () => {
-  renderAt({ pathname: '/learn/beginner/basics/first-edit', state: { from: '/learn/advanced/power/subagents#chart-loop' } })
-  expect(screen.getByTestId('back')).toHaveTextContent('/learn/advanced/power/subagents#chart-loop')
+  renderAt({ pathname: '/learn/beginner/basics/first-edit', state: { from: '/learn/advanced/power/subagents#chart-demo' } })
+  expect(screen.getByTestId('back')).toHaveTextContent('/learn/advanced/power/subagents#chart-demo')
 })
 
 test('falls back to the previous curriculum lesson', () => {

@@ -71,15 +71,15 @@ test('hides the Back button on the first lesson with no origin', async () => {
   expect(screen.queryByRole('button', { name: /back/i })).toBeNull()
 })
 
-test('scroll-restore fires on #chart-loop anchor after lazy MDX mounts', async () => {
+test('scroll-restore fires on #chart-demo anchor after lazy MDX mounts', async () => {
   const original = Element.prototype.scrollIntoView
   const scrollSpy = vi.fn()
   Element.prototype.scrollIntoView = scrollSpy
   try {
-    renderAt('/learn/advanced/power/subagents#chart-loop')
-    // Wait for the lazy MDX + chart to mount — the Edit node is an interactive button
-    await screen.findByRole('button', { name: 'Edit' })
-    // The rAF poll should have found #chart-loop and called scrollIntoView
+    renderAt('/learn/advanced/power/subagents#chart-demo')
+    // Wait for the lazy MDX + chart to mount — the Beginner card is an interactive button
+    expect(await screen.findByRole('button', { name: 'Beginner' })).toBeInTheDocument()
+    // The rAF poll should have found #chart-demo and called scrollIntoView
     await waitFor(() => expect(scrollSpy).toHaveBeenCalled())
   } finally {
     Element.prototype.scrollIntoView = original

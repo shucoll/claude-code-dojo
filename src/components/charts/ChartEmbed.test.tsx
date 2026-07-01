@@ -29,23 +29,23 @@ test('renders nothing for an unknown chart id', () => {
 })
 
 test('exposes the scroll anchor id', () => {
-  const { container } = renderEmbed('loop')
-  expect(container.querySelector('#chart-loop')).not.toBeNull()
+  const { container } = renderEmbed('demo')
+  expect(container.querySelector('#chart-demo')).not.toBeNull()
 })
 
-test('a lesson node navigates with state.from set to the anchor', async () => {
+test('a lesson card navigates with state.from set to the anchor', async () => {
   const user = userEvent.setup()
-  renderEmbed('loop')
-  await user.click(screen.getByRole('button', { name: 'Edit' }))
+  renderEmbed('demo')
+  await user.click(screen.getByRole('button', { name: 'Beginner' }))
   const loc = screen.getByTestId('loc').textContent ?? ''
   expect(loc).toContain('/learn/beginner/basics/first-edit')
-  expect(loc).toContain('/learn/advanced/power/subagents#chart-loop')
+  expect(loc).toContain('/learn/advanced/power/subagents#chart-demo')
 })
 
-test('a popup node opens the modal instead of navigating', async () => {
+test('a popup card opens the modal instead of navigating', async () => {
   const user = userEvent.setup()
-  renderEmbed('loop')
-  await user.click(screen.getByRole('button', { name: 'Prompt' }))
-  expect(await screen.findByRole('dialog')).toHaveAccessibleName('Prompt')
+  renderEmbed('demo')
+  await user.click(screen.getByRole('button', { name: 'Bash' }))
+  expect(await screen.findByRole('dialog')).toHaveAccessibleName('Bash')
   expect(screen.getByTestId('loc').textContent).toContain('/learn/advanced/power/subagents')
 })
