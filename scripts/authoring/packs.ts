@@ -1,14 +1,7 @@
 import { Node, SyntaxKind } from 'ts-morph'
 import type { ObjectLiteralExpression, SourceFile } from 'ts-morph'
 import { STUB } from './paths.ts'
-
-function sq(value: string): string {
-  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
-}
-
-function unquote(name: string): string {
-  return name.replace(/^['"]|['"]$/g, '')
-}
+import { sq, unquote } from './tsutil.ts'
 
 function packObject(sf: SourceFile): ObjectLiteralExpression {
   const decl = sf.getVariableDeclarations().find((d) => d.getTypeNode()?.getText() === 'LanguagePack')

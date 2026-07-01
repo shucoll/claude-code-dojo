@@ -1,10 +1,6 @@
 import { Node, SyntaxKind } from 'ts-morph'
 import type { ArrayLiteralExpression, ObjectLiteralExpression, SourceFile } from 'ts-morph'
-
-/** Single-quoted, escaped string literal text for insertion. */
-function sq(value: string): string {
-  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
-}
+import { sq } from './tsutil.ts'
 
 function getStringProp(obj: ObjectLiteralExpression, name: string): string | undefined {
   const prop = obj.getProperty(name)

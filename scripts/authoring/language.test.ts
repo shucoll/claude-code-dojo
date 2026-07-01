@@ -4,8 +4,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { scaffoldLanguage } from './language.ts'
 
+const tmpDirs: string[] = []
+
+afterEach(() => {
+  for (const d of tmpDirs.splice(0)) fs.rmSync(d, { recursive: true, force: true })
+})
+
 function seedSnippets(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccc-'))
+  tmpDirs.push(dir)
   fs.mkdirSync(path.join(dir, 'snippets'), { recursive: true })
   fs.writeFileSync(
     path.join(dir, 'snippets/index.ts'),
@@ -46,4 +53,11 @@ test('scaffoldLanguage refuses to overwrite an existing pack', () => {
 test('scaffoldLanguage rejects a non-identifier id', () => {
   const dir = seedSnippets()
   expect(() => scaffoldLanguage({ id: 'c++', label: 'C++' }, dir)).toThrow(/identifier/)
+})
+
+test('scaffoldLanguage escapes apostrophes in the label', () => {
+  const dir = seedSnippets()
+  scaffoldLanguage({ id: 'shell', label: "Bash (Node's shell)" }, dir)
+  const pack = fs.readFileSync(path.join(dir, 'snippets/shell.ts'), 'utf8')
+  expect(pack).toContain("label: 'Bash (Node\\'s shell)'")
 })
