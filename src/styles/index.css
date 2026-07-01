@@ -82,6 +82,15 @@
 
   --destructive: var(--ccc-red-600);
   --destructive-foreground: #ffffff;
+
+  /* Chart tone palette — chart-scoped exception (documented). Not for general UI.
+     Success-green is intentionally excluded; charts use `teal`. */
+  --chart-neutral-bg: #f1f5f9; --chart-neutral-border: #cbd5e1; --chart-neutral-text: #334155;
+  --chart-blue-bg:    #dbeafe; --chart-blue-border:    #93c5fd; --chart-blue-text:    #1d4ed8;
+  --chart-violet-bg:  #ede9fe; --chart-violet-border:  #c4b5fd; --chart-violet-text:  #6d28d9;
+  --chart-amber-bg:   #fef3c7; --chart-amber-border:   #fcd34d; --chart-amber-text:   #b45309;
+  --chart-rose-bg:    #ffe4e6; --chart-rose-border:    #fda4af; --chart-rose-text:    #be123c;
+  --chart-teal-bg:    #ccfbf1; --chart-teal-border:    #5eead4; --chart-teal-text:    #0f766e;
 }
 
 /* ── 3. Semantic tokens — DARK (override) ─────────────────────────────────*/
@@ -122,6 +131,14 @@
 
   --destructive: var(--ccc-red-500);
   --destructive-foreground: var(--ccc-slate-900);
+
+  /* Chart tone palette — dark. Deep muted fills with lighter heading text. */
+  --chart-neutral-bg: #1e293b; --chart-neutral-border: #334155; --chart-neutral-text: #e2e8f0;
+  --chart-blue-bg:    #172554; --chart-blue-border:    #1e40af; --chart-blue-text:    #93c5fd;
+  --chart-violet-bg:  #2e1065; --chart-violet-border:  #5b21b6; --chart-violet-text:  #c4b5fd;
+  --chart-amber-bg:   #451a03; --chart-amber-border:   #92400e; --chart-amber-text:   #fcd34d;
+  --chart-rose-bg:    #4c0519; --chart-rose-border:    #9f1239; --chart-rose-text:    #fda4af;
+  --chart-teal-bg:    #042f2e; --chart-teal-border:    #115e59; --chart-teal-text:    #5eead4;
 }
 
 /* ── 4. Map semantic tokens → Tailwind utilities (react to .dark) ─────────*/
@@ -149,6 +166,24 @@
   --color-success-foreground: var(--success-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-chart-neutral-bg: var(--chart-neutral-bg);
+  --color-chart-neutral-border: var(--chart-neutral-border);
+  --color-chart-neutral-text: var(--chart-neutral-text);
+  --color-chart-blue-bg: var(--chart-blue-bg);
+  --color-chart-blue-border: var(--chart-blue-border);
+  --color-chart-blue-text: var(--chart-blue-text);
+  --color-chart-violet-bg: var(--chart-violet-bg);
+  --color-chart-violet-border: var(--chart-violet-border);
+  --color-chart-violet-text: var(--chart-violet-text);
+  --color-chart-amber-bg: var(--chart-amber-bg);
+  --color-chart-amber-border: var(--chart-amber-border);
+  --color-chart-amber-text: var(--chart-amber-text);
+  --color-chart-rose-bg: var(--chart-rose-bg);
+  --color-chart-rose-border: var(--chart-rose-border);
+  --color-chart-rose-text: var(--chart-rose-text);
+  --color-chart-teal-bg: var(--chart-teal-bg);
+  --color-chart-teal-border: var(--chart-teal-border);
+  --color-chart-teal-text: var(--chart-teal-text);
 
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Menlo", monospace;
