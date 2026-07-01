@@ -26,6 +26,7 @@ test('ensureLevel appends a new level with an empty modules array', () => {
   ensureLevel(sf, { id: 'advanced', title: 'Advanced' })
   expect(sf.getFullText()).toContain("id: 'advanced'")
   expect(sf.getFullText()).toContain("title: 'Advanced'")
+  expect(sf.getFullText()).toContain('modules: []')
 })
 
 test('ensureModule appends a new module under the level', () => {
@@ -33,6 +34,14 @@ test('ensureModule appends a new module under the level', () => {
   const level = ensureLevel(sf, { id: 'beginner', title: 'Beginner' })
   ensureModule(level, { id: 'workflows', title: 'Workflows' })
   expect(sf.getFullText()).toContain("id: 'workflows'")
+})
+
+test('ensureModule is idempotent for an existing module id', () => {
+  const sf = seed()
+  const level = ensureLevel(sf, { id: 'beginner', title: 'Beginner' })
+  ensureModule(level, { id: 'basics', title: 'The Basics' })
+  ensureModule(level, { id: 'basics', title: 'The Basics' })
+  expect((sf.getFullText().match(/id: 'basics'/g) ?? []).length).toBe(1)
 })
 
 test('addLesson inserts a well-formed entry and is idempotent', () => {
@@ -45,4 +54,12 @@ test('addLesson inserts a well-formed entry and is idempotent', () => {
   expect(again).toBe(false)
   expect(sf.getFullText()).toContain("id: 'first-edit'")
   expect(sf.getFullText()).toContain("import('./lessons/beginner/first-edit.mdx')")
+})
+
+test('sq escapes single quotes in titles and stays idempotent', () => {
+  const sf = seed()
+  ensureLevel(sf, { id: 'ext', title: "Claude's Basics" })
+  ensureLevel(sf, { id: 'ext', title: "Claude's Basics" })
+  expect((sf.getFullText().match(/id: 'ext'/g) ?? []).length).toBe(1)
+  expect(sf.getFullText()).toContain("Claude\\'s Basics")
 })
