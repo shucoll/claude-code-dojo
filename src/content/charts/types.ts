@@ -13,24 +13,26 @@ export type ChartTarget =
 
 export type PopupTarget = Extract<ChartTarget, { kind: 'popup' }>
 
-export interface ChartNode {
+export type ChartTone = 'neutral' | 'blue' | 'violet' | 'amber' | 'rose' | 'teal'
+
+export interface ChartCard {
   id: string
-  label: string
-  /** Position in a normalized 0–100 viewBox space. */
-  x: number
-  y: number
-  /** Omitted => a plain, non-interactive node. */
+  title: string
+  /** Muted description lines, e.g. "operator · the turn". */
+  lines?: string[]
+  /** Defaults to 'neutral'. */
+  tone?: ChartTone
+  /** Omitted => a plain, non-interactive card. */
   target?: ChartTarget
 }
 
-export interface ChartEdge {
-  from: string
-  to: string
-}
+export type ChartRow =
+  | { kind: 'cards'; cards: ChartCard[] }
+  | { kind: 'connector'; label: string }
 
 export interface ChartDef {
   id: string
   title?: string
-  nodes: ChartNode[]
-  edges: ChartEdge[]
+  subtitle?: string
+  rows: ChartRow[]
 }
