@@ -36,6 +36,17 @@ Charts are card-flow stacks (`src/content/charts/`), embedded in lessons via
 `<ChartEmbed id="…" />`. To add one: define a `ChartDef`, register it in
 `index.ts`, and embed it. Full guide: `src/content/charts/README.md`.
 
+## Adding lessons & languages
+Authoring is script-backed (`scripts/authoring/`, run via `tsx`) and wrapped by skills:
+- **Add a lesson / module / level:** use the `new-lesson` skill (`cli.ts lesson` or
+  `cli.ts outline`). Stubs new snippet/prompt keys in the default pack only; other packs
+  fall back.
+- **Add a language:** use the `new-language` skill (`cli.ts language`) — creates an empty
+  pack; existing lessons fall back to the default until translated.
+- **Check coverage:** `npm run check-snippets` (also a CI gate and the `/check-snippets`
+  command). Tiered: a reference missing from the default pack fails; non-default gaps and
+  leftover `@@TODO@@` stubs warn.
+
 ## Commands
 - `npm run dev` — dev server
 - `npm run build` — type-check + bundle
