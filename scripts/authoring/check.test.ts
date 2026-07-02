@@ -62,6 +62,16 @@ test('a key missing from a non-default pack is a warning, not an error', () => {
   expect(warnings.some((w) => w.includes('python') && w.includes('edit-function'))).toBe(true)
 })
 
+test('references inside code fences or inline code are ignored (no false-positive ERROR)', () => {
+  const dir = seedContent()
+  fs.writeFileSync(
+    path.join(dir, 'lessons/beginner/e.mdx'),
+    '# E\n\nInline `<Snippet id="doc-only" />` and:\n\n```mdx\n<Snippet id="fenced-only" />\n<TryPrompt id="fenced-prompt" />\n```\n',
+  )
+  const { errors } = checkSnippets(dir)
+  expect(errors).toEqual([])
+})
+
 test('a leftover STUB value is a warning', () => {
   const dir = seedContent()
   fs.writeFileSync(

@@ -31,6 +31,8 @@ function scanLessonRefs(dir: string): { snippets: Set<string>; prompts: Set<stri
   for (const file of walk(dir)) {
     if (!file.endsWith('.mdx')) continue
     const text = fs.readFileSync(file, 'utf8')
+      .replace(/```[\s\S]*?```/g, '') // fenced code blocks
+      .replace(/`[^`]*`/g, '')        // inline code spans
     for (const m of text.matchAll(/<Snippet\s+id=["']([^"']+)["']/g)) snippets.add(m[1])
     for (const m of text.matchAll(/<TryPrompt\s+id=["']([^"']+)["']/g)) prompts.add(m[1])
   }
