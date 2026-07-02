@@ -22,9 +22,18 @@ export function formatAndSave(sf: SourceFile): void {
   sf.saveSync()
 }
 
-/** Single-quoted, escaped string-literal text for insertion into generated TS. */
+/**
+ * Single-quoted, escaped string-literal text for insertion into generated TS.
+ * Escapes backslashes, single quotes, and newlines so the emitted literal is
+ * always syntactically valid, even for multi-line input.
+ */
 export function sq(value: string): string {
-  return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
+  const escaped = value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+  return `'${escaped}'`
 }
 
 /** Strip a single layer of surrounding straight quotes from a property name. */

@@ -55,6 +55,13 @@ test('scaffoldLanguage rejects a non-identifier id', () => {
   expect(() => scaffoldLanguage({ id: 'c++', label: 'C++' }, dir)).toThrow(/identifier/)
 })
 
+test('scaffoldLanguage rejects reserved words and unsafe property names', () => {
+  const dir = seedSnippets()
+  // pass the identifier regex but would generate invalid TS / pollute LANGUAGE_PACKS
+  expect(() => scaffoldLanguage({ id: 'class', label: 'Class' }, dir)).toThrow(/identifier/)
+  expect(() => scaffoldLanguage({ id: '__proto__', label: 'Proto' }, dir)).toThrow(/identifier/)
+})
+
 test('scaffoldLanguage escapes apostrophes in the label', () => {
   const dir = seedSnippets()
   scaffoldLanguage({ id: 'shell', label: "Bash (Node's shell)" }, dir)

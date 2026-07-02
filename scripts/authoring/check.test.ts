@@ -72,6 +72,29 @@ test('references inside code fences or inline code are ignored (no false-positiv
   expect(errors).toEqual([])
 })
 
+test('output ordering is deterministic — packs are reported in sorted id order', () => {
+  const dir = seedContent() // default javascript has edit-function + refactor; python is empty
+  // a second non-default pack whose id sorts before "python"
+  fs.writeFileSync(
+    path.join(dir, 'snippets/aardvark.ts'),
+    `import type { LanguagePack } from '../types'
+
+const aardvark: LanguagePack = {
+  meta: { id: 'aardvark', label: 'Aardvark' },
+  snippets: {},
+  prompts: {},
+}
+
+export default aardvark
+`,
+  )
+  const { warnings } = checkSnippets(dir)
+  const firstAardvark = warnings.findIndex((w) => w.startsWith('aardvark:'))
+  const firstPython = warnings.findIndex((w) => w.startsWith('python:'))
+  expect(firstAardvark).toBeGreaterThanOrEqual(0)
+  expect(firstPython).toBeGreaterThan(firstAardvark)
+})
+
 test('a leftover STUB value is a warning', () => {
   const dir = seedContent()
   fs.writeFileSync(

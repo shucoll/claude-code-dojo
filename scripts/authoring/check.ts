@@ -14,11 +14,14 @@ function listPackIds(contentDir: string): string[] {
     .readdirSync(snippetsDir(contentDir))
     .filter((f) => f.endsWith('.ts') && !f.startsWith('index.') && !f.endsWith('.test.ts'))
     .map((f) => f.replace(/\.ts$/, ''))
+    .sort()
 }
 
 function* walk(dir: string): Generator<string> {
   if (!fs.existsSync(dir)) return
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+  // Sort so output ordering doesn't depend on filesystem iteration order.
+  const entries = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
+  for (const entry of entries) {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) yield* walk(full)
     else yield full
@@ -50,10 +53,10 @@ export function checkSnippets(contentDir: string = DEFAULT_CONTENT_DIR): CheckRe
   if (!def) throw new Error(`default pack "${DEFAULT_LANGUAGE}" not found`)
 
   const refs = scanLessonRefs(lessonsDir(contentDir))
-  for (const id of refs.snippets) {
+  for (const id of [...refs.snippets].sort()) {
     if (!(id in def.snippets)) errors.push(`Snippet id "${id}" is referenced in a lesson but missing from the default pack (${DEFAULT_LANGUAGE}).`)
   }
-  for (const id of refs.prompts) {
+  for (const id of [...refs.prompts].sort()) {
     if (!(id in def.prompts)) errors.push(`Prompt id "${id}" is referenced in a lesson but missing from the default pack (${DEFAULT_LANGUAGE}).`)
   }
 
