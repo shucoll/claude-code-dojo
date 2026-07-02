@@ -93,3 +93,52 @@ test('re-scaffolding an existing lesson preserves authored .mdx content', () => 
   scaffoldLesson(spec, dir)
   expect(fs.readFileSync(file, 'utf8')).toBe('# Hand-authored\n\nCustom prose.\n')
 })
+
+test('an inserted lesson matches sibling indentation and carries a trailing comma', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccc-'))
+  tmpDirs.push(dir)
+  fs.mkdirSync(path.join(dir, 'lessons/beginner'), { recursive: true })
+  fs.mkdirSync(path.join(dir, 'snippets'), { recursive: true })
+  fs.writeFileSync(
+    path.join(dir, 'curriculum.ts'),
+    `export const curriculum = [
+  {
+    id: 'beginner',
+    title: 'Beginner',
+    modules: [
+      {
+        id: 'basics',
+        title: 'The Basics',
+        lessons: [
+          { id: 'what-is-cc', title: 'What is Claude Code?', content: () => import('./lessons/beginner/what-is-cc.mdx') },
+        ],
+      },
+    ],
+  },
+]
+`,
+  )
+  fs.writeFileSync(
+    path.join(dir, 'snippets/javascript.ts'),
+    `import type { LanguagePack } from '../types'
+
+const javascript: LanguagePack = {
+  meta: { id: 'javascript', label: 'JavaScript' },
+  snippets: {},
+  prompts: {},
+}
+
+export default javascript
+`,
+  )
+  scaffoldLesson(
+    { level: { id: 'beginner', title: 'Beginner' }, module: { id: 'basics', title: 'The Basics' }, id: 'first-edit', title: 'Your First Edit' },
+    dir,
+  )
+  const lines = fs.readFileSync(path.join(dir, 'curriculum.ts'), 'utf8').split('\n')
+  const indentOf = (needle: string) => ((lines.find((l) => l.includes(needle)) ?? '').match(/^ */) ?? [''])[0]
+  const inserted = lines.find((l) => l.includes("id: 'first-edit'")) ?? ''
+  // same indentation as the existing sibling, and a trailing comma (matches the hand-authored style)
+  expect(indentOf("id: 'first-edit'")).toBe(indentOf("id: 'what-is-cc'"))
+  expect(inserted.trimEnd().endsWith('},')).toBe(true)
+})

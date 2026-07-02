@@ -1,10 +1,10 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { Project, QuoteKind } from 'ts-morph'
 import { DEFAULT_CONTENT_DIR, DEFAULT_LANGUAGE, curriculumFile, lessonsDir, packFile } from './paths.ts'
 import { addLesson, ensureLevel, ensureModule } from './curriculum.ts'
 import { addPromptStub, addSnippetStub } from './packs.ts'
 import { lessonTemplate } from './lessonTemplate.ts'
+import { formatAndSave, newProject } from './tsutil.ts'
 
 export interface OutlineLesson {
   id: string
@@ -41,7 +41,7 @@ export interface ScaffoldReport {
 }
 
 export function scaffoldOutline(outline: Outline, contentDir: string = DEFAULT_CONTENT_DIR): ScaffoldReport {
-  const project = new Project({ skipAddingFilesFromTsConfig: true, manipulationSettings: { quoteKind: QuoteKind.Single } })
+  const project = newProject()
   const curriculum = project.addSourceFileAtPath(curriculumFile(contentDir))
   const defaultPack = project.addSourceFileAtPath(packFile(contentDir, DEFAULT_LANGUAGE))
   const report: ScaffoldReport = { created: [], changed: [] }
@@ -68,8 +68,8 @@ export function scaffoldOutline(outline: Outline, contentDir: string = DEFAULT_C
     }
   }
 
-  curriculum.saveSync()
-  defaultPack.saveSync()
+  formatAndSave(curriculum)
+  formatAndSave(defaultPack)
   report.changed.push(curriculumFile(contentDir), packFile(contentDir, DEFAULT_LANGUAGE))
   return report
 }

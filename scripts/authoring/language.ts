@@ -1,7 +1,7 @@
 import fs from 'node:fs'
-import { Project, QuoteKind, SyntaxKind } from 'ts-morph'
+import { SyntaxKind } from 'ts-morph'
 import { DEFAULT_CONTENT_DIR, packFile, packsIndexFile } from './paths.ts'
-import { sq } from './tsutil.ts'
+import { formatAndSave, newProject, sq } from './tsutil.ts'
 import type { ScaffoldReport } from './scaffold.ts'
 
 export interface LanguageSpec {
@@ -29,7 +29,7 @@ const ${spec.id}: LanguagePack = {
 export default ${spec.id}
 `
 
-  const project = new Project({ skipAddingFilesFromTsConfig: true, manipulationSettings: { quoteKind: QuoteKind.Single } })
+  const project = newProject()
   const index = project.addSourceFileAtPath(packsIndexFile(contentDir))
   index.addImportDeclaration({ defaultImport: spec.id, moduleSpecifier: `./${spec.id}` })
   index
@@ -38,7 +38,7 @@ export default ${spec.id}
     .addShorthandPropertyAssignment({ name: spec.id })
 
   fs.writeFileSync(file, body)
-  index.saveSync()
+  formatAndSave(index)
 
   return { created: [file], changed: [packsIndexFile(contentDir)] }
 }
