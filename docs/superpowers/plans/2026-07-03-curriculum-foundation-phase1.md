@@ -764,21 +764,44 @@ git commit -m "feat(authoring): emit curriculum.ts source from frontmatter"
 
 **Files:**
 - Create: `scripts/authoring/generateCurriculum.ts`
-- Modify: `src/content/charts/index.ts` (export `chartIds`)
+- Create: `src/content/charts/chartIds.ts` (node-safe, import-free chart-id list)
+- Modify: `src/content/charts/index.ts` (add `registeredChartIds` for the drift guard)
+- Modify: `src/content/charts/index.test.ts` (drift-guard test)
 - Modify: `package.json` (scripts)
 - Test: `scripts/authoring/generateCurriculum.test.ts`
 
 **Interfaces:**
 - Consumes: `readAllLessonMeta` (Task 3), `validateContent` (Task 4), `emitCurriculum` (Task 5), `structure` (Task 2), existing `tsutil` helpers `newProject`/`formatAndSave`, existing `paths` helpers `curriculumFile`/`lessonsDir`/`DEFAULT_CONTENT_DIR`.
-- Produces: `chartIds: ReadonlySet<string>` from `charts/index.ts`; an exported `generate(contentDir?): void`; a runnable `tsx scripts/authoring/generateCurriculum.ts` that writes `src/content/curriculum.ts`.
+- Produces: `chartIds: readonly string[]` from the new node-safe `src/content/charts/chartIds.ts`; `registeredChartIds: string[]` from `charts/index.ts`; an exported `generate(contentDir?): void`; a runnable `tsx scripts/authoring/generateCurriculum.ts` that writes `src/content/curriculum.ts`.
 
 **Note:** this task does NOT touch the real `src/content/curriculum.ts` — the real content is still un-migrated (it has no frontmatter), so running the generator against it would (correctly) throw. The orchestrator is proven here against a **temporary** content dir; the real regeneration happens in Task 7. Every commit in this task leaves the suite green.
 
-- [ ] **Step 1: Export chart ids**
+- [ ] **Step 1: Add a node-safe chart-id list (do NOT import app chart modules into the generator)**
 
-Edit `src/content/charts/index.ts` — after the `charts` const, add:
+The generator is compiled under the nodenext authoring tsconfig. Importing `src/content/charts/index.ts` would drag `demo.ts`/`types.ts` (extensionless bundler imports) and `./popups/bash.mdx` into that compilation and fail (TS2835 "explicit file extension", TS2307 "cannot find .mdx"). So expose chart ids from a dedicated import-free module and validate it against the real registry with a test — do NOT add `.ts` extensions to the app chart files, and do NOT edit `tsconfig.node.json`.
+
+Create `src/content/charts/chartIds.ts` (zero imports — node-safe):
 ```ts
-export const chartIds: ReadonlySet<string> = new Set(Object.keys(charts))
+// Node-safe list of registered chart ids. Kept import-free so the authoring
+// generator (nodenext) can validate lesson `interactive.spec` without pulling
+// the app chart module graph (demo.ts, *.mdx popups) into its compilation.
+// A drift guard in index.test.ts asserts this matches the real registry.
+export const chartIds: readonly string[] = ['demo']
+```
+
+Add a runtime-derived id list to `src/content/charts/index.ts` (after the `charts` const), leaving its existing extensionless imports untouched:
+```ts
+export const registeredChartIds: string[] = Object.keys(charts)
+```
+
+Add a drift-guard test to `src/content/charts/index.test.ts` (this is app code, jsdom default env — do NOT add a `@vitest-environment node` pragma):
+```ts
+import { chartIds } from './chartIds'
+import { registeredChartIds } from './index'
+
+test('chartIds stays in sync with the real chart registry', () => {
+  expect([...registeredChartIds].sort()).toEqual([...chartIds].sort())
+})
 ```
 
 - [ ] **Step 2: Write the failing orchestrator test**
@@ -834,7 +857,7 @@ import { readAllLessonMeta } from './generate/frontmatter.ts'
 import { validateContent } from './generate/validate.ts'
 import { emitCurriculum } from './generate/emit.ts'
 import { structure } from '../../src/content/structure.ts'
-import { chartIds } from '../../src/content/charts/index.ts'
+import { chartIds } from '../../src/content/charts/chartIds.ts'
 import { curriculumFile, lessonsDir, DEFAULT_CONTENT_DIR } from './paths.ts'
 import { newProject, formatAndSave } from './tsutil.ts'
 
@@ -882,7 +905,7 @@ Expected: FAILS with `ERROR …: missing required field "id"` lines (real lesson
 - [ ] **Step 8: Commit (generator + wiring only; real curriculum.ts unchanged)**
 
 ```bash
-git add scripts/authoring/generateCurriculum.ts scripts/authoring/generateCurriculum.test.ts src/content/charts/index.ts package.json
+git add scripts/authoring/generateCurriculum.ts scripts/authoring/generateCurriculum.test.ts src/content/charts/chartIds.ts src/content/charts/index.ts src/content/charts/index.test.ts package.json
 git commit -m "feat(authoring): curriculum generator CLI + chart-id registry + scripts"
 ```
 
