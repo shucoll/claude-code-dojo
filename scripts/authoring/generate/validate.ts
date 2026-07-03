@@ -1,0 +1,80 @@
+import { levelOf, moduleCodeOf } from './ids.ts'
+import type { LessonMeta } from './frontmatter.ts'
+import type { LevelDef } from '../../../src/content/structure.ts'
+
+export interface ValidateInput {
+  structure: LevelDef[]
+  metas: LessonMeta[]
+  knownChartIds: Set<string>
+}
+
+const LESSON_TYPES = new Set(['core', 'resolver', 'workflow', 'checkpoint', 'milestone'])
+const VOLATILITIES = new Set(['stable', 'evolving', 'volatile'])
+
+export function validateContent({ structure, metas, knownChartIds }: ValidateInput): string[] {
+  const errors: string[] = []
+
+  const moduleByCode = new Map<string, { levelId: string }>()
+  for (const level of structure) {
+    for (const mod of level.modules) moduleByCode.set(mod.code, { levelId: level.id })
+  }
+
+  const seenDotted = new Set<string>()
+  const seenSlug = new Set<string>()
+  const dottedIds = new Set(metas.map((m) => m.dottedId).filter(Boolean))
+
+  for (const m of metas) {
+    const at = m.file
+    if (!m.dottedId) errors.push(`${at}: missing required field "id"`)
+    if (!m.slug) errors.push(`${at}: missing required field "slug"`)
+    if (!m.title) errors.push(`${at}: missing required field "title"`)
+    if (m.type && !LESSON_TYPES.has(m.type)) errors.push(`${at}: invalid type "${m.type}"`)
+    if (m.volatility && !VOLATILITIES.has(m.volatility)) errors.push(`${at}: invalid volatility "${m.volatility}"`)
+    if (m.verifiedAgainstDocsAt && Number.isNaN(Date.parse(m.verifiedAgainstDocsAt)))
+      errors.push(`${at}: invalid verifiedAgainstDocsAt "${m.verifiedAgainstDocsAt}"`)
+
+    if (m.dottedId) {
+      if (seenDotted.has(m.dottedId)) errors.push(`${at}: duplicate id "${m.dottedId}"`)
+      seenDotted.add(m.dottedId)
+      const levelId = levelOf(m.dottedId)
+      if (!levelId) errors.push(`${at}: id "${m.dottedId}" has an unknown level letter`)
+      else if (levelId !== m.levelDir)
+        errors.push(`${at}: id "${m.dottedId}" implies level "${levelId}" but file is under "${m.levelDir}"`)
+      const code = moduleCodeOf(m.dottedId)
+      const mod = moduleByCode.get(code)
+      if (!mod) errors.push(`${at}: module "${code}" (from id "${m.dottedId}") not found in structure.ts`)
+      else if (levelId && mod.levelId !== levelId)
+        errors.push(`${at}: module "${code}" belongs to level "${mod.levelId}", not "${levelId}"`)
+    }
+
+    if (m.slug) {
+      if (seenSlug.has(m.slug)) errors.push(`${at}: duplicate slug "${m.slug}"`)
+      seenSlug.add(m.slug)
+    }
+
+    for (const ref of m.prerequisites ?? []) if (!dottedIds.has(ref)) errors.push(`${at}: prerequisite "${ref}" does not resolve`)
+    for (const ref of m.references ?? []) if (!dottedIds.has(ref)) errors.push(`${at}: reference "${ref}" does not resolve`)
+    for (const it of m.interactive ?? []) if (!knownChartIds.has(it.spec)) errors.push(`${at}: interactive spec "${it.spec}" not in chart registry`)
+    if (m.volatility && m.volatility !== 'stable' && (m.docsSources ?? []).length === 0)
+      errors.push(`${at}: volatility "${m.volatility}" requires docsSources`)
+  }
+
+  const ordersByModule = new Map<string, number[]>()
+  for (const m of metas) {
+    if (!m.dottedId || typeof m.order !== 'number') continue
+    const code = moduleCodeOf(m.dottedId)
+    ordersByModule.set(code, [...(ordersByModule.get(code) ?? []), m.order])
+  }
+  for (const [code, orders] of ordersByModule) {
+    const sorted = [...orders].sort((a, b) => a - b)
+    if (sorted.length !== new Set(sorted).size) {
+      errors.push(`module ${code}: duplicate order values`)
+      continue
+    }
+    const expected = sorted.map((_, i) => i + 1)
+    if (JSON.stringify(sorted) !== JSON.stringify(expected))
+      errors.push(`module ${code}: order values must be contiguous from 1, got [${sorted.join(', ')}]`)
+  }
+
+  return errors
+}
