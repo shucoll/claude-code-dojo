@@ -62,5 +62,5 @@ function walkMdx(dir: string): string[] {
 export function readAllLessonMeta(lessonsRoot: string): LessonMeta[] {
   return walkMdx(lessonsRoot)
     .map((f) => readLessonMeta(f, lessonsRoot))
-    .sort((a, b) => a.dottedId.localeCompare(b.dottedId))
+    .sort((a, b) => (a.dottedId ?? '').localeCompare(b.dottedId ?? ''))
 }
