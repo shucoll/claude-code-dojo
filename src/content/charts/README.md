@@ -257,6 +257,75 @@ export const levelChart: ChartDef = {
 
 Then register in `index.ts` and embed with `<ChartEmbed id="levels" />`.
 
-## Future: React Flow
+## Flowcharts (branching)
 
-This card-flow renderer is a linear vertical stack of rows with simple connectors. Genuinely graph-shaped charts—those with loops, multiple edges between nodes, or edge labels—are planned as a future React Flow renderer behind the same `ChartDef` contract and will not be supported by this linear stack implementation.
+The card-flow rows above are a linear vertical stack — great for a straight-line
+narrative, but they can't express branches, loops, or labeled edges. For that,
+use a `flow` row:
+
+```typescript
+{ kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: 'TB' | 'LR' }
+```
+
+`direction` defaults to `'TB'` (top-to-bottom); use `'LR'` for a left-to-right
+layout.
+
+### Flow nodes and edges
+
+```typescript
+interface FlowNode {
+  id: string
+  title: string
+  lines?: string[]        // optional muted description lines
+  tone?: ChartTone        // same tone palette as cards; defaults to 'neutral'
+  target?: ChartTarget    // same lesson/popup targets as cards; omit for inert node
+  role?: 'default' | 'question' | 'leaf'   // Phase-2 traversal hint; defaults to 'default'
+}
+
+interface FlowEdge {
+  from: string   // source node id
+  to: string     // target node id
+  label?: string // e.g. "yes" / "no" / an option label, rendered on the edge
+}
+```
+
+Layout is computed by [`@dagrejs/dagre`](https://github.com/dagrejs/dagre),
+dynamically imported (code-split) in `src/content/charts/flowLayout.ts` so the
+dependency isn't in the main bundle unless a lesson actually embeds a flow
+chart. The positioned graph is rendered by `FlowView`
+(`src/components/charts/FlowView.tsx`), which reuses `ChartCardView` for each
+node and draws the edges as SVG paths with label pills. Cycles/loops and
+multiple labeled edges between nodes are fully supported — unlike the linear
+stack above.
+
+### When to use `flow` vs. card rows/connectors
+
+- **Card rows + connectors** — a linear narrative: "first this, then that,"
+  with at most one path through the chart.
+- **`flow` row** — anything graph-shaped: branching decision trees (a question
+  node with multiple labeled outgoing edges to different outcomes) or loops
+  (an edge back to an earlier node), where a straight vertical stack can't
+  represent the structure.
+
+Example — a single-question decision node with one labeled option:
+
+```typescript
+{
+  kind: 'flow',
+  direction: 'TB',
+  nodes: [
+    { id: 'q', title: 'Which?', role: 'question' },
+    { id: 'a', title: 'Option A', role: 'leaf', target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'first-edit' } } },
+  ],
+  edges: [{ from: 'q', to: 'a', label: 'if X' }],
+}
+```
+
+Two working examples are registered in `src/content/charts/index.ts`:
+`agentic-loop-diagram` (a loop) and `clear-compact-new-tree` (a decision tree).
+
+**Phase-2 readiness:** `role` marks a node as a `question` (branch point) or a
+`leaf` (recommendation terminus); the order of a node's outgoing edges in the
+`edges` array is the answer-option order. This is the same data a future
+guided, click-through traversal will consume — no separate authoring step is
+needed now to support it later.
