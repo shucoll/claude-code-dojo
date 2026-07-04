@@ -75,6 +75,7 @@ export function FlowView({ row, onActivate }: FlowViewProps) {
           pe.edge.label && pe.labelPoint ? (
             <div
               key={`label-${i}`}
+              aria-hidden="true"
               className="absolute -translate-x-1/2 -translate-y-1/2 rounded-pill border-2 border-border bg-background px-2 py-0.5 text-xs text-muted-foreground"
               style={{ left: pe.labelPoint.x, top: pe.labelPoint.y }}
             >
