@@ -54,3 +54,15 @@ test('lesson with a non-numeric --estimated-minutes returns 2 and prints a frien
   expect(code).toBe(2)
   expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('--estimated-minutes must be a number'))
 })
+
+test('lesson with an invalid --volatility returns 2', () => {
+  const code = run(['lesson', '--level', 'beginner', '--module', 'B1', '--slug', 'x', '--title', 'X', '--type', 'core', '--volatility', 'wobbly'])
+  expect(code).toBe(2)
+  expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('invalid --volatility'))
+})
+
+test('lesson with a malformed --interactive entry (no colon) returns 2', () => {
+  const code = run(['lesson', '--level', 'beginner', '--module', 'B1', '--slug', 'x', '--title', 'X', '--type', 'core', '--interactive', 'diagram'])
+  expect(code).toBe(2)
+  expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('must be "kind:spec"'))
+})

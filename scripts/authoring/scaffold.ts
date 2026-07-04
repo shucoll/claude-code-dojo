@@ -7,6 +7,17 @@ import { renderLesson, type LessonFrontmatter, type LessonType, type TemplateOpt
 import { addPromptStub, addSnippetStub } from './packs.ts'
 import { formatAndSave, newProject } from './tsutil.ts'
 import { readLessonMeta } from './generate/frontmatter.ts'
+import { LEVEL_BY_LETTER } from './generate/ids.ts'
+
+// Fail fast (before any file is written) if a module's level letter (B/I/A)
+// disagrees with the target level id. Otherwise the lesson's dotted id would
+// imply one level while its file lands under another, and generation would only
+// fail AFTER the .mdx + structure.ts edits were already made.
+function assertLevelMatchesModule(levelId: string, moduleCode: string): void {
+  const implied = LEVEL_BY_LETTER[moduleCode[0]]
+  if (!implied) throw new Error(`module "${moduleCode}" has an unknown level letter "${moduleCode[0] ?? ''}" (expected B, I, or A)`)
+  if (implied !== levelId) throw new Error(`module "${moduleCode}" implies level "${implied}" but level id is "${levelId}"`)
+}
 
 export interface LessonSpec {
   level: { id: string; title: string }
@@ -108,6 +119,9 @@ export function scaffoldOutline(outline: Outline, contentDir: string = DEFAULT_C
   const defaultPack = project.addSourceFileAtPath(packFile(contentDir, DEFAULT_LANGUAGE))
   const ctx: Ctx = { contentDir, report: { created: [], changed: [] }, structureSf, defaultPack, packTouched: false }
 
+  // Validate the whole outline up front so a mismatch anywhere aborts before any writes.
+  for (const level of outline.levels) for (const mod of level.modules) assertLevelMatchesModule(level.id, mod.code)
+
   for (const level of outline.levels) {
     const levelObj = ensureLevel(structureSf, { id: level.id, title: level.title })
     for (const mod of level.modules) {
@@ -135,6 +149,7 @@ export function scaffoldLesson(spec: LessonSpec, contentDir: string = DEFAULT_CO
   const defaultPack = project.addSourceFileAtPath(packFile(contentDir, DEFAULT_LANGUAGE))
   const ctx: Ctx = { contentDir, report: { created: [], changed: [] }, structureSf, defaultPack, packTouched: false }
 
+  assertLevelMatchesModule(spec.level.id, spec.module.code)
   const levelObj = ensureLevel(structureSf, { id: spec.level.id, title: spec.level.title })
   ensureModule(levelObj, { code: spec.module.code, slug: spec.module.slug, title: spec.module.title })
 
@@ -144,7 +159,9 @@ export function scaffoldLesson(spec: LessonSpec, contentDir: string = DEFAULT_CO
   const existingFile = path.join(lessonsDir(contentDir), spec.level.id, `${spec.slug}.mdx`)
   let dottedId: string
   if (fs.existsSync(existingFile)) {
-    dottedId = readLessonMeta(existingFile, lessonsDir(contentDir)).dottedId
+    const existingId = readLessonMeta(existingFile, lessonsDir(contentDir)).dottedId
+    if (!existingId) throw new Error(`${existingFile} already exists but its frontmatter has no "id"; fix it or remove the file`)
+    dottedId = existingId
   } else {
     const next = nextLessonId(contentDir, spec.module.code)
     dottedId = next.dottedId

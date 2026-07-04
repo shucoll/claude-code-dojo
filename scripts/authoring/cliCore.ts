@@ -50,11 +50,13 @@ function parseInteractive(v: string | undefined): { kind: string; spec: string }
     .filter(Boolean)
     .map((pair) => {
       const [kind, spec] = pair.split(':')
-      return { kind: kind ?? '', spec: spec ?? '' }
+      if (!kind || !spec) throw new Error(`lesson: --interactive entry "${pair}" must be "kind:spec"`)
+      return { kind, spec }
     })
 }
 
 const VALID_TYPES = new Set(['core', 'resolver', 'workflow', 'checkpoint', 'milestone'])
+const VALID_VOLATILITIES = new Set(['stable', 'evolving', 'volatile'])
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -73,6 +75,7 @@ export function run(argv: string[]): number {
       case 'lesson': {
         requireFlags(flags, ['level', 'module', 'slug', 'title', 'type'], 'lesson')
         if (!VALID_TYPES.has(flags.type)) throw new Error(`lesson: invalid --type "${flags.type}"`)
+        if (flags.volatility && !VALID_VOLATILITIES.has(flags.volatility)) throw new Error(`lesson: invalid --volatility "${flags.volatility}"`)
         let estimatedMinutes: number | undefined
         if (flags['estimated-minutes']) {
           estimatedMinutes = Number(flags['estimated-minutes'])

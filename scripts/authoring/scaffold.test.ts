@@ -136,3 +136,37 @@ test('re-scaffolding an existing lesson returns its real existing id, not a bogu
   expect(r2.dottedId).toBe('B1.1')
   expect(r2.created).toEqual([])
 })
+
+test('scaffoldLesson throws (before writing) when the module letter disagrees with the level id', () => {
+  const dir = seedContent()
+  expect(() => scaffoldLesson({ ...spec, level: { id: 'advanced', title: 'Advanced' } }, dir)).toThrow(/implies level/)
+  // nothing was written under advanced/
+  expect(fs.existsSync(path.join(dir, 'lessons/advanced'))).toBe(false)
+})
+
+test('scaffoldOutline aborts before any writes when a module letter disagrees with its level', () => {
+  const dir = seedContent()
+  expect(() =>
+    scaffoldOutline(
+      {
+        levels: [
+          {
+            id: 'advanced',
+            title: 'Advanced',
+            modules: [{ code: 'B9', slug: 'nope', title: 'Nope', lessons: [{ slug: 'x', title: 'X', type: 'core', verifiedAgainstDocsAt: '2026-07-03' }] }],
+          },
+        ],
+      },
+      dir,
+    ),
+  ).toThrow(/implies level/)
+  expect(fs.existsSync(path.join(dir, 'lessons/advanced'))).toBe(false)
+})
+
+test('re-scaffolding a lesson whose existing file has no frontmatter id throws a clear error', () => {
+  const dir = seedContent()
+  scaffoldLesson(spec, dir)
+  const file = path.join(dir, 'lessons/beginner/first-edit.mdx')
+  fs.writeFileSync(file, '# No frontmatter here\n')
+  expect(() => scaffoldLesson(spec, dir)).toThrow(/no "id"/)
+})

@@ -34,3 +34,20 @@ test('readStructure round-trips a seeded structure.ts into LevelDef[]', () => {
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('readStructure throws on a malformed structure.ts (missing order) rather than silently coercing', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ccc-'))
+  try {
+    fs.writeFileSync(
+      path.join(dir, 'structure.ts'),
+      `export const structure = [
+  { id: 'beginner', title: 'Beginner', modules: [] },
+]
+`,
+    )
+    const project = new Project({ skipAddingFilesFromTsConfig: true })
+    expect(() => readStructure(project, dir)).toThrow(/order/)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
