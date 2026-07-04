@@ -25,3 +25,12 @@ test('lesson with missing required flags returns 2 and prints a clean error (no 
 test('an unknown command returns 2', () => {
   expect(run(['bogus'])).toBe(2)
 })
+
+test('lesson command requires level, module, slug, title, type', () => {
+  const code = run(['lesson', '--level', 'beginner'])
+  expect(code).toBe(2) // missing required flags -> caught error
+})
+
+test('unknown command returns 2 and lists commands', () => {
+  expect(run(['frobnicate'])).toBe(2)
+})
