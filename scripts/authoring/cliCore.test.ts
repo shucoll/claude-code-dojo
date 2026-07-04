@@ -34,3 +34,23 @@ test('lesson command requires level, module, slug, title, type', () => {
 test('unknown command returns 2 and lists commands', () => {
   expect(run(['frobnicate'])).toBe(2)
 })
+
+test('lesson with a non-numeric --estimated-minutes returns 2 and prints a friendly error (no NaN leaks)', () => {
+  const code = run([
+    'lesson',
+    '--level',
+    'beginner',
+    '--module',
+    'B1',
+    '--slug',
+    'x',
+    '--title',
+    'X',
+    '--type',
+    'core',
+    '--estimated-minutes',
+    'abc',
+  ])
+  expect(code).toBe(2)
+  expect(errSpy).toHaveBeenCalledWith(expect.stringContaining('--estimated-minutes must be a number'))
+})

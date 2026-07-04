@@ -127,3 +127,12 @@ test('re-scaffolding an existing lesson preserves authored .mdx content', () => 
   scaffoldLesson(spec, dir)
   expect(fs.readFileSync(file, 'utf8')).toBe('---\nid: "B1.1"\n---\n\n# Hand-authored\n')
 })
+
+test('re-scaffolding an existing lesson returns its real existing id, not a bogus next id', () => {
+  const dir = seedContent()
+  const r1 = scaffoldLesson(spec, dir)
+  expect(r1.dottedId).toBe('B1.1')
+  const r2 = scaffoldLesson(spec, dir)
+  expect(r2.dottedId).toBe('B1.1')
+  expect(r2.created).toEqual([])
+})

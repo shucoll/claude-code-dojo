@@ -73,6 +73,11 @@ export function run(argv: string[]): number {
       case 'lesson': {
         requireFlags(flags, ['level', 'module', 'slug', 'title', 'type'], 'lesson')
         if (!VALID_TYPES.has(flags.type)) throw new Error(`lesson: invalid --type "${flags.type}"`)
+        let estimatedMinutes: number | undefined
+        if (flags['estimated-minutes']) {
+          estimatedMinutes = Number(flags['estimated-minutes'])
+          if (!Number.isFinite(estimatedMinutes)) throw new Error('lesson: --estimated-minutes must be a number')
+        }
         const r = scaffoldLesson({
           level: { id: flags.level, title: flags['level-title'] || titleCase(flags.level) },
           module: {
@@ -83,7 +88,7 @@ export function run(argv: string[]): number {
           slug: flags.slug,
           title: flags.title,
           type: flags.type as LessonType,
-          estimatedMinutes: flags['estimated-minutes'] ? Number(flags['estimated-minutes']) : undefined,
+          estimatedMinutes,
           volatility: flags.volatility || undefined,
           verifiedAgainstDocsAt: flags['verified-at'] || today(),
           prerequisites: list(flags.prerequisites),

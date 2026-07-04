@@ -6,6 +6,7 @@ import { nextLessonId } from './nextId.ts'
 import { renderLesson, type LessonFrontmatter, type LessonType, type TemplateOptions } from './lessonTemplate.ts'
 import { addPromptStub, addSnippetStub } from './packs.ts'
 import { formatAndSave, newProject } from './tsutil.ts'
+import { readLessonMeta } from './generate/frontmatter.ts'
 
 export interface LessonSpec {
   level: { id: string; title: string }
@@ -136,8 +137,19 @@ export function scaffoldLesson(spec: LessonSpec, contentDir: string = DEFAULT_CO
 
   const levelObj = ensureLevel(structureSf, { id: spec.level.id, title: spec.level.title })
   ensureModule(levelObj, { code: spec.module.code, slug: spec.module.slug, title: spec.module.title })
-  const { dottedId, order } = nextLessonId(contentDir, spec.module.code)
-  writeLessonFile(ctx, spec.level, spec, dottedId, order)
+
+  // If the target .mdx already exists, it is left untouched (idempotent — never
+  // overwrite authored content), so report the EXISTING lesson's real id rather
+  // than a freshly-computed "next" id that was never assigned to any file.
+  const existingFile = path.join(lessonsDir(contentDir), spec.level.id, `${spec.slug}.mdx`)
+  let dottedId: string
+  if (fs.existsSync(existingFile)) {
+    dottedId = readLessonMeta(existingFile, lessonsDir(contentDir)).dottedId
+  } else {
+    const next = nextLessonId(contentDir, spec.module.code)
+    dottedId = next.dottedId
+    writeLessonFile(ctx, spec.level, spec, dottedId, next.order)
+  }
 
   formatAndSave(structureSf)
   ctx.report.changed.push(structureFile(contentDir))
