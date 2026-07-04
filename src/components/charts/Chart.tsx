@@ -42,16 +42,16 @@ export function Chart({ def, onActivate }: ChartProps) {
                 {row.label}
               </div>
             </div>
-          ) : (
+          ) : row.kind === 'cards' ? (
             <div
               data-testid="chart-cards-row"
               className={cn('grid grid-cols-1 gap-4', COLS[row.cards.length] ?? 'sm:grid-cols-1')}
             >
-              {row.cards.map((card) => (
+              {row.cards.map((card: ChartCard) => (
                 <ChartCardView key={card.id} card={card} onActivate={onActivate} />
               ))}
             </div>
-          )}
+          ) : null}
         </div>
       ))}
     </div>
