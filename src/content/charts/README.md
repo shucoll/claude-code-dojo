@@ -2,7 +2,7 @@
 
 ## Overview
 
-Charts are interactive card-flow stacks embedded in lessons. Each chart is a vertical stack of rows, where each row contains either a set of cards or a connector pill with a label. Click an interactive card to navigate to a lesson in the curriculum or open a modal popup with additional content. Non-interactive (targetless) cards are inert.
+Charts are interactive stacks embedded in lessons. Each chart is a vertical stack of rows, where each row contains a set of cards, a connector pill with a label, or a branching **flow** (a flowchart of nodes and labeled edges — see "Flowcharts (branching)" below). Click an interactive card or node to navigate to a lesson in the curriculum or open a modal popup with additional content. Non-interactive (targetless) cards and nodes are inert.
 
 ## Data Model
 
