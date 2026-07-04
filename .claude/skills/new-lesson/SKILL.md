@@ -63,7 +63,11 @@ not as of training data.
    - `--docs-sources <url>` — comma-separated; required when volatility isn't
      `stable`
    - `--interactive diagram:spec-id` — comma-separated `kind:spec` pairs; each
-     `spec` must exist in the chart registry (`src/content/charts/index.ts`)
+     `spec` must exist in the chart registry (`src/content/charts/index.ts`).
+     Charts can be linear card-flows **or** branching flowcharts (`flow` rows
+     for decision trees/loops) — see `src/content/charts/README.md`; both are
+     authored the same way: define a `ChartDef`, register it in `index.ts` +
+     `chartIds.ts`, and embed with `<ChartEmbed id="…" />`.
    - `--snippets a,b` / `--prompts c` — **opt-in only** (see below); omit them
      entirely if the lesson doesn't need language-specific examples
 

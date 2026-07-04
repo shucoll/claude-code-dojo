@@ -26,9 +26,38 @@ export interface ChartCard {
   target?: ChartTarget
 }
 
+export type FlowNodeRole = 'default' | 'question' | 'leaf'
+
+export interface FlowNode {
+  id: string
+  title: string
+  /** Muted description lines. */
+  lines?: string[]
+  /** Defaults to 'neutral'. */
+  tone?: ChartTone
+  /** Omitted => a plain, non-interactive node. */
+  target?: ChartTarget
+  /**
+   * Traversal-state hint for Phase 2 guided decision trees (spec §8):
+   * 'question' = a branch point whose outgoing edges are the answer options;
+   * 'leaf' = a recommendation terminus. Defaults to 'default'.
+   */
+  role?: FlowNodeRole
+}
+
+export interface FlowEdge {
+  from: string
+  to: string
+  /** e.g. "yes" / "no" / an option label. */
+  label?: string
+}
+
+export type FlowDirection = 'TB' | 'LR'
+
 export type ChartRow =
   | { kind: 'cards'; cards: ChartCard[] }
   | { kind: 'connector'; label: string }
+  | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection }
 
 export interface ChartDef {
   id: string
