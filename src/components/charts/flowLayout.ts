@@ -27,6 +27,22 @@ export interface FlowLayout {
   height: number
 }
 
+interface DagreNode {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface DagreEdge {
+  points: Point[]
+}
+
+interface DagreGraph {
+  width?: number
+  height?: number
+}
+
 const NODE_WIDTH = 208
 
 function nodeHeight(node: FlowNode): number {
@@ -60,14 +76,14 @@ export async function layoutFlow(
   dagre.layout(g)
 
   const positionedNodes: PositionedNode[] = nodes.map((node) => {
-    const { x, y, width, height } = g.node(node.id)
+    const { x, y, width, height } = g.node(node.id) as DagreNode
     return { node, x: x - width / 2, y: y - height / 2, width, height }
   })
   const positionedEdges: PositionedEdge[] = edges.map((edge, i) => {
-    const { points } = g.edge({ v: edge.from, w: edge.to, name: `e${i}` })
+    const { points } = g.edge({ v: edge.from, w: edge.to, name: `e${i}` }) as DagreEdge
     return { edge, points, labelPoint: points[Math.floor(points.length / 2)] }
   })
-  const graph = g.graph()
+  const graph = g.graph() as DagreGraph
   return {
     nodes: positionedNodes,
     edges: positionedEdges,

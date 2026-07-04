@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { layoutFlow } from './flowLayout'
 import type { FlowEdge, FlowNode } from '../../content/charts/types'
-
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
 
 const nodes: FlowNode[] = [
   { id: 'a', title: 'A' },
@@ -49,7 +45,7 @@ test('lays out a cyclic graph without throwing', async () => {
 })
 
 test('dagre is code-split: dynamic import only, no top-level import', () => {
-  const src = readFileSync(join(__dirname, 'flowLayout.ts'), 'utf8')
+  const src = readFileSync(join(import.meta.dirname, 'flowLayout.ts'), 'utf8')
   expect(src).toMatch(/import\(\s*['"]@dagrejs\/dagre['"]\s*\)/)
   expect(src).not.toMatch(/^\s*import\s+[^\n]*['"]@dagrejs\/dagre['"]/m)
 })
