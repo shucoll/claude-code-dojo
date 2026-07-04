@@ -1,8 +1,9 @@
+import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { LessonLink } from './LessonLink'
 
-function renderLink(ui: React.ReactNode) {
+function renderLink(ui: ReactNode) {
   return render(<MemoryRouter>{ui}</MemoryRouter>)
 }
 
