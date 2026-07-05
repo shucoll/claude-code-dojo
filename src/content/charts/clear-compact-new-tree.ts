@@ -1,8 +1,8 @@
 import type { ChartDef } from './types'
 
 /**
- * Decision-tree dogfood (static Phase 1 fallback of the B2.4 resolver).
- * Question node + labeled option edges + leaves that link or pop up.
+ * Guided decision-tree dogfood (static Phase 1 fallback of the B2.4 resolver).
+ * Two-level guided tree with labeled edges and leaves that link or pop up.
  */
 export const clearCompactNewTree: ChartDef = {
   id: 'clear-compact-new-tree',
@@ -12,16 +12,10 @@ export const clearCompactNewTree: ChartDef = {
     {
       kind: 'flow',
       direction: 'TB',
+      guided: true,
       nodes: [
-        { id: 'q', title: 'What is going on?', role: 'question' },
-        {
-          id: 'clear',
-          title: '/clear',
-          role: 'leaf',
-          tone: 'blue',
-          lines: ['Wipe context, keep the session'],
-          target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'first-edit' } },
-        },
+        { id: 'q1', title: 'Are you mid-task?', role: 'question' },
+        { id: 'q2', title: 'How is the context holding up?', role: 'question' },
         {
           id: 'compact',
           title: '/compact',
@@ -29,6 +23,14 @@ export const clearCompactNewTree: ChartDef = {
           tone: 'violet',
           lines: ['Summarize, keep decisions'],
           target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'review-changes' } },
+        },
+        {
+          id: 'clear',
+          title: '/clear',
+          role: 'leaf',
+          tone: 'blue',
+          lines: ['Wipe context, keep the session'],
+          target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'first-edit' } },
         },
         {
           id: 'new',
@@ -40,9 +42,10 @@ export const clearCompactNewTree: ChartDef = {
         },
       ],
       edges: [
-        { from: 'q', to: 'clear', label: 'context is irrelevant' },
-        { from: 'q', to: 'compact', label: 'just getting long' },
-        { from: 'q', to: 'new', label: 'something broke' },
+        { from: 'q1', to: 'q2', label: 'yes, still going' },
+        { from: 'q1', to: 'new', label: 'no, starting fresh' },
+        { from: 'q2', to: 'compact', label: 'just getting long' },
+        { from: 'q2', to: 'clear', label: 'no longer relevant' },
       ],
     },
   ],
