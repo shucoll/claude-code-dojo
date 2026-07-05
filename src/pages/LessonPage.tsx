@@ -119,7 +119,7 @@ export function LessonPage() {
       </MDXProvider>
 
       {location.lesson.references?.length ? (
-        <LessonRefLinks label="Where next" ids={location.lesson.references} variant="list" />
+        <LessonRefLinks label="Related" ids={location.lesson.references} variant="list" />
       ) : null}
 
       <footer className="mt-12 flex justify-end border-t-2 border-border pt-6">
