@@ -57,7 +57,7 @@ export type FlowDirection = 'TB' | 'LR'
 export type ChartRow =
   | { kind: 'cards'; cards: ChartCard[] }
   | { kind: 'connector'; label: string }
-  | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection }
+  | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection; guided?: boolean }
 
 export interface ChartDef {
   id: string
