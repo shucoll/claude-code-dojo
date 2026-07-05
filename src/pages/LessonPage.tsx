@@ -5,6 +5,7 @@ import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBackTarget } from '../lib/useBackTarget'
 import { mdxComponents } from '../components/mdx/mdxComponents'
 import { Button } from '../components/ui/Button'
+import { LessonDocsLinks } from '../components/mdx/LessonDocsLinks'
 import { LessonRefLinks } from '../components/mdx/LessonRefLinks'
 import { curriculum } from '../content/curriculum'
 import { useProgress } from '../context/ProgressContext'
@@ -118,8 +119,12 @@ export function LessonPage() {
         </Suspense>
       </MDXProvider>
 
+      {location.lesson.docsSources?.length ? (
+        <LessonDocsLinks urls={location.lesson.docsSources} />
+      ) : null}
+
       {location.lesson.references?.length ? (
-        <LessonRefLinks label="Where next" ids={location.lesson.references} variant="list" />
+        <LessonRefLinks label="Related" ids={location.lesson.references} variant="list" />
       ) : null}
 
       <footer className="mt-12 flex justify-end border-t-2 border-border pt-6">

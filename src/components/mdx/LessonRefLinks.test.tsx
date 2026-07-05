@@ -18,8 +18,8 @@ test('inline variant renders the label and one link per id', () => {
 })
 
 test('list variant renders a labelled nav with a link per id', () => {
-  renderRefs(<LessonRefLinks label="Where next" ids={['B1.3']} variant="list" />)
-  expect(screen.getByRole('navigation', { name: 'Where next' })).toBeInTheDocument()
+  renderRefs(<LessonRefLinks label="Related" ids={['B1.3']} variant="list" />)
+  expect(screen.getByRole('navigation', { name: 'Related' })).toBeInTheDocument()
   expect(screen.getByRole('link', { name: /reviewing changes/i })).toHaveAttribute(
     'href',
     '/learn/beginner/basics/review-changes',

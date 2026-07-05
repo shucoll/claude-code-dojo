@@ -94,15 +94,25 @@ test('renders the Prerequisites strip linking to prerequisite lessons', async ()
   expect(link).toHaveAttribute('href', '/learn/beginner/basics/what-is-cc')
 })
 
-test('renders the Where next footer from references', async () => {
+test('renders the Related footer from references', async () => {
   renderAt('/learn/beginner/basics/first-edit')
   await screen.findByRole('heading', { name: /your first edit/i })
-  const nav = screen.getByRole('navigation', { name: 'Where next' })
+  const nav = screen.getByRole('navigation', { name: 'Related' })
   expect(nav).toBeInTheDocument()
   expect(screen.getByRole('link', { name: /reviewing changes/i })).toHaveAttribute(
     'href',
     '/learn/beginner/basics/review-changes',
   )
+})
+
+test('renders the Official docs footer from docsSources', async () => {
+  renderAt('/learn/beginner/basics/first-edit')
+  await screen.findByRole('heading', { name: /your first edit/i })
+  const nav = screen.getByRole('navigation', { name: 'Official docs' })
+  expect(nav).toBeInTheDocument()
+  const link = screen.getByRole('link', { name: 'quickstart' })
+  expect(link).toHaveAttribute('href', 'https://code.claude.com/docs/en/quickstart')
+  expect(link).toHaveAttribute('target', '_blank')
 })
 
 test('omits the Prerequisites strip when the lesson has none', async () => {

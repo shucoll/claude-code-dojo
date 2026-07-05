@@ -22,6 +22,12 @@ export function lessonPath(loc: LessonLocation): string {
   return `/learn/${loc.levelId}/${loc.moduleId}/${loc.lesson.id}`
 }
 
+/** The level segment of a `/learn/:levelId/...` path, or null if the path isn't a lesson. */
+export function levelIdFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/learn\/([^/]+)/)
+  return match ? match[1] : null
+}
+
 export function firstLesson(levels: Level[]): LessonLocation | undefined {
   return flattenLessons(levels)[0]
 }
