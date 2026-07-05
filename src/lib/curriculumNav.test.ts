@@ -1,5 +1,5 @@
 import type { Level } from '../content/curriculum'
-import { findByDottedId, findLesson, firstLesson, flattenLessons, lessonPath, nextLesson, prevLesson } from './curriculumNav'
+import { findByDottedId, findLesson, firstLesson, flattenLessons, lessonPath, levelIdFromPath, nextLesson, prevLesson } from './curriculumNav'
 
 const noop = () => Promise.resolve({ default: () => null })
 const levels: Level[] = [
@@ -35,6 +35,13 @@ test('nextLesson returns the following lesson across module/level boundaries', (
 
 test('lessonPath builds the /learn route for a location', () => {
   expect(lessonPath(flattenLessons(levels)[0])).toBe('/learn/l1/m1/a')
+})
+
+test('levelIdFromPath extracts the level segment of a lesson path', () => {
+  expect(levelIdFromPath('/learn/intermediate/workflows/slash-commands')).toBe('intermediate')
+  expect(levelIdFromPath('/learn/beginner')).toBe('beginner')
+  expect(levelIdFromPath('/onboarding')).toBeNull()
+  expect(levelIdFromPath('/')).toBeNull()
 })
 
 test('prevLesson returns the preceding lesson across module/level boundaries', () => {

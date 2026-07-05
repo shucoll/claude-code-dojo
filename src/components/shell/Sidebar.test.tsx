@@ -19,6 +19,14 @@ test('renders the curriculum hierarchy as navigation', () => {
   expect(screen.getByRole('link', { name: /your first edit/i })).toBeInTheDocument()
 })
 
+test('expands only the active level and collapses the others', () => {
+  wrap(<Sidebar />, '/learn/intermediate/workflows/slash-commands')
+  // The active level's lesson is rendered…
+  expect(screen.getByRole('link', { name: /slash commands/i })).toBeInTheDocument()
+  // …while other levels stay collapsed, so their lessons are not in the DOM.
+  expect(screen.queryByRole('link', { name: /your first edit/i })).not.toBeInTheDocument()
+})
+
 test('marks the active route lesson with the current glyph', () => {
   wrap(<Sidebar />)
   const activeLink = screen.getByRole('link', { name: /your first edit/i })

@@ -1,9 +1,10 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { cn } from '../../lib/cn'
 import { curriculum } from '../../content/curriculum'
 import { useProgress } from '../../context/ProgressContext'
+import { levelIdFromPath } from '../../lib/curriculumNav'
 import { levelPercent } from '../../lib/progressMath'
 import { Badge } from '../ui/Badge'
 import { ProgressGlyph, type LessonStatus as GlyphStatus } from './ProgressGlyph'
@@ -36,9 +37,24 @@ export function Sidebar() {
   const location = useLocation()
   // Preserve any hash/search (e.g. a `#chart-…` anchor) so Back can scroll-restore.
   const from = `${location.pathname}${location.search}${location.hash}`
+
+  // Only the active level starts expanded: the level of the lesson the user is on.
+  // The landing resolver puts new users on their joined level and returning users on
+  // their last lesson, so the route already encodes the right level in both cases.
+  const routeLevel = levelIdFromPath(location.pathname)
+  const activeLevel = curriculum.some((l) => l.id === routeLevel)
+    ? routeLevel
+    : (curriculum[0]?.id ?? null)
+
   const [open, setOpen] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(curriculum.map((level) => [level.id, true])),
+    Object.fromEntries(curriculum.map((level) => [level.id, level.id === activeLevel])),
   )
+
+  // Keep the active level open as the user navigates across levels (e.g. via a
+  // cross-link or Continue crossing a boundary) without collapsing ones they opened.
+  useEffect(() => {
+    if (activeLevel) setOpen((o) => (o[activeLevel] ? o : { ...o, [activeLevel]: true }))
+  }, [activeLevel])
 
   return (
     <nav aria-label="Lessons" className="flex flex-col gap-1 p-3">
