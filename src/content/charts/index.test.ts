@@ -44,3 +44,13 @@ test('the decision tree exercises labeled edges, a lesson link, and a popup leaf
   expect(flow.nodes.some((n) => n.target?.kind === 'lesson')).toBe(true)
   expect(flow.nodes.some((n) => n.target?.kind === 'popup')).toBe(true)
 })
+
+test('the decision tree opts into guided traversal with a single root question', () => {
+  const flow = getChart('clear-compact-new-tree')!.rows.find((r) => r.kind === 'flow')!
+  if (flow.kind !== 'flow') throw new Error('expected flow row')
+  expect(flow.guided).toBe(true)
+  const targets = new Set(flow.edges.map((e) => e.to))
+  const roots = flow.nodes.filter((n) => !targets.has(n.id))
+  expect(roots).toHaveLength(1)
+  expect(roots[0].role).toBe('question')
+})
