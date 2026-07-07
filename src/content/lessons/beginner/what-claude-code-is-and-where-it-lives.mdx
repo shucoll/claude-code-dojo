@@ -1,0 +1,57 @@
+---
+id: "B1.2"
+slug: "what-claude-code-is-and-where-it-lives"
+title: "What Claude Code is and where it lives"
+type: "core"
+order: 2
+estimatedMinutes: 8
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-06"
+prerequisites: ["B1.1"]
+teaches: ["claude-code-positioning", "surfaces", "models"]
+references: ["B1.1"]
+docsSources: ["https://code.claude.com/docs/en/overview", "https://code.claude.com/docs/en/how-claude-code-works", "https://code.claude.com/docs/en/desktop-quickstart", "https://code.claude.com/docs/en/vs-code"]
+---
+
+# What Claude Code is and where it lives
+
+## What it is, and what it isn't
+
+You met the agentic loop in <LessonLink id="B1.1" />. So what exactly is the thing running that loop? The fastest way to place Claude Code is by what it is *not*.
+
+It is **not a chatbot**. A chatbot answers inside a window and has no hold on your project. It is **not an editor or an IDE**. It does not replace VS Code, and it has no cursor of its own to type with.
+
+Claude Code is a **terminal-first agent harness wrapped around Claude models**. "Harness" is the load-bearing word: it is the layer that hands a Claude model a set of tools, your project's context, and a place to run commands, turning a model that can only produce text into an agent that can act. You drive it in plain language; it does the reading, editing, and running.
+
+That harness is a single engine. What changes from one place to the next is only the window you drive it through.
+
+## Where it lives
+
+Claude Code shows up on a handful of surfaces. The engine is the same on all of them, so pick the one that fits how you like to work.
+
+| Surface | What it is | Good when |
+|---|---|---|
+| **Terminal (CLI)** | The full-featured `claude` command in your shell. Every feature lands here first. | You want the complete tool, and one thing to learn that covers the rest. |
+| **Desktop app** | A standalone app with visual diff review, side-by-side sessions, and scheduled or cloud tasks. No terminal required. | You prefer a graphical interface, or want several sessions running at once. |
+| **VS Code / JetBrains** | An IDE extension: inline diffs, `@`-mention files, review plans, all beside your code. | You live in your editor and want Claude in the same window. |
+| **Web** | `claude.ai/code` in the browser, running in the cloud with nothing to install. | You want to start work from any machine, or hand a long task off and check back later. |
+
+The IDE extensions bundle their own copy of Claude Code, though running `claude` in the editor's integrated terminal still wants the CLI installed. The web and Desktop apps can also run work on Anthropic's cloud instead of your machine.
+
+**Everything this course teaches transfers.** Context, CLAUDE.md, permissions, skills, hooks, MCP, subagents: all of it belongs to the engine, not the window, so it behaves the same on every surface. Your CLAUDE.md files, settings, and MCP servers are literally shared across them. That is why the course teaches the **CLI first**: learn it once in the terminal and you know it everywhere, and when a surface adds something of its own (the Desktop diff viewer, say) we call it out.
+
+## FAQ
+
+**So is it a chatbot, an IDE, or something else?** Something else: an agent harness. It borrows the prompt box you know from chat and it sits next to your IDE, but its actual job is to *act* on your project through tools, which neither a plain chatbot nor an editor does on its own.
+
+**Which model is it using?** A Claude model, and you choose which one. Sonnet handles most coding work well; Opus trades some speed for stronger reasoning on hard, architectural problems. Switch mid-session with `/model`. Knowing *which* model to reach for and when is a later topic; the default is a fine place to start.
+
+**Where can I actually run it?** Terminal, Desktop app, web browser, VS Code, and JetBrains IDEs, per the table above. Begin wherever you are most comfortable; the skills carry over.
+
+**Do concepts transfer between surfaces?** Yes, almost entirely. The agentic loop, tools, CLAUDE.md, and every extension are the same engine underneath, so a skill or setting you learn in the terminal works in the Desktop app and the IDE extension too. Only the interface around it changes.
+
+**What does it cost, and what plan do I need?** Most surfaces need a paid Claude subscription (Pro, Max, Team, or Enterprise) or an Anthropic Console account. Exact tiers, limits, and prices shift over time, so they are not hardcoded here. Check the current [Claude pricing](https://claude.com/pricing) and the [setup guide](https://code.claude.com/docs/en/setup) for what your plan includes.
+
+## Where next
+
+You know what Claude Code is and where it runs. One piece of groundwork remains before you install: <LessonLink id="B1.3" /> covers exactly what Claude can see and touch on your machine, and the permission prompts that keep you in control. After that, <LessonLink id="B1.4" /> gets the CLI installed and you logged in.

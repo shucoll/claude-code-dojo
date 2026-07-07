@@ -4,10 +4,11 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import mdx from '@mdx-js/rollup'
 import remarkFrontmatter from 'remark-frontmatter'
+import remarkGfm from 'remark-gfm'
 
 export default defineConfig({
   plugins: [
-    { enforce: 'pre', ...mdx({ remarkPlugins: [remarkFrontmatter], providerImportSource: '@mdx-js/react' }) },
+    { enforce: 'pre', ...mdx({ remarkPlugins: [remarkFrontmatter, remarkGfm], providerImportSource: '@mdx-js/react' }) },
     react({ include: /\.(jsx|js|mdx|md|tsx|ts)$/ }),
     tailwindcss(),
   ],

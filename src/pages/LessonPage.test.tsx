@@ -96,15 +96,10 @@ test('renders the Prerequisites strip linking to prerequisite lessons', async ()
   expect(link).toHaveAttribute('href', '/learn/beginner/basics/what-is-cc')
 })
 
-test('renders the Related footer from references', async () => {
+test('does not render a Related footer from references', async () => {
   renderAt('/learn/beginner/basics/first-edit')
   await screen.findByRole('heading', { name: /your first edit/i })
-  const nav = screen.getByRole('navigation', { name: 'Related' })
-  expect(nav).toBeInTheDocument()
-  expect(screen.getByRole('link', { name: /reviewing changes/i })).toHaveAttribute(
-    'href',
-    '/learn/beginner/basics/review-changes',
-  )
+  expect(screen.queryByRole('navigation', { name: 'Related' })).toBeNull()
 })
 
 test('renders the Official docs footer from docsSources', async () => {

@@ -34,4 +34,12 @@ export const mdxComponents = {
       {...props}
     />
   ),
+  table: (props) => (
+    <div className="my-6 overflow-x-auto rounded-card border-2 border-ink">
+      <table className="w-full border-collapse text-left text-sm" {...props} />
+    </div>
+  ),
+  thead: (props) => <thead className="border-b-2 border-ink bg-muted" {...props} />,
+  th: (props) => <th className="px-3 py-2 font-mono text-xs font-semibold uppercase tracking-wide text-foreground" {...props} />,
+  td: (props) => <td className="border-t border-border px-3 py-2 align-top leading-relaxed text-foreground" {...props} />,
 } satisfies MDXComponents

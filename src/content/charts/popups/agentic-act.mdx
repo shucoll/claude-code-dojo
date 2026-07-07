@@ -1,0 +1,9 @@
+This is the phase a chat window cannot reach. Using tools, Claude edits files,
+runs shell commands, runs your tests, or uses git.
+
+By default it asks permission before edits and commands, so you see each change
+before it happens. Every file edit is snapshotted first, so you can rewind if
+you do not like the result.
+
+Actions that touch systems outside your project, like deleting data or calling a
+live service, always stop for your approval. A local snapshot cannot undo those.

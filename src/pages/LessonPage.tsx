@@ -123,10 +123,6 @@ export function LessonPage() {
         <LessonDocsLinks urls={location.lesson.docsSources} />
       ) : null}
 
-      {location.lesson.references?.length ? (
-        <LessonRefLinks label="Related" ids={location.lesson.references} variant="list" />
-      ) : null}
-
       <footer className="mt-12 flex justify-end border-t-2 border-border pt-6">
         <Button onClick={handleComplete} trailingIcon={next ? <ArrowRightIcon /> : undefined}>
           {next ? 'Mark complete & continue' : 'Mark complete'}
