@@ -139,6 +139,15 @@ footer.
      `<LessonLink id="B2.3" />` (renders the target lesson's title as a link;
      wrap custom text as `<LessonLink id="B2.3">as we saw earlier</LessonLink>`).
      The id must resolve — `check-snippets` fails on unknown ids.
+   - **Inline links that leave the platform** (official docs, pricing,
+     anthropic.com, any `http(s)://` URL) are just normal markdown links
+     `[text](url)` — the MDX `a` renderer automatically opens them in a new tab
+     and appends the `↗` marker, so don't hand-roll `target`/`rel`. **Every
+     external URL you link inline must also appear in the lesson's `docsSources`**
+     so it shows up in the auto "Official docs" footer (the footer is the
+     canonical list of outbound links; inline links are a subset of it). Add the
+     URL to frontmatter and rerun `npm run gen:curriculum` if you linked it
+     inline first. Internal navigation uses `<LessonLink>`, not a raw link.
 4. Verify: `npm run check-snippets` — this is now the full content check
    (frontmatter validation + snippet/prompt coverage). Resolve every `ERROR`
    before finishing; warnings (fallback gaps, leftover `@@TODO@@` stubs) are

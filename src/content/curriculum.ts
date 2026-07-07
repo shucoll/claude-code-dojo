@@ -40,7 +40,7 @@ export const curriculum: Level[] = [
             prerequisites: ['B1.1'],
             teaches: ['claude-code-positioning', 'surfaces', 'models'],
             references: ['B1.1'],
-            docsSources: ['https://code.claude.com/docs/en/overview', 'https://code.claude.com/docs/en/how-claude-code-works', 'https://code.claude.com/docs/en/desktop-quickstart', 'https://code.claude.com/docs/en/vs-code'],
+            docsSources: ['https://code.claude.com/docs/en/overview', 'https://code.claude.com/docs/en/how-claude-code-works', 'https://code.claude.com/docs/en/desktop-quickstart', 'https://code.claude.com/docs/en/vs-code', 'https://code.claude.com/docs/en/setup', 'https://claude.com/pricing'],
             content: () => import('./lessons/beginner/what-claude-code-is-and-where-it-lives.mdx'),
           },
           {
@@ -70,7 +70,7 @@ export const curriculum: Level[] = [
             prerequisites: ['B1.2'],
             teaches: ['installation', 'authentication', 'updates'],
             references: ['B1.3'],
-            docsSources: ['https://code.claude.com/docs/en/setup', 'https://code.claude.com/docs/en/quickstart', 'https://code.claude.com/docs/en/troubleshoot-install'],
+            docsSources: ['https://code.claude.com/docs/en/setup', 'https://code.claude.com/docs/en/quickstart', 'https://code.claude.com/docs/en/troubleshoot-install', 'https://code.claude.com/docs/en/desktop-quickstart', 'https://www.anthropic.com/supported-countries'],
             content: () => import('./lessons/beginner/install-and-authenticate.mdx'),
           },
         ],
