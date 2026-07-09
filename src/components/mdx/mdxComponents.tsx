@@ -1,6 +1,7 @@
 import type { MDXComponents } from 'mdx/types'
 import { cn } from '../../lib/cn'
 import { ChartEmbed } from '../charts/ChartEmbed'
+import { CodeBlock } from './CodeBlock'
 import { LessonLink } from './LessonLink'
 import { Snippet } from './Snippet'
 import { TryPrompt } from './TryPrompt'
@@ -36,12 +37,20 @@ export const mdxComponents = {
       </a>
     )
   },
-  code: ({ className, ...props }) => (
-    <code
-      className={cn('rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em]', className)}
-      {...props}
-    />
-  ),
+  pre: CodeBlock,
+  code: ({ className, ...props }) => {
+    // Fenced blocks carry a `language-*` class and are styled by CodeBlock; only
+    // inline code gets the pill treatment.
+    if (typeof className === 'string' && className.includes('language-')) {
+      return <code className={className} {...props} />
+    }
+    return (
+      <code
+        className={cn('rounded bg-muted px-1.5 py-0.5 font-mono text-[0.875em]', className)}
+        {...props}
+      />
+    )
+  },
   blockquote: (props) => (
     <blockquote
       className="my-4 border-l-4 border-accent bg-muted/50 py-2 pl-4 text-muted-foreground"

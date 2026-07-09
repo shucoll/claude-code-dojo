@@ -128,6 +128,13 @@ footer.
      "Edge cases"; `workflow`, `checkpoint`, and `milestone` have their own
      shapes). Replace every `@@TODO@@` comment with real prose, following its
      guidance.
+   - **Use a ` ```prompt ` fence for anything the learner types into Claude**
+     (natural-language prompts, `@`-mentions, `!` shell passthrough). It renders
+     as a prominent "Prompt:" card, visually distinct from a ` ```bash ` fence
+     (a command run in their own shell) and a ` ```text ` fence (terminal or UI
+     output they only read, such as a permission dialog). Getting this right is
+     what tells the learner *where* to put the thing they are looking at. Every
+     fence gets a copy button automatically.
    - **Inline fenced code (` ```bash `, ` ```javascript `, …) is the default**
      for examples — write it directly in the MDX body. Only reach for
      `<Snippet id="…" />` / `<TryPrompt id="…" />` at a spot that is genuinely

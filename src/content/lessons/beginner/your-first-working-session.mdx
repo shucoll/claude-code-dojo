@@ -41,7 +41,7 @@ You will see the prompt with the model and working directory shown above it. If 
 
 The instinct from chat tools is to immediately ask for a change. Resist it. Claude works better once it has read the code, and *you* work better once you have watched it read. So your first prompt is a question, not a command:
 
-```text
+```prompt
 what does this project do, and where is the entry point?
 ```
 
@@ -49,7 +49,7 @@ Claude reads files on its own (you never paste them in) and answers. Watch what 
 
 Ask one or two more questions to get your bearings:
 
-```text
+```prompt
 what are the main pieces, and how do they fit together?
 ```
 
@@ -65,7 +65,7 @@ You will not always like where a turn is going. Three controls let you stay in t
 
 **Point at a file with `@`.** Instead of describing a file in prose, type `@` and start its path. An autocomplete menu appears and Claude gets the exact file:
 
-```text
+```prompt
 explain what @src/auth/login.ts is responsible for
 ```
 
@@ -73,7 +73,7 @@ This is faster and less ambiguous than "the login file," especially in a big rep
 
 **Hand it a URL or an image.** Paste a URL straight into your prompt and Claude can fetch and read it (fetching a web page is one of the actions that asks permission first, from <LessonLink id="B1.3" />). For an image, a screenshot of a bug or a design mockup, copy it and paste with `Ctrl+V` (on macOS iTerm2 use `Cmd+V`; on WSL use `Alt+V`). Do not use `Cmd+V` in plain Terminal.app, it pastes the file path, not the image. Claude inserts an `[Image #1]` chip you can refer to:
 
-```text
+```prompt
 the layout in [Image #1] is broken on mobile. what in @src/styles.css would cause that?
 ```
 
@@ -81,7 +81,7 @@ the layout in [Image #1] is broken on mobile. what in @src/styles.css would caus
 
 Now make Claude do some work. Keep it small and specific, this is your first change, not your best one:
 
-```text
+```prompt
 add a one-line docstring to the main entry function explaining what it does
 ```
 
@@ -103,11 +103,11 @@ Then decide. You can approve this single change, reject it and tell Claude what 
 
 After you accept, confirm what landed the same way you would with any change, by asking Claude or checking git:
 
-```text
+```prompt
 what files did you just change?
 ```
 
-```text
+```prompt
 ! git diff
 ```
 
