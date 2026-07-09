@@ -27,10 +27,11 @@ export function ChartEmbed({ id }: ChartEmbedProps) {
       setPopup(target)
       return
     }
-    const { level, module, lesson } = target.ref
+    const { level, module, lesson, anchor } = target.ref
     const loc = findLesson(curriculum, level, module, lesson)
     if (!loc) return
-    navigate(lessonPath(loc), { state: { from: `${pathname}#chart-${id}` } })
+    const to = anchor ? `${lessonPath(loc)}#${anchor}` : lessonPath(loc)
+    navigate(to, { state: { from: `${pathname}#chart-${id}` } })
   }
 
   return (

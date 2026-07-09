@@ -1,5 +1,6 @@
 import { agenticLoopDiagram } from './agentic-loop-diagram'
 import { clearCompactNewTree } from './clear-compact-new-tree'
+import { commandBeltReference } from './command-belt-reference'
 import { contextWindowSimulator } from './context-window-simulator'
 import { demo } from './demo'
 import type { ChartDef } from './types'
@@ -9,6 +10,7 @@ const charts: Record<string, ChartDef> = {
   [agenticLoopDiagram.id]: agenticLoopDiagram,
   [clearCompactNewTree.id]: clearCompactNewTree,
   [contextWindowSimulator.id]: contextWindowSimulator,
+  [commandBeltReference.id]: commandBeltReference,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)
@@ -22,6 +24,7 @@ export type {
   ChartCard,
   ChartBarSegment,
   ChartRow,
+  GridColumns,
   ChartTone,
   ChartTarget,
   PopupTarget,

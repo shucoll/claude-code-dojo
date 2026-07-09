@@ -37,6 +37,25 @@ test('renders one arrow between each pair of consecutive rows', () => {
   expect(container.querySelectorAll('[data-testid="chart-arrow"]')).toHaveLength(2)
 })
 
+test('grid rows are never joined to a neighbour by an arrow', () => {
+  // Grids are reference material: an arrow between them would imply an order
+  // the entries do not have.
+  const gridDef: ChartDef = {
+    id: 'g',
+    rows: [
+      { kind: 'grid', items: [{ id: 'a', title: '/one' }] },
+      { kind: 'grid', items: [{ id: 'b', title: '/two' }] },
+      { kind: 'cards', cards: [{ id: 'c', title: 'After' }] },
+    ],
+  }
+  const { container } = render(<Chart def={gridDef} onActivate={() => {}} />)
+  expect(container.querySelectorAll('[data-testid="chart-arrow"]')).toHaveLength(0)
+  expect(screen.getAllByTestId('chart-grid-row')).toHaveLength(2)
+  // …but they still get the arrow's vertical rhythm, or the hard shadow of the
+  // cards above lands on the next row's label. 3 rows => 2 gaps.
+  expect(screen.getAllByTestId('chart-row-gap')).toHaveLength(2)
+})
+
 test('renders a flow row as a FlowView (nodes + edge label)', async () => {
   const flowDef: ChartDef = {
     id: 'f',

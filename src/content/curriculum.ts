@@ -118,11 +118,12 @@ export const curriculum: Level[] = [
             order: 3,
             estimatedMinutes: 10,
             volatility: 'evolving',
-            verifiedAgainstDocsAt: '2026-07-07',
+            verifiedAgainstDocsAt: '2026-07-09',
             prerequisites: ['B2.1'],
             teaches: ['slash-commands', 'command-belt'],
             references: ['B2.2'],
             docsSources: ['https://code.claude.com/docs/en/commands', 'https://code.claude.com/docs/en/interactive-mode'],
+            interactive: [{ kind: 'diagram', spec: 'command-belt-reference' }],
             content: () => import('./lessons/beginner/the-essential-command-belt.mdx'),
           },
           {

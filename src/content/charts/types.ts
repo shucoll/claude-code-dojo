@@ -5,6 +5,13 @@ export interface LessonRef {
   level: string
   module: string
   lesson: string
+  /**
+   * Optional heading id to scroll to inside the lesson, so a chart entry can land
+   * on the section that introduces it rather than the top of the page. Must match a
+   * heading's `rehype-slug` id; `index.test.ts` checks every anchor against the
+   * lesson's real headings.
+   */
+  anchor?: string
 }
 
 export type ChartTarget =
@@ -63,11 +70,14 @@ export interface FlowEdge {
 
 export type FlowDirection = 'TB' | 'LR'
 
+export type GridColumns = 2 | 3 | 4
+
 export type ChartRow =
   | { kind: 'cards'; cards: ChartCard[] }
   | { kind: 'connector'; label: string }
   | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection; guided?: boolean }
   | { kind: 'bar'; segments: ChartBarSegment[]; label?: string; caption?: string }
+  | { kind: 'grid'; items: ChartCard[]; label?: string; columns?: GridColumns; caption?: string }
 
 export interface ChartDef {
   id: string

@@ -5,6 +5,7 @@
 export const chartIds: readonly string[] = [
   'agentic-loop-diagram',
   'clear-compact-new-tree',
+  'command-belt-reference',
   'context-window-simulator',
   'demo',
 ]

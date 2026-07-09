@@ -22,7 +22,10 @@ export const clearCompactNewTree: ChartDef = {
           role: 'leaf',
           tone: 'violet',
           lines: ['Summarize, keep decisions'],
-          target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'review-changes' } },
+          target: {
+            kind: 'lesson',
+            ref: { level: 'beginner', module: 'sessions-and-context', lesson: 'the-context-window' },
+          },
         },
         {
           id: 'clear',
@@ -30,7 +33,14 @@ export const clearCompactNewTree: ChartDef = {
           role: 'leaf',
           tone: 'blue',
           lines: ['Wipe context, keep the session'],
-          target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'first-edit' } },
+          target: {
+            kind: 'lesson',
+            ref: {
+              level: 'beginner',
+              module: 'sessions-and-context',
+              lesson: 'sessions-resume-name-branch',
+            },
+          },
         },
         {
           id: 'new',

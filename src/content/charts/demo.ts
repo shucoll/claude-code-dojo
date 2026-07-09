@@ -21,7 +21,10 @@ export const demo: ChartDef = {
           title: 'Beginner',
           lines: ['operator · the turn', 'approve diffs · /init'],
           tone: 'blue',
-          target: { kind: 'lesson', ref: { level: 'beginner', module: 'basics', lesson: 'first-edit' } },
+          target: {
+            kind: 'lesson',
+            ref: { level: 'beginner', module: 'meet-claude-code', lesson: 'from-chat-to-agent' },
+          },
         },
         {
           id: 'bash',

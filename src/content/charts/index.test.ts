@@ -1,5 +1,76 @@
+import fs from 'node:fs'
+import path from 'node:path'
+import GithubSlugger from 'github-slugger'
+import { curriculum } from '../curriculum'
+import { findLesson } from '../../lib/curriculumNav'
 import { chartIds } from './chartIds'
 import { getChart, registeredChartIds } from './index'
+import type { ChartCard } from './types'
+
+/**
+ * The heading ids `rehype-slug` will generate for a lesson, derived from its MDX
+ * source the same way the build does: in document order, skipping fenced code
+ * blocks, with GithubSlugger's de-duplication.
+ */
+function headingIds(levelId: string, lessonId: string): string[] {
+  const file = path.join('src/content/lessons', levelId, `${lessonId}.mdx`)
+  const src = fs.readFileSync(file, 'utf8')
+  const slugger = new GithubSlugger()
+  const ids: string[] = []
+  let inFence = false
+  for (const line of src.split('\n')) {
+    if (line.startsWith('```')) inFence = !inFence
+    if (inFence) continue
+    const heading = /^#{1,6}\s+(.*)$/.exec(line)
+    if (heading) ids.push(slugger.slug(heading[1].trim()))
+  }
+  return ids
+}
+
+/** Every clickable card/node/segment across every row kind of a chart. */
+function targetsOf(chartId: string): ChartCard[] {
+  return getChart(chartId)!.rows.flatMap((row) => {
+    if (row.kind === 'cards') return row.cards
+    if (row.kind === 'flow') return row.nodes
+    if (row.kind === 'bar') return row.segments
+    if (row.kind === 'grid') return row.items
+    return []
+  })
+}
+
+// ChartEmbed silently no-ops when a lesson target does not resolve (`if (!loc) return`),
+// so a typo'd or stale ref ships as a dead click with nothing to catch it. This is that
+// something.
+test('every chart lesson target resolves against the real curriculum', () => {
+  const dead: string[] = []
+  for (const id of registeredChartIds) {
+    for (const card of targetsOf(id)) {
+      if (card.target?.kind !== 'lesson') continue
+      const { level, module, lesson } = card.target.ref
+      if (!findLesson(curriculum, level, module, lesson)) {
+        dead.push(`${id}/${card.id} -> ${level}/${module}/${lesson}`)
+      }
+    }
+  }
+  expect(dead).toEqual([])
+})
+
+// An anchor that does not match a heading scrolls nowhere: the lesson opens at the
+// top and the entry silently loses its precision.
+test('every chart lesson anchor matches a real heading in that lesson', () => {
+  const broken: string[] = []
+  for (const id of registeredChartIds) {
+    for (const card of targetsOf(id)) {
+      if (card.target?.kind !== 'lesson') continue
+      const { level, lesson, anchor } = card.target.ref
+      if (!anchor) continue
+      if (!headingIds(level, lesson).includes(anchor)) {
+        broken.push(`${id}/${card.id} -> ${lesson}#${anchor}`)
+      }
+    }
+  }
+  expect(broken).toEqual([])
+})
 
 test('chartIds stays in sync with the real chart registry', () => {
   expect([...registeredChartIds].sort()).toEqual([...chartIds].sort())

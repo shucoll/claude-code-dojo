@@ -1,0 +1,8 @@
+Shows your token usage and cost. Aliased as `/cost`.
+
+Do not confuse it with `/context`. They answer different questions:
+
+- `/context` asks **"how full is this session's window right now?"** That governs whether Claude is about to start forgetting.
+- `/usage` asks **"what have I spent?"** across sessions. That governs your bill and your plan limits.
+
+A session can be nearly empty on `/context` while `/usage` shows plenty consumed, because every turn you have already sent was paid for even after compaction discarded it.
