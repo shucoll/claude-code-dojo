@@ -30,6 +30,11 @@ const B3_1: LessonRef = {
   module: 'teaching-claude-your-project',
   lesson: 'claude-md-fundamentals',
 }
+const B3_2: LessonRef = {
+  level: 'beginner',
+  module: 'teaching-claude-your-project',
+  lesson: 'claude-md-vs-auto-memory',
+}
 const B3_4: LessonRef = {
   level: 'beginner',
   module: 'teaching-claude-your-project',
@@ -78,28 +83,28 @@ export const commandBeltReference: ChartDef = {
           title: '/compact',
           tone: 'blue',
           lines: ['Summarize the conversation to free space'],
-          target: lesson(B2_4),
+          target: lesson(B2_4, 'side-by-side'),
         },
         {
           id: 'clear',
           title: '/clear',
           tone: 'blue',
           lines: ['Start a fresh conversation, empty context'],
-          target: lesson(B2_4),
+          target: lesson(B2_4, 'side-by-side'),
         },
         {
           id: 'resume',
           title: '/resume',
           tone: 'blue',
           lines: ['Pick up an earlier conversation'],
-          target: lesson(B2_5),
+          target: lesson(B2_5, 'resume-pick-up-where-you-left-off'),
         },
         {
           id: 'rewind',
           title: '/rewind',
           tone: 'blue',
           lines: ['Undo code, conversation, or both'],
-          target: lesson(B3_4),
+          target: lesson(B3_4, 'how-to-rewind'),
         },
         {
           id: 'model',
@@ -119,13 +124,15 @@ export const commandBeltReference: ChartDef = {
           id: 'init',
           title: '/init',
           lines: ['Generate a CLAUDE.md for this project'],
-          target: lesson(B3_1),
+          target: lesson(B3_1, 'what-init-generates'),
         },
         {
           id: 'memory',
           title: '/memory',
           lines: ['Edit CLAUDE.md and inspect auto memory'],
-          target: lesson(B3_1),
+          // /memory's dual role (edit CLAUDE.md, audit auto memory) is what B3.2
+          // resolves; its decision-rule section is where the command is explained.
+          target: lesson(B3_2, 'which-one-in-one-rule'),
         },
         {
           id: 'usage',
