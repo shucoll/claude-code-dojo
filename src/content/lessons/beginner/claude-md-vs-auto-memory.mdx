@@ -17,20 +17,116 @@ docsSources: ["https://code.claude.com/docs/en/memory"]
 
 ## The confusion
 
-{/* @@TODO@@ State exactly what people mix up and why the confusion exists. */}
+You wrote a `CLAUDE.md` in <LessonLink id="B3.1" />, so you know why Claude remembers your build command. Then something stranger happens.
+
+Claude uses `pnpm` in a project where you never wrote that down. It knows the test suite needs a local Redis instance, and you never told it, not in this session anyway. It avoids a directory you complained about last week. You go looking in `CLAUDE.md` and none of it is there.
+
+**There are two memory systems, and only one of them is yours.**
+
+`CLAUDE.md` is the file you write. **Auto memory** is a set of notes Claude writes to itself, on by default, accumulating quietly across sessions as it works with you. Both load at the start of every conversation. Neither one announces itself.
+
+This matters more than a curiosity, because of one thing that surprises nearly everyone:
+
+> When you tell Claude "remember that we always use pnpm," it saves that to **auto memory**, not to `CLAUDE.md`.
+
+So the instruction you thought you had committed to a versioned file that your team shares is actually sitting in a personal, machine-local note that nobody else will ever see. That single misunderstanding is what this lesson exists to fix.
 
 ## Side-by-side
 
-{/* @@TODO@@ Compare the options on: what it does, when it runs/loads, cost, who controls it, persistence. */}
+| | `CLAUDE.md` | Auto memory |
+|---|---|---|
+| **Who writes it** | You | Claude |
+| **What it holds** | Instructions and rules | Learnings and patterns it noticed |
+| **How it gets there** | You type it, or edit the file | Claude decides something is worth keeping |
+| **Where it lives** | In your repo (or `~/.claude/`) | `~/.claude/projects/<project>/memory/` |
+| **Scope** | Project, user, or organization | One directory per repository, shared across its worktrees |
+| **Shared with your team** | **Yes**, it is committed to git | **No.** Machine-local, never leaves your computer |
+| **Versioned, reviewable** | Yes, it shows up in pull requests | No, it changes without a diff |
+| **Loaded** | Every session, **in full** | Every session, but only the first 200 lines or 25KB of `MEMORY.md` |
+| **Enforced?** | No, it is context | No, it is context |
+| **Best for** | Coding standards, workflows, architecture | Build commands, debugging insights, preferences it discovers |
 
-## Decision tree
+Three rows deserve more than a cell.
 
-{/* @@TODO@@ The resolver logic as a flowchart (static clickable diagram in Phase 1). */}
+**"Shared with your team" is the important one.** `CLAUDE.md` is a team artifact: committed, reviewed, improved by everyone. Auto memory is a private notebook. A convention that lives only in your auto memory works perfectly for you and does not exist for anyone else, which is a confusing way for a team to operate.
+
+**"Versioned, reviewable" is the one that bites later.** Auto memory changes without a diff. Nothing tells you it happened beyond a brief "Writing memory" in the interface. Facts accumulate, and some of them go stale.
+
+**Neither is enforced.** Both are context, both shape behavior, and neither guarantees it. When you need a guarantee, you need a hook, exactly as in <LessonLink id="B3.1" />.
+
+There is also a structural difference worth knowing. Auto memory's directory holds a `MEMORY.md` index plus topic files (`debugging.md`, `api-conventions.md`, and so on). Only `MEMORY.md` loads at startup, and only its first 200 lines. The topic files sit on disk and Claude opens them when it needs them. That is a deliberately cheaper design than `CLAUDE.md`, which loads in full no matter how long it is, and it is why auto memory does not blow up your context the way an unpruned `CLAUDE.md` would (see <LessonLink id="B2.2" />).
+
+## Which one, in one rule
+
+You do not need a decision tree for two options. You need one question:
+
+> **Would a teammate need this, and would you want it reviewed?**
+
+If yes, it belongs in `CLAUDE.md`. Write it there yourself, or tell Claude explicitly: *"add this to CLAUDE.md."* Team conventions, build commands, architectural rules, anything a code reviewer would care about.
+
+If no, let auto memory have it. Your personal quirks, the corrections you keep making, the debugging insight that only matters to how *you* work. You do not have to curate this. That is the whole point of it.
+
+And the operational half of the rule: **you deliberately manage `CLAUDE.md`. You periodically audit auto memory.** One is authored. The other is inspected.
+
+Both are plain markdown, and `/memory` opens either.
 
 ## Scenario walkthroughs
 
-{/* @@TODO@@ 5–8 rapid-fire scenarios, each stated then resolved with the recommended option + reasoning. */}
+**"Always use pnpm, never npm" for the whole team.**
+`CLAUDE.md`, and say so explicitly. If you just say "remember that we use pnpm," Claude files it in *your* auto memory, and your teammates keep getting `npm`. Say "add to CLAUDE.md: use pnpm, never npm."
 
-## Edge cases
+**Claude keeps forgetting that the integration tests need Redis running locally.**
+Let auto memory handle it, or better, notice why you are being asked. If this is true for everyone on the project, it is a project fact and belongs in `CLAUDE.md`. If it is true because of how your machine is set up, auto memory is right.
 
-{/* @@TODO@@ Situations where two options are both defensible, and what tips the balance. */}
+**You correct Claude's comment style for the third time this week.**
+This is exactly what auto memory is for. It will pick it up on its own. If it does not, and the preference matters across every project, put it in `~/.claude/CLAUDE.md` instead.
+
+**Claude confidently uses an API helper that was deleted two months ago.**
+Stale auto memory. It learned the helper existed, the fact expired, and nothing tells a note to expire. Run `/memory`, open the auto memory folder, find the entry, delete it. This is the failure mode of the whole system: **auto memory is silently wrong far more easily than `CLAUDE.md`, because nothing forces you to look at it.**
+
+**Your `CLAUDE.md` says "use tabs" and auto memory says you prefer spaces.**
+They both load, they contradict, and Claude may pick one arbitrarily. There is no precedence rule that saves you. Fix it at the source: decide which is true, correct `CLAUDE.md` if it is wrong, and delete the auto memory entry if it is. Contradictions do not resolve themselves; they just make behavior look random.
+
+**A new teammate clones the repo and Claude behaves completely differently for them.**
+Expected, and the clearest illustration of the split. They got your `CLAUDE.md`. They did not get eight weeks of your auto memory. If Claude's good behavior on your machine depends on notes only you have, that behavior is not really part of the project. Move the parts that matter into `CLAUDE.md`.
+
+**You are about to hand this project off, or you are debugging why Claude acts strangely only for you.**
+Audit. `/memory`, open the auto memory folder, read it. It is plain markdown. Most people have never looked, and most people find something in there they no longer believe.
+
+**You want none of this.**
+Auto memory is on by default and you can turn it off: toggle it in `/memory`, set `"autoMemoryEnabled": false` in settings, or set `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. Reasonable if you want every instruction to be explicit and reviewable. You lose the thing that quietly stops you repeating yourself.
+
+## Try It
+
+**Environment:** whichever repository you have actually used Claude in the most. This only reads and edits memory files, never your code.
+
+1. Start Claude and run `/memory`. Note which `CLAUDE.md` files are listed as loaded. If one you expected is missing, that is why its rules were being ignored.
+2. Open the auto memory folder from the same menu. Read `MEMORY.md`.
+3. Find one entry that is stale, wrong, or that you would be embarrassed to have a teammate inherit. Delete it.
+4. Find one entry that *should* be a team fact. Move it: ask Claude to *"add this to CLAUDE.md,"* then delete the auto memory version so the two cannot disagree.
+
+**Success criteria:** you can say, out loud, which of Claude's behaviors in this project come from a file your team shares and which come from notes only your machine has. If the auto memory folder is empty, that is a valid result; it means Claude has not found anything worth keeping yet.
+
+## FAQ
+
+**Claude remembers something I never wrote down. What is doing that?** Auto memory. Claude writes notes to itself as you work, stores them under `~/.claude/projects/<project>/memory/`, and loads the `MEMORY.md` index at the start of every session.
+
+**Which memory should I deliberately manage?** `CLAUDE.md`. Author it, prune it, commit it. Auto memory is meant to run without you, so the job there is periodic audit, not curation.
+
+**Where does "remember that…" go?** Auto memory, which is the single most common surprise here. To put something in `CLAUDE.md`, say so explicitly: *"add this to CLAUDE.md."*
+
+**Is auto memory shared with my team?** No. It is machine-local and never leaves your computer, not even across your own machines. Anything the team needs must be in `CLAUDE.md`.
+
+**What happens when the two disagree?** Both load as context and Claude may pick either. Resolve it yourself by editing the source of the wrong one.
+
+**How do I inspect or delete what Claude saved?** `/memory` lists loaded files and opens the auto memory folder. Everything is plain markdown you can read, edit, or delete.
+
+**Does auto memory bloat my context like a long `CLAUDE.md`?** Much less. Only the first 200 lines (or 25KB) of `MEMORY.md` load at startup; topic files are read on demand. `CLAUDE.md` loads in full regardless of length.
+
+**Can I turn it off?** Yes, via the `/memory` toggle, `"autoMemoryEnabled": false`, or `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
+
+## Where next
+
+You can now tell the two memories apart, which mostly means you can tell *your* instructions from Claude's inferences, and you know which of them your team can see.
+
+Both systems share a limitation worth repeating: they are context, so they persuade rather than enforce. <LessonLink id="B3.3" /> approaches control from the opposite side, with permission modes and plan mode, which do not ask Claude to behave. They constrain what it is able to do.
