@@ -4,6 +4,7 @@
 // A drift guard in index.test.ts asserts this matches the real registry.
 export const chartIds: readonly string[] = [
   'agentic-loop-diagram',
+  'beginner-workflow-map',
   'clear-compact-new-tree',
   'command-belt-reference',
   'context-window-simulator',

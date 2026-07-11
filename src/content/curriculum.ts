@@ -272,6 +272,7 @@ export const curriculum: Level[] = [
             teaches: ['workflow-loop', 'explore-plan-code-verify-commit'],
             references: ['B2.4', 'B3.1', 'B3.4', 'B3.5'],
             docsSources: ['https://code.claude.com/docs/en/best-practices', 'https://code.claude.com/docs/en/common-workflows'],
+            interactive: [{ kind: 'diagram', spec: 'beginner-workflow-map' }, { kind: 'diagram', spec: 'agentic-loop-diagram' }],
             content: () => import('./lessons/beginner/explore-plan-code-verify-commit.mdx'),
           },
           {

@@ -1,4 +1,5 @@
 import { agenticLoopDiagram } from './agentic-loop-diagram'
+import { beginnerWorkflowMap } from './beginner-workflow-map'
 import { clearCompactNewTree } from './clear-compact-new-tree'
 import { commandBeltReference } from './command-belt-reference'
 import { contextWindowSimulator } from './context-window-simulator'
@@ -8,6 +9,7 @@ import type { ChartDef } from './types'
 const charts: Record<string, ChartDef> = {
   [demo.id]: demo,
   [agenticLoopDiagram.id]: agenticLoopDiagram,
+  [beginnerWorkflowMap.id]: beginnerWorkflowMap,
   [clearCompactNewTree.id]: clearCompactNewTree,
   [contextWindowSimulator.id]: contextWindowSimulator,
   [commandBeltReference.id]: commandBeltReference,
