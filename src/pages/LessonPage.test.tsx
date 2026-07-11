@@ -88,6 +88,20 @@ test('scroll-restore fires on #chart-demo anchor after lazy MDX mounts', async (
   }
 })
 
+test('scroll-restore resolves a #lref-N ordinal to the Nth lesson link', async () => {
+  const original = Element.prototype.scrollIntoView
+  const scrollSpy = vi.fn()
+  Element.prototype.scrollIntoView = scrollSpy
+  try {
+    renderAt('/learn/advanced/power/subagents#lref-0')
+    const link = await screen.findByTestId('fixture-lref')
+    // The rAF poll should resolve #lref-0 to the first lesson link and scroll it.
+    await waitFor(() => expect(scrollSpy.mock.contexts).toContain(link))
+  } finally {
+    Element.prototype.scrollIntoView = original
+  }
+})
+
 test('renders the Prerequisites strip linking to prerequisite lessons', async () => {
   renderAt('/learn/beginner/basics/first-edit')
   await screen.findByRole('heading', { name: /your first edit/i })
