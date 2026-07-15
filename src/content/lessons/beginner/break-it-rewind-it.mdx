@@ -15,7 +15,7 @@ docsSources: ["https://code.claude.com/docs/en/checkpointing"]
 
 # Break it, rewind it
 
-Shelf works: it stores tagged items and filters by tag. This milestone you are going to break it on purpose, twice, and recover two different ways. The point is not the app, you will put it back exactly as it was. The point is to make recovery feel boring, because a developer who knows undo is cheap works more boldly than one who is afraid to touch anything.
+Shelf works: it stores tagged items and filters by tag. This milestone you are going to break it on purpose, twice, and recover two different ways. You are not building anything new; you will put Shelf back the way it was. What you are building is the reflex of cheap recovery, because a developer who knows undo is one command away works more boldly than one who is afraid to touch anything.
 
 ## Goal for this stage
 
@@ -26,7 +26,7 @@ Practice the two recovery tools on real breakage you cause deliberately:
 
 By the end, Shelf is exactly where it started and you can tell, without thinking, which tool a given mess calls for.
 
-**Environment:** your Shelf repo. You committed the tagging feature in <LessonLink id="B5.2" />, so you have a clean baseline. That commit is precisely what makes the second half safe.
+**Environment:** your Shelf repo. You committed the tagging feature in <LessonLink id="B5.2" />, so you have a clean baseline. That commit is what makes the second half safe.
 
 ## Steps
 
@@ -76,7 +76,7 @@ curl -s "localhost:5000/items?tag=scifi"
 
 </WhenLang>
 
-"Still returns 200" is exactly why the verification habit matters: nothing errored, but the behavior is wrong.
+"Still returns 200" is why the verification habit matters: nothing errored, but the behavior is wrong.
 
 ### 3. Recover with `/rewind`
 
@@ -131,7 +131,7 @@ That second point is the sharp edge to remember: the moment recovery involves an
 
 ### 6. Recover with `git revert`
 
-The right move is to add a commit that undoes the bad one, which keeps history honest instead of rewriting it, exactly the discipline from <LessonLink id="B4.3" />:
+The right move is to add a commit that undoes the bad one, which keeps history truthful instead of rewriting it, the discipline from <LessonLink id="B4.3" />:
 
 ```prompt
 That last commit broke the tag filter. git revert it.

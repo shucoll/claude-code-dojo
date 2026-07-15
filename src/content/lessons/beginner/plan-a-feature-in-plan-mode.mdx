@@ -32,7 +32,7 @@ The artifact is a working tagging feature. The skill is the cycle that produced 
 
 ### 1. Enter plan mode, and know why
 
-The health check did not need a plan. It was one file and one obvious line; per the ladder in <LessonLink id="B3.5" />, you just do those. Tagging is different: it changes the database schema, the data layer in `db.js`, and the routes in `server.js`. That is three touch points you do not fully hold in your head at once, which is exactly the threshold <LessonLink id="B3.3" /> describes for reaching for plan mode.
+The health check did not need a plan. It was one file and one obvious line; per the ladder in <LessonLink id="B3.5" />, you just do those. Tagging is different: it changes the database schema, the data layer in `db.js`, and the routes in `server.js`. That is three touch points you do not fully hold in your head at once, the threshold <LessonLink id="B3.3" /> describes for reaching for plan mode.
 
 Enter it by pressing `Shift+Tab` to cycle to **plan** (the status bar shows the mode), or prefix a single prompt with `/plan`, or launch with `claude --permission-mode plan`. In plan mode Claude reads files and explores but cannot edit anything. Edits stay blocked until you approve a plan, so there is no risk in letting it look around.
 
@@ -241,7 +241,7 @@ And there is a test proving it, plus one commit that contains exactly this featu
 
 ## Reasoning recap
 
-Plan mode's ceremony is worth it precisely when a change touches multiple files you do not fully hold in your head. The health check did not qualify; tagging did. Learning to feel that line is half the lesson.
+Plan mode's ceremony is worth it when a change touches multiple files you do not fully hold in your head. The health check did not qualify; tagging did. Learning to feel that line is half the lesson.
 
 The other half is that the leverage is not the plan, it is the **review** of the plan. A wrong approach caught at plan time costs one sentence of feedback. The same mistake caught in the diff costs a re-run. Caught after you ship, it costs a debugging session. Reviewing the plan is how you move a correction as early as it can possibly go, which is the cheapest place to make it.
 

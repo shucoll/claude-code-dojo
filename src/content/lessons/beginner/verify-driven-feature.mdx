@@ -69,7 +69,7 @@ show me the output. It isn't done until they pass.
 
 </WhenLang>
 
-This is the whole move. The check now lives *inside* the prompt, so the loop closes on its own: Claude writes the code, runs the tests, reads the result, and keeps going until they pass. Without that, you are the verification loop, catching each mistake by eye.
+That single change does the work. The check now lives *inside* the prompt, so the loop closes on its own: Claude writes the code, runs the tests, reads the result, and keeps going until they pass. Without it, you are the verification loop, catching each mistake by eye.
 
 ### 3. Read the tests before the code
 

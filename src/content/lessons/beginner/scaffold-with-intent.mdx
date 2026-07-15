@@ -42,7 +42,7 @@ Get the project set up the right way round: **write `CLAUDE.md` before any code 
 
 Before Claude writes a line of code, you write the file that tells it how. This is the inversion that gives the milestone its name. You already met `CLAUDE.md` in <LessonLink id="B3.1" />; here you author one for a project that does not exist yet.
 
-A tempting shortcut is `/init`, which generates a starter `CLAUDE.md` for you. It will not help here, and knowing why is the point: `/init` works by *reading your existing codebase* to detect its stack, commands, and patterns. An empty directory has nothing to read. When there is no code yet, intent has to be authored by hand. That is not a limitation to route around, it is the entire move: you are deciding the conventions instead of letting them accrete.
+A tempting shortcut is `/init`, which generates a starter `CLAUDE.md` for you. It will not help here, and knowing why matters: `/init` works by *reading your existing codebase* to detect its stack, commands, and patterns. An empty directory has nothing to read. When there is no code yet, intent has to be authored by hand. That is not a limitation to route around. It is the work: deciding the conventions yourself instead of letting them accrete.
 
 Create `CLAUDE.md` in the empty directory with the stack you are about to build, the commands that *will* exist, and the conventions you want honored from the first file:
 
@@ -100,7 +100,7 @@ Notice what is *not* in there: no file-by-file description, no explanation of wh
 
 ### 2. Scaffold against the file you just wrote
 
-Now prompt Claude to build the skeleton. The prompt carries a clear goal and a finish line it can check, exactly the shape from <LessonLink id="B4.1" />. The finish line here is "a health check that returns 200," which is the smallest thing that proves the server actually boots.
+Now prompt Claude to build the skeleton. The prompt carries a clear goal and a finish line it can check, the shape from <LessonLink id="B4.1" />. The finish line here is "a health check that returns 200," which is the smallest thing that proves the server actually boots.
 
 <WhenLang is="javascript">
 
