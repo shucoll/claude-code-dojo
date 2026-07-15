@@ -15,18 +15,128 @@ docsSources: ["https://code.claude.com/docs/en/common-workflows"]
 
 # Ship the repo
 
+Shelf works. It runs on your machine, the features are complete, the tests are green. But "works on my machine" is not shipped. Shipped means someone else could clone the repo, understand it, and run it, and that you would be glad to have your name on it. This last milestone turns a working directory into a repository you would show a colleague.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Turn working Shelf into a shipped repo:
+
+- a `README.md` generated from the actual code,
+- a commit history that reads as a story,
+- a final read-through you own,
+- and a `WORKFLOW.md` you write yourself, describing the loop you just ran.
+
+That last file is the exit artifact of the whole project, and the baseline you carry into the next level.
+
+**Environment:** your Shelf repo, feature-complete from <LessonLink id="B5.5" />.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Let Claude write the README from the code
+
+A README should describe what is actually in the repo, not what you meant to build. Have Claude read the codebase and write it:
+
+<WhenLang is="javascript">
+
+```prompt
+Read the codebase and write a README.md: what Shelf is, how to install and run
+it (npm install, npm start), the API endpoints with example curl requests, and
+how to run the tests (npm test). Cover only what the code actually does.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Read the codebase and write a README.md: what Shelf is, how to install and run
+it (pip install -r requirements.txt, flask --app app run), the API endpoints
+with example curl requests, and how to run the tests (pytest). Cover only what
+the code actually does.
+```
+
+</WhenLang>
+
+Generated from the code, the README is accurate the moment it is written. Read it anyway and fix anything that drifted. A README that promises an endpoint you deleted is worse than no README, and catching that is your job, not Claude's.
+
+### 2. Tidy the commit history into a story
+
+Six milestones left a real record. Look at it:
+
+```bash
+git log --oneline
+```
+
+```text
+b7c1a90 wire up the browser UI
+3f9d2e1 add edit and delete endpoints
+a4e88c2 add title search
+a1b2c3d Revert "simplify item listing"
+e4f5g6h simplify item listing
+c2d1f0a add tagging to Shelf
+9h8i7j6 scaffold Shelf
+```
+
+A history worth shipping reads like a story a reviewer can follow: one concern per commit, messages that say what changed and why. Yours already mostly does, though the break-and-recover detour from <LessonLink id="B5.3" /> left a pair of commits that only cancel out. Ask Claude to look with you:
+
+```prompt
+Review our commit history with git log. Each message should describe one change
+and why it happened. Point out anything a reviewer would find confusing.
+```
+
+Then decide what to leave. One rule governs how freely you can reshape it, from <LessonLink id="B4.3" />: history that has not been shared is yours to clean up, but once it is pushed you revert forward instead of rewriting. Shelf is local and unpushed, so you have room to tidy. The skill to take away is reading your own history the way a reviewer would.
+
+### 3. Take the final read-through yourself
+
+Shipping means owning it, so verify the repo the way a stranger would meet it. In a fresh directory, follow your own README's steps and see if they hold:
+
+<WhenLang is="javascript">
+
+```bash
+npm install
+npm start          # serves http://localhost:3000
+npm test
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+pip install -r requirements.txt
+flask --app app run   # serves http://localhost:5000
+pytest
+```
+
+</WhenLang>
+
+If a step is missing or wrong, the README is wrong, so fix it. A repo that will not run from its own instructions is not shipped, it is just sitting on your disk with a nice file on top.
+
+### 4. Write `WORKFLOW.md` in your own words
+
+This is the one document you do not hand to Claude. Write it yourself: a short account of the loop you ran across these six milestones. What you reach for first on a new task, when you drop into plan mode, how you verify, how you recover, when you reset the context.
+
+Its value is that it is yours. Claude can generate a tidy description of a generic workflow, but it cannot write down the judgment *you* built, and a loop you have named in your own words is one you can actually repeat and improve. Keep it to a page. It is the baseline you take into the next level.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+Shelf is shipped:
+
+- a `README.md` that matches the code and was read by a human,
+- a commit history that tells the story of the build,
+- confirmed to run from its own instructions in a clean checkout,
+- and a `WORKFLOW.md` in your own words.
+
+**Done looks like:** someone who is not you could clone Shelf and run it from the README alone, and you hold a written account of the loop you now own.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+"Works on my machine" and "shipped" are different states, and the gap between them is everything that lets the repo stand on its own: documentation drawn from the real code, a history a reviewer can follow, and instructions that work for someone who did not build it. Claude can produce all of that quickly, but the read-through stays yours, because generated docs are true when written and drift with every change after, and only you can vouch that the repo does what it claims. That is the ownership principle from <LessonLink id="B4.3" />, widened from a single commit to the whole repository.
+
+`WORKFLOW.md` is the real graduation. The features were only the vehicle; the loop was the lesson. Explore, plan, verify, recover, manage context, ship. Writing it down in your own words is how it turns from steps you followed into a habit you carry.
+
+## Where next
+
+That completes the guided project, and with the concept modules and the level self-assessment, the Beginner level. You can scaffold a project with intent, design a multi-file change in plan mode, break things without fear, prompt for proof instead of hoping, keep a long session healthy, and ship a repo you would sign your name to.
+
+The next level shifts the focus from *using* Claude Code well to *shaping* it: building skills, hooks, MCP connections, and subagents into a development environment tuned to how you work. The loop you just wrote into `WORKFLOW.md` is the thing all of that will make faster.
