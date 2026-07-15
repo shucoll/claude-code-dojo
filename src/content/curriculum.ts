@@ -436,7 +436,29 @@ export const curriculum: Level[] = [
   {
     id: 'intermediate',
     title: 'Intermediate',
-    modules: [],
+    modules: [
+      {
+        id: 'tools-permissions-settings',
+        title: 'Tools, Permissions, Settings',
+        lessons: [
+          {
+            id: 'the-built-in-tool-belt',
+            dottedId: 'I1.1',
+            title: 'The built-in tool belt',
+            type: 'core',
+            order: 1,
+            estimatedMinutes: 11,
+            volatility: 'evolving',
+            verifiedAgainstDocsAt: '2026-07-15',
+            teaches: ['tool-belt', 'risk-tiers', 'reading-transcripts'],
+            references: ['B1.1', 'B2.3'],
+            docsSources: ['https://code.claude.com/docs/en/tools-reference', 'https://code.claude.com/docs/en/permissions'],
+            interactive: [{ kind: 'diagram', spec: 'tool-belt-map' }],
+            content: () => import('./lessons/intermediate/the-built-in-tool-belt.mdx'),
+          },
+        ],
+      },
+    ],
   },
   {
     id: 'advanced',
@@ -472,4 +494,5 @@ export const lessonPathById: Record<string, string> = {
   'B5.4': '/learn/beginner/guided-project-shelf/verify-driven-feature',
   'B5.5': '/learn/beginner/guided-project-shelf/context-management-under-pressure',
   'B5.6': '/learn/beginner/guided-project-shelf/ship-the-repo',
+  'I1.1': '/learn/intermediate/tools-permissions-settings/the-built-in-tool-belt',
 }

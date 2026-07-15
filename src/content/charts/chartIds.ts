@@ -9,4 +9,5 @@ export const chartIds: readonly string[] = [
   'command-belt-reference',
   'context-window-simulator',
   'demo',
+  'tool-belt-map',
 ]

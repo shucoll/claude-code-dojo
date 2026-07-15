@@ -25,7 +25,7 @@ export const structure: LevelDef[] = [
     id: 'intermediate',
     title: 'Intermediate',
     order: 2,
-    modules: [],
+    modules: [{ code: 'I1', slug: 'tools-permissions-settings', title: 'Tools, Permissions, Settings', order: 1 }],
   },
   {
     id: 'advanced',
