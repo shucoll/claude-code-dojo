@@ -42,6 +42,28 @@ Always fetch the relevant official docs first (start from the docs map at
 is accurate as of today, not as of training data. If a lesson's content
 conflicts with current docs, the docs win.
 
+### Authoring a pre-scaffolded stub
+
+A lesson may already exist as a frontmatter-only `@@TODO@@` skeleton, scaffolded
+in a batch ahead of time (the whole Intermediate level was). **Its frontmatter is
+provisional — do not trust it as verified.** Before writing the body:
+
+- **`docsSources` URLs were inferred** from the curriculum's `.md` filenames
+  (`claude-directory.md` → `/en/claude-directory`) and **have never been
+  fetched**. Fetch each one. A URL that 404s or redirects is wrong: find the real
+  page and fix the frontmatter, since these render as the lesson's "Official
+  docs" footer.
+- **`interactive` was deliberately omitted** when the lesson's chart didn't exist
+  yet (the validator only accepts a registered chart id). Check the curriculum's
+  Interactive row: if it names a chart, author and register it now, then add the
+  `interactive` block and the `<ChartEmbed>`.
+- **`verifiedAgainstDocsAt` is the scaffold date, not a verification.** Set it to
+  the day you actually check the docs.
+- **`volatility`** came from the curriculum; re-judge it against the real docs
+  surface, per the rule above.
+
+Rerun `npm run gen:curriculum` after any frontmatter change.
+
 ## Follow the lesson's Structure line
 
 Every core and resolver lesson in the curriculum carries a **Structure** line
