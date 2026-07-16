@@ -1,0 +1,10 @@
+The team's settings file, committed to the repo. Clone the project, get these settings.
+
+It holds permissions (`allow` / `deny` / `ask`), hooks, environment variables, and enabled plugins.
+
+Two things people expect to find here and never will:
+
+- **Hooks have no file of their own.** They live under the `"hooks"` key *inside* this file. A standalone hooks file is silently ignored.
+- **MCP servers do not go here.** This file has no `mcpServers` key. Project servers belong in `.mcp.json` at the repository root.
+
+Overridden by `settings.local.json`, and by managed settings your organization deploys.

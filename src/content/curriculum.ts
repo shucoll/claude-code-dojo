@@ -505,6 +505,7 @@ export const curriculum: Level[] = [
             prerequisites: ['I1.2'],
             references: ['B3.1'],
             docsSources: ['https://code.claude.com/docs/en/claude-directory', 'https://code.claude.com/docs/en/settings', 'https://code.claude.com/docs/en/debug-your-config'],
+            interactive: [{ kind: 'diagram', spec: 'dot-claude-directory-map' }],
             content: () => import('./lessons/intermediate/settings-scopes-and-the-claude-directory.mdx'),
           },
           {

@@ -4,6 +4,7 @@ import { clearCompactNewTree } from './clear-compact-new-tree'
 import { commandBeltReference } from './command-belt-reference'
 import { contextWindowSimulator } from './context-window-simulator'
 import { demo } from './demo'
+import { dotClaudeDirectoryMap } from './dot-claude-directory-map'
 import { intermediateStackMap } from './intermediate-stack-map'
 import { permissionRuleShapes } from './permission-rule-shapes'
 import { toolBeltMap } from './tool-belt-map'
@@ -19,6 +20,7 @@ const charts: Record<string, ChartDef> = {
   [toolBeltMap.id]: toolBeltMap,
   [intermediateStackMap.id]: intermediateStackMap,
   [permissionRuleShapes.id]: permissionRuleShapes,
+  [dotClaudeDirectoryMap.id]: dotClaudeDirectoryMap,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)

@@ -12,4 +12,5 @@ export const chartIds: readonly string[] = [
   'tool-belt-map',
   'intermediate-stack-map',
   'permission-rule-shapes',
+  'dot-claude-directory-map',
 ]
