@@ -25,7 +25,7 @@ export const structure: LevelDef[] = [
     id: 'intermediate',
     title: 'Intermediate',
     order: 2,
-    modules: [{ code: 'I0', slug: 'level-overview', title: 'Level Overview', order: 0 }, { code: 'I1', slug: 'tools-permissions-settings', title: 'Tools, Permissions, Settings', order: 1 }],
+    modules: [{ code: 'I0', slug: 'level-overview', title: 'Level Overview', order: 0 }, { code: 'I1', slug: 'tools-permissions-settings', title: 'Tools, Permissions, Settings', order: 1 }, { code: 'I2', slug: 'context-engineering', title: 'Context Engineering', order: 2 }, { code: 'I3', slug: 'skills', title: 'Skills', order: 3 }, { code: 'I4', slug: 'hooks', title: 'Hooks', order: 4 }, { code: 'I5', slug: 'mcp-servers', title: 'MCP Servers', order: 5 }, { code: 'I6', slug: 'subagents', title: 'Subagents', order: 6 }, { code: 'I7', slug: 'plugins-and-integration', title: 'Plugins and Integration', order: 7 }, { code: 'I8', slug: 'guided-project-pulseboard', title: 'Guided Project: PulseBoard', order: 8 }],
   },
   {
     id: 'advanced',
