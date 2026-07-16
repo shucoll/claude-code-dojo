@@ -20,7 +20,7 @@ interactive:
 
 ## The problem
 
-In <LessonLink id="I1.1" /> you learned that every permission prompt is a tool asking, and the tier predicts which prompts you get. But you are still clicking those prompts one at a time, session after session: yes to `npm test`, yes to the same edit, yes to `git status` you have approved a hundred times. Clicking works until it doesn't. It trains you to approve without reading, which is exactly the habit that lets a bad action slip through, and it interrupts you for things you were never actually worried about.
+In <LessonLink id="I1.1" /> you learned that every permission prompt is a tool asking, and the tier predicts which prompts you get. But you are still clicking those prompts one at a time, session after session: yes to `npm test`, yes to the same edit, yes to `git status` you have approved a hundred times. Clicking works until it doesn't. It trains you to approve without reading, which is the habit that lets a bad action slip through, and it interrupts you for things you were never actually worried about.
 
 Permission rules turn that clicking into a written policy. You allow the safe things once, deny the dangerous things always, and keep the prompt for the few actions that genuinely deserve a pause.
 
@@ -34,7 +34,7 @@ A permission rule is one line in a list. There are three lists, named for what t
 
 Every tool call is checked against all three, in a fixed order: **deny first, then ask, then allow.** The first list that matches decides the outcome, and it stops there. So deny beats ask beats allow, always. Rule *specificity* does not change this: a broad `deny` beats a precise `allow`, because the bucket it lives in is checked first.
 
-That single sentence, **deny > ask > allow**, explains almost every permission surprise you will ever have. Hold onto it.
+That single sentence, **deny > ask > allow**, explains almost every permission surprise you will ever have.
 
 Rules live in your settings files and you manage them with the `/permissions` command, which lists every active rule and the file it came from. There are three files, and <LessonLink id="I1.3">the next lesson</LessonLink> maps them properly; for now the short version is enough:
 
@@ -163,7 +163,7 @@ On a Bash prompt, `Ctrl+E` also explains what the command does and rates its ris
 
 ## FAQ
 
-**Where exactly do rules live?** In the three settings files above, and you edit them with `/permissions` or by hand. Which file to choose (team vs personal vs global) is the whole subject of <LessonLink id="I1.3">the next lesson</LessonLink>, on settings and scopes.
+**Where exactly do rules live?** In the three settings files above, and you edit them with `/permissions` or by hand. Which file to choose (team vs personal vs global) is the subject of <LessonLink id="I1.3">the next lesson</LessonLink>, on settings and scopes.
 
 **Can a rule use a regular expression?** No. Bash rules are glob patterns and file rules are gitignore patterns. This trips up anyone expecting regex; there is no `.*` or anchors, just `*` and `**`.
 

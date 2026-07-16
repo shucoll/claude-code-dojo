@@ -150,6 +150,21 @@ footer.
    - **Prose style: use em-dashes (—) minimally, ideally none.** Reach for
      periods, commas, colons, or parentheses instead. Overusing em-dashes makes
      lessons read as machine-authored; keep them rare across all lesson prose.
+   - **No self-referential emphasis.** Never announce that something is
+     important — state it plainly and let it carry itself. Banned shapes:
+     "that is exactly what X resolves", "this is the whole point / the whole
+     answer / the entire point", "is exactly why/what", "and it matters",
+     "worth slowing down for", "hold onto it", "that is the whole game".
+     Also drop filler `exactly`/`precisely` before a comparison ("exactly the
+     shape from B4.1" → "the shape from B4.1"); precise-equality uses are fine
+     ("back exactly where it started").
+   - **Say each point once.** Don't repeat an insight or a cross-link in two
+     sections (e.g. a body step and the recap). Put it where it lands best.
+   - **Avoid "honestly"** as a filler adverb.
+
+     These are standing user preferences, flagged repeatedly across reviews.
+     Grep the finished lesson before claiming it done:
+     `grep -niE "exactly (what|why|the)|the whole (point|answer|game)|and it matters|honestly|—" <file>`
    - The scaffolder writes the anatomy for the chosen `--type` as headings with
      `@@TODO@@` guidance comments describing what belongs in each section
      (e.g. `core` gets "The problem" → "The concept" → "How it works" →
