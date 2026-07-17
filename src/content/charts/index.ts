@@ -6,6 +6,7 @@ import { contextCostLedger } from './context-cost-ledger'
 import { contextWindowSimulator } from './context-window-simulator'
 import { demo } from './demo'
 import { dotClaudeDirectoryMap } from './dot-claude-directory-map'
+import { hookLifecycleClickable } from './hook-lifecycle-clickable'
 import { intermediateStackMap } from './intermediate-stack-map'
 import { permissionRuleShapes } from './permission-rule-shapes'
 import { toolBeltMap } from './tool-belt-map'
@@ -23,6 +24,7 @@ const charts: Record<string, ChartDef> = {
   [intermediateStackMap.id]: intermediateStackMap,
   [permissionRuleShapes.id]: permissionRuleShapes,
   [dotClaudeDirectoryMap.id]: dotClaudeDirectoryMap,
+  [hookLifecycleClickable.id]: hookLifecycleClickable,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)

@@ -1,0 +1,6 @@
+Fires before any tool call runs, and it can stop the call. Its matcher filters
+by tool name (`Bash`, `Edit|Write`, `mcp__.*`), and an `if` clause narrows
+further to specific arguments (`Bash(git push *)`).
+
+This is the enforcement point. Block edits to protected files, or refuse a
+dangerous command, before it happens rather than cleaning up after.

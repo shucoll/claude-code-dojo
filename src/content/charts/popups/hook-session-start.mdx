@@ -1,0 +1,7 @@
+Fires once when a session begins or resumes. Its matcher distinguishes how it
+began: `startup`, `resume`, `clear`, or `compact`.
+
+Anything the hook prints to stdout is added to Claude's context, which makes
+this the event for loading project state at the top of a session: recent
+commits, the current sprint, or the conventions you want reasserted after a
+compaction.

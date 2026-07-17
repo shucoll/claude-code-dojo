@@ -14,4 +14,5 @@ export const chartIds: readonly string[] = [
   'intermediate-stack-map',
   'permission-rule-shapes',
   'dot-claude-directory-map',
+  'hook-lifecycle-clickable',
 ]

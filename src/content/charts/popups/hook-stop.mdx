@@ -1,0 +1,6 @@
+Fires when Claude finishes a turn and is about to hand control back to you.
+There is no matcher.
+
+It can refuse to stop. A Stop hook that runs the test suite and blocks on
+failure changes what "done" means, since Claude cannot end the turn until the
+tests pass.

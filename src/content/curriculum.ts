@@ -647,10 +647,11 @@ export const curriculum: Level[] = [
             order: 1,
             estimatedMinutes: 12,
             volatility: 'evolving',
-            verifiedAgainstDocsAt: '2026-07-16',
+            verifiedAgainstDocsAt: '2026-07-17',
             prerequisites: ['I1.3'],
             references: ['B2.3', 'I1.1'],
             docsSources: ['https://code.claude.com/docs/en/hooks-guide', 'https://code.claude.com/docs/en/hooks'],
+            interactive: [{ kind: 'diagram', spec: 'hook-lifecycle-clickable' }],
             content: () => import('./lessons/intermediate/hooks-deterministic-automation.mdx'),
           },
           {

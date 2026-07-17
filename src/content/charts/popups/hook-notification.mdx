@@ -1,0 +1,6 @@
+Fires when Claude Code needs your attention: a permission prompt, or an idle
+prompt when it has finished and is waiting. Its matcher picks which
+(`permission_prompt`, `idle_prompt`, and more).
+
+It has no side effects, which makes it the safe first hook to write: a desktop
+notification so you can look away from the terminal without missing your turn.

@@ -1,0 +1,5 @@
+Fires just before Claude compacts the context window to reclaim space, whether
+you ran `/compact` (matcher `manual`) or it triggered automatically (`auto`).
+
+It is the hook for surviving compaction: capture or re-assert the details a
+summary would otherwise drop, so the work continues from the same footing.

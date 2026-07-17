@@ -6,50 +6,187 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-17"
 prerequisites: ["I1.3"]
 references: ["B2.3", "I1.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks-guide", "https://code.claude.com/docs/en/hooks"]
+interactive:
+  - kind: "diagram"
+    spec: "hook-lifecycle-clickable"
 ---
 
 # Hooks: deterministic automation
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You have a rule you care about: run the formatter after every edit, never touch `.env`, run the tests before calling anything done. So you put it in `CLAUDE.md`, and it works. Most of the time. Then a long session fills the window, the instruction is now forty messages back, and Claude edits a file without formatting it. You told it the rule and it still slipped, because an instruction is something Claude reads and weighs, and under enough pressure it can weigh it as less urgent than the task in front of it.
+
+Some rules cannot afford to be sometimes. "Never modify the migration files" is not advice you want followed on average. You want it to be impossible to break. That is a different kind of guarantee than any instruction can give, and it is what hooks are for.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+A hook binds a shell command to a moment in Claude Code's lifecycle. When that moment arrives, the command runs. Every time. No model reads it, decides whether it applies, or chooses whether to obey, because a hook is not an instruction to Claude at all. It is machinery the harness runs on its own.
+
+The shift is from asking to guaranteeing. <LessonLink id="B3.1">`CLAUDE.md`</LessonLink> asks Claude to remember to format after an edit; it usually does. A `PostToolUse` hook on the edit tool runs the formatter itself the moment the edit lands, whether Claude thought of it or not. The rule stops depending on the model's attention and starts depending on the harness, which does not get distracted.
+
+That reliability is also the constraint. A hook fires on an event, not on intent. It cannot judge whether this particular edit is the one that matters; it runs on all of them or, with a filter, on a named subset. So hooks are the right tool for rules you can state as "on event X, always do Y," and the wrong tool for anything needing the judgment only the model has. This lesson is about placing them; the two after it are about what they can do once placed.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The lifecycle, and where hooks attach
+
+A hook is useless until you know the moment it fires on. Claude Code's lifecycle is a set of named events, nested three deep: the **session** (from launch to quit), the **turn** inside it (from your prompt to Claude's stop), and the **tool call** inside that (the agentic loop from <LessonLink id="I1.1" />, running many times per turn). Each level has events you can hook. The diagram below is that lifecycle with the main hookable events as clickable nodes. Click one to see when it fires and what you would bind to it, then read the config underneath.
+
+<ChartEmbed id="hook-lifecycle-clickable" />
+
+The events divide by how often they fire, which is the first thing to internalize because it governs cost and blast radius:
+
+- **Once per session.** `SessionStart` (launch or resume), `SessionEnd` (quit). Good for loading or tearing down state.
+- **Once per turn.** `UserPromptSubmit` (you send a prompt, before Claude reads it), `Stop` (Claude finishes and hands control back). `Stop` is special: it can refuse, keeping Claude working until a condition is met.
+- **On every tool call.** `PreToolUse` (before a tool runs, and it can block the call) and `PostToolUse` (after it succeeds). These fire many times a turn, so they are where formatting, protection, and logging live.
+- **Reactive.** `Notification` (Claude needs your input), `PreCompact` (the window is about to be compacted). These fire when a condition is met rather than at a fixed point in the loop.
+
+That is the working set. The full surface has many more events, for subagents, MCP elicitation, config changes, worktrees, but the eight above cover almost everything you will write, and the rest follow the same pattern once you know these.
+
+### Where hooks are configured
+
+Hooks live in the same settings files as everything else from <LessonLink id="I1.3" />, under a `hooks` key. Where you put the file is where the hook applies:
+
+| Location | Scope |
+|---|---|
+| `~/.claude/settings.json` | all your projects, personal to your machine |
+| `.claude/settings.json` | one project, committed so the team gets it |
+| `.claude/settings.local.json` | one project, gitignored, just you |
+
+Managed policy settings can also carry hooks org-wide, and plugins and skills can bundle their own. The scope decision is the one <LessonLink id="I1.3" /> already taught: personal versus team, this-project versus everywhere.
+
+### The shape of a hook entry
+
+Every hook is three levels of nesting, and once you see the shape once it repeats everywhere:
+
+```json
+{
+  "hooks": {
+    "EventName": [
+      {
+        "matcher": "which occurrences",
+        "hooks": [
+          { "type": "command", "command": "what to run" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The outer key is the **event**. Inside it, a **matcher group** filters which occurrences of that event fire the hook. Inside that, the **handler** says what runs, a shell command here (the other handler types, prompt and agent, wait for <LessonLink id="I4.4" />). The inner `hooks` array is a list, so one matcher can run several handlers in order.
+
+### Matchers: firing on a subset
+
+`PostToolUse` fires after every tool call, which is rarely what you want. A formatter should run after edits, not after a file read. The matcher is how you narrow it. For tool events, the matcher tests the **tool name**:
+
+- `"Edit|Write"` fires only after those two tools. `|` separates alternatives.
+- `"Bash"` fires only on shell commands.
+- `"mcp__.*"` is a regex (any matcher with characters outside the plain list is treated as one), firing on every MCP tool.
+- `""` or omitted matches everything.
+
+To filter by a tool's **arguments**, not just its name, an `if` clause on the handler takes a permission rule from <LessonLink id="I1.2" />: `"if": "Bash(git push *)"` runs the handler only when the Bash command is a `git push`. That is how "before any git push" becomes expressible, distinct from "before any Bash command." Matchers on non-tool events filter differently, for instance `SessionStart` matches on `startup` versus `resume` versus `compact`, but the idea is the same: fire on a subset of the event, not all of it.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+We will write the safest possible hook first: a desktop notification when Claude needs your attention. It has no side effects, so there is nothing to get wrong except the wiring, which is the part worth practicing.
+
+The event is `Notification`, which fires when Claude is waiting on you, either for a permission approval or because it finished and wants your next prompt. Open `~/.claude/settings.json` and add:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"Claude Code\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+That command is macOS. On Linux use `notify-send 'Claude Code' 'Claude Code needs your attention'`; on Windows, a PowerShell `MessageBox` call. The empty matcher means every notification type fires it; to fire only when Claude wants approval, set the matcher to `permission_prompt`, or `idle_prompt` for only the finished-and-waiting case.
+
+If your settings file already has a `hooks` block, add `Notification` as a sibling key inside it rather than replacing the whole object. Each event is one key in the single `hooks` object.
+
+Now confirm it registered. In Claude Code, run:
+
+```text
+/hooks
+```
+
+That opens the hooks browser: every event, with a count next to the ones that have hooks. Select `Notification` and you will see your entry, its matcher, type, source file, and command. The menu is read-only, a viewer, not an editor. You change hooks by editing the settings file (or asking Claude to), and the file watcher picks up the change without a restart.
+
+Test it: ask Claude to do something needing permission, then switch to another window. The notification should appear. You have bound a command to a lifecycle event, which is every hook you will ever write, differing only in the event and what runs.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+- **You want the formatter to run after every edit.** A `PostToolUse` hook with matcher `Edit|Write` that runs your formatter on the changed file. It stops being something Claude has to remember and becomes something the harness does. Full recipe in <LessonLink id="I4.3" />.
+
+- **You want migrations to be untouchable.** A `PreToolUse` hook with matcher `Edit|Write` that checks the path and blocks the call if it is under `migrations/`. `PreToolUse` is the only event that can stop an action before it happens, which is what "cannot be modified" requires. The blocking mechanics are <LessonLink id="I4.2" />.
+
+- **You want "done" to mean the tests pass.** A `Stop` hook that runs the suite and refuses to let the turn end on failure. Because `Stop` can decline, Claude keeps working until green rather than declaring success early.
+
+- **You want project context reloaded after a compaction.** A `SessionStart` hook with matcher `compact` whose stdout is added to Claude's context, re-asserting the conventions a summary would have dropped. This is a structural fix for the <LessonLink id="B2.4">compaction memory-loss</LessonLink> problem.
+
+- **Near miss: you want Claude to write better commit messages.** That is not a hook. There is no lifecycle event for "the message could be clearer," and the improvement needs judgment, not a fixed reaction. That belongs in a <LessonLink id="B3.1">`CLAUDE.md`</LessonLink> convention or a <LessonLink id="I3.1">skill</LessonLink>. <LessonLink id="I4.5" /> is the resolver for exactly this fork.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Reach for a hook when the rule is **deterministic and lifecycle-shaped**: you can name the event it fires on, and the response is a fixed action with no judgment. "After every edit, format." "Before any push, run the linter." "On session start, load the sprint notes." If you can write it as "on event X, always do Y," it is a hook, and making it a hook is what turns "usually" into "always."
+
+Do not reach for a hook when the response needs the model's judgment ("is this refactor safe?"), when there is no event to anchor to, or when the thing is genuinely advisory and an occasional miss is fine. Forcing those into hooks means either a hook that cannot make the call or a `prompt` hook (<LessonLink id="I4.4" />) whose cost you should weigh first.
+
+The cost of a hook is not context, it is execution. A hook adds latency to the event it fires on, and a `PreToolUse`/`PostToolUse` hook fires on potentially every tool call in a turn, so a slow command there is felt on every action. Keep frequently-firing hooks fast, and scope them with a matcher so they run only when they must.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+**Reaching for a hook when you needed an instruction.** The symptom is a hook that never quite works because the rule it encodes needs judgment. If you find yourself wanting the hook to "decide," it is the wrong mechanism. Step back to <LessonLink id="I4.5" />.
+
+**No matcher, so it fires on everything.** The symptom is a formatter running after file reads, or a check firing on tool calls it has nothing to do with. An omitted or empty matcher matches all occurrences of the event. Add the matcher that names the subset you meant.
+
+**A matcher typo that silently matches nothing.** The symptom is a hook that never fires and no error to explain why. `Edt|Write` matches no tool, so the hook is inert. `/hooks` shows what is registered but not whether the matcher matches anything real, so verify by triggering the event and watching for the effect.
+
+**A slow command on a hot event.** The symptom is every edit or every command feeling sluggish. A `PostToolUse` hook that spins up a heavy process runs that process on every matching tool call. Keep hot-path hooks quick, or move the work to a less frequent event.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** any project, and a terminal where desktop notifications work (grant Script Editor notification permission on macOS if the first one is silent).
+
+1. Add the `Notification` hook from the walkthrough to `~/.claude/settings.json`, using your platform's notification command.
+2. Run `/hooks`, select `Notification`, and confirm your entry appears with its command.
+3. Back at the prompt, ask Claude to run a command that needs approval, then switch away from the terminal. Confirm the notification fires.
+4. Change the matcher from `""` to `idle_prompt` and reload. Now it should fire when Claude finishes and waits, but not on a permission prompt. Trigger each case to feel the difference a matcher makes.
+
+**Success looks like:** a notification you did not have to ask Claude for, firing on the event you scoped it to and not on the ones you did not. You have placed a hook on the lifecycle and controlled which occurrences trigger it.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**What exactly is a hook, in one line?** A shell command the harness runs automatically when a named lifecycle event fires, with no model involvement.
+
+**What are the main events?** By cadence: `SessionStart` / `SessionEnd` once per session; `UserPromptSubmit` / `Stop` once per turn; `PreToolUse` / `PostToolUse` on every tool call; `Notification` and `PreCompact` reactively. There are many more, but these are the working set.
+
+**How do I filter which occurrences fire?** The matcher. For tool events it tests the tool name (`Bash`, `Edit|Write`, a regex); an `if` clause narrows further by arguments (`Bash(git push *)`). Non-tool events match on their own dimension, like `SessionStart` on `startup` versus `compact`.
+
+**Where do hooks go?** In a settings file's `hooks` key: `~/.claude/settings.json` for personal-everywhere, `.claude/settings.json` for the committed team version, `.claude/settings.local.json` for just-you-this-project, the scopes from <LessonLink id="I1.3" />.
+
+**Can I edit hooks from the `/hooks` menu?** No, it is read-only. Edit the settings JSON directly or ask Claude to; the change is picked up live.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="I4.2" /> is the contract underneath a working hook: the JSON Claude Code sends the command on stdin, and the two ways the command answers back, exit codes and structured output, which is how a `PreToolUse` hook actually blocks and how a hook injects context.
+
+<LessonLink id="I4.3" /> is the cookbook: five production-tested hooks (auto-format, protect paths, re-inject context after compaction, notify, audit) written to paste straight into your setup.
+
+<LessonLink id="I4.5" /> is the resolver for the near-miss above: when a rule keeps getting ignored, is the fix a better instruction, a skill, or a hook that makes it impossible to miss?
