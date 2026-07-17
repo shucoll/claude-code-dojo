@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-17"
 prerequisites: ["I3.1"]
 references: ["I1.2"]
 docsSources: ["https://code.claude.com/docs/en/skills"]
@@ -16,40 +16,218 @@ docsSources: ["https://code.claude.com/docs/en/skills"]
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You have the shape of a skill from <LessonLink id="I3.1" />: a folder, a `SKILL.md`, a description that triggers it, a body that runs. Now you go to build a real one, and the questions the mental model glossed over all arrive at once.
+
+It should write a commit message, but the message depends on what is staged, so the skill needs to see your diff. Sometimes you want to pass it a scope, so it needs to take input. The rules for a good message are long, and you do not want that text sitting in every session, so the bulk needs to live somewhere that loads on demand. And if the skill is going to run `git`, you would rather it not stop and ask permission on every call.
+
+A skill that fumbles any one of those is worse than the paste-it-in habit it replaced. This lesson builds one that handles all of them.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Writing the body is the easy part. Building a skill is three more decisions layered on top of it:
+
+- **How it triggers.** The `description`, plus the ways you can invoke it by hand.
+- **What input it takes.** Arguments, and the placeholders that drop them into the body.
+- **What it is allowed to do.** Which tools it can use without stopping to ask, and who is allowed to set it running.
+
+Bulk that does not belong in the body goes in **supporting files** beside `SKILL.md`, loaded only when the skill points Claude at them. We build a `conventional-commit` skill and add these one at a time.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The frontmatter that matters for building
+
+<LessonLink id="I3.1" /> used a skill with nothing but a `description`. These are the other fields you reach for when building a working one. All are optional.
+
+| Field | Does |
+|---|---|
+| `description` | the trigger surface Claude matches against; still the one that matters most |
+| `argument-hint` | text shown in autocomplete, like `[scope]`, so you remember what to pass |
+| `arguments` | names for positional arguments, so `$scope` works instead of `$1` |
+| `allowed-tools` | tools the skill may use this turn without prompting you |
+| `disable-model-invocation` | `true` means only you can start it, never Claude on its own |
+| `user-invocable` | `false` hides it from the `/` menu, for knowledge Claude reads but you never type |
+
+### Getting input in: arguments and substitutions
+
+Anything you type after the command name is available inside the body through a placeholder that Claude Code fills in before the skill runs.
+
+| Placeholder | Expands to |
+|---|---|
+| `$ARGUMENTS` | everything you typed after the command name |
+| `$1`, `$2`, … | the first, second, … argument by position (0-based `$0` is the first) |
+| `$scope` | a named argument, when you declare `arguments: [scope]` in frontmatter |
+
+Wrap multi-word arguments in quotes to keep them together: `/migrate "search bar" React Vue` makes `$0` the phrase `search bar`. A placeholder with no matching argument is left as-is for a positional one, or becomes empty for a named one, so an optional argument degrades quietly.
+
+### The command name, and three ways to run it
+
+The folder name is the command, the rule from <LessonLink id="I3.1" />. A skill at `.claude/skills/conventional-commit/` is `/conventional-commit`. From there it runs one of three ways, and building the skill is partly deciding which you want:
+
+1. **Claude decides.** Your request matches the description and Claude loads the skill on its own. Best for skills that are safe to fire whenever they are relevant.
+2. **You name it.** You mention the skill in plain words (*use the conventional-commit skill*). Same path as the first, with an unambiguous signal instead of leaving the match to chance.
+3. **You type the command.** `/conventional-commit`, optionally with arguments. This skips the relevance judgment entirely, which is what you want for anything with side effects.
+
+That third case is why `disable-model-invocation: true` exists. A skill that commits, deploys, or sends a message should not run because your code happened to look ready. Setting it means the command is the only way in.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+We build `conventional-commit` in two stages: first a version that drafts a message, safe to trigger any way, then a version that actually commits, which forces the tool and invocation decisions.
+
+### Stage one: the drafter
+
+Make the folder and the file:
+
+```bash
+mkdir -p ~/.claude/skills/conventional-commit
+```
+
+Save this as `~/.claude/skills/conventional-commit/SKILL.md`:
+
+```markdown
+---
+description: Write a Conventional Commits message for the staged changes. Use when the user asks for a commit message, wants to commit, or says "commit this".
+argument-hint: "[scope]"
+---
+
+## Staged changes
+
+!`git diff --cached`
+
+## Recent messages, for style
+
+!`git log -5 --pretty=format:"%s"`
+
+## Your task
+
+Write one Conventional Commits message for the staged changes above.
+
+- Pick a type from the list in [reference.md](reference.md).
+- If a scope was given, use it: `$1`. If not, omit the scope.
+- Match the style of the recent messages.
+- If nothing is staged, say so instead of inventing a message.
+```
+
+Three things are doing work here. The `` !`git diff --cached` `` and `` !`git log …` `` lines run before Claude sees the skill and paste their output in, so the message is written against your real staged tree, not a guess. `$1` is the optional scope you can pass. And `[reference.md](reference.md)` points at a supporting file we have not written yet.
+
+Create it now, `~/.claude/skills/conventional-commit/reference.md`:
+
+```markdown
+# Conventional Commits types
+
+| Type | Use for |
+|---|---|
+| feat | a new feature |
+| fix | a bug fix |
+| docs | documentation only |
+| refactor | code change that neither fixes a bug nor adds a feature |
+| test | adding or correcting tests |
+| chore | build, tooling, dependencies |
+
+Format: `type(scope): summary`. Summary is imperative and under 72 characters.
+Add a `!` after the type or scope for a breaking change.
+```
+
+This file loads only when Claude follows the link, so the full type table costs nothing until a commit is actually being written. The folder now looks like this:
+
+```text
+conventional-commit/
+├── SKILL.md        # trigger, injected context, the task
+└── reference.md    # the type table, loaded on demand
+```
+
+Invoke it all three ways. Stage a change first (`git add`), then:
+
+```prompt
+Write me a commit message for what I staged.
+```
+
+That matches the description, so Claude loads the skill on its own. Or name it:
+
+```prompt
+Use the conventional-commit skill.
+```
+
+Or type the command, with a scope:
+
+```text
+/conventional-commit auth
+```
+
+All three render the same body, run the same injected commands, and produce a message. The command form passed `auth`, which lands in `$1` and becomes the scope.
+
+### Stage two: letting it commit
+
+Now make it act. A committing skill calls `git` as a tool, and without help it will stop and ask you to approve each call. Two frontmatter fields fix that, and they pull in <LessonLink id="I1.2" />.
+
+```markdown
+---
+description: Write and create a Conventional Commits commit for the staged changes.
+argument-hint: "[scope]"
+allowed-tools: Bash(git add *) Bash(git commit *) Bash(git status *)
+disable-model-invocation: true
+---
+```
+
+`allowed-tools` pre-approves exactly those three `git` commands for the turn the skill runs, so it commits without prompting you. The grant is narrow on purpose. It lists the commands this skill needs and nothing else, which is least privilege from <LessonLink id="I1.2" /> applied to a procedure: a skill that only commits has no reason to be able to run `git push` or `rm`, so it is not granted them. The grant also clears the moment you send your next message, so it is a per-run approval, not a standing one.
+
+`disable-model-invocation: true` takes away Claude's ability to start this skill. It commits, so you want the command to be the only trigger. As a side effect, its description drops out of the startup listing, since Claude no longer needs to match against a skill it cannot invoke.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+- **A release checklist you run by hand.** Build it, add `disable-model-invocation: true`, invoke it with `/release`. You never want Claude deciding it is release time.
+- **A changelog entry from an issue number.** Take the number as an argument (`/changelog 412`), inject the issue with `` !`gh issue view $1` ``, and write the entry against real data.
+- **A test-writing helper with a house style.** The style rules are long, so they go in a supporting `conventions.md` the skill links to, keeping `SKILL.md` short.
+- **Near miss: a script that scaffolds a component.** If the real work is a shell or Python script, the skill should not reimplement it in prose. It should run it: reference the script with `${CLAUDE_SKILL_DIR}/scripts/scaffold.sh` so the path resolves wherever the skill is installed, and let the script do the work while the skill orchestrates.
 
-## When to use / when not to use
+## When to use, when not
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Add an **argument** when the skill's behavior genuinely varies with input you would type: a scope, an issue number, a target. Do not add one for something that never changes; hardcode that in the body.
+
+Move text into a **supporting file** when it is reference material the skill consults rather than steps it always follows: a long table, an API spec, a style guide. Keep the steps themselves in `SKILL.md`, because that is what runs every time.
+
+Reach for **`allowed-tools`** when a skill runs the same tools every time and the permission prompts are pure friction. Keep the list to what the skill needs. Reach for **`disable-model-invocation`** whenever the skill has side effects you want to time yourself.
+
+The cost to weigh: `SKILL.md` and any injected command output load every time the skill runs and stay in context for the session, so a long body is a recurring bill. Supporting files and scripts are the release valve, since they load or execute only when reached.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+**Hardcoding what should be an argument.** The symptom is a skill you edit every time you run it, or three near-identical skills that differ by one word. If you find yourself changing the body to change the input, that input is an argument.
+
+**Everything in `SKILL.md`.** The symptom is a skill whose whole reference manual is in your context on every invocation, even the 90% of it that this run does not need. Split the reference into a supporting file and link to it.
+
+**Over-granting `allowed-tools`.** The symptom is a skill that can do far more than its job. `allowed-tools: Bash(git *)` to run one `git commit` hands the skill every `git` subcommand, including destructive ones. List the commands the skill actually calls. Note also that `allowed-tools` only *pre-approves*, it does not restrict: to take a tool away, use `disallowed-tools` or a deny rule from <LessonLink id="I1.2" />.
+
+**A side-effecting skill left auto-invocable.** The symptom is a commit or a deploy you did not ask for, because your request read as ready. Add `disable-model-invocation: true` to anything that changes state.
+
+**A description that will not trigger.** The symptom is a skill that works when you type the command but never fires on its own. That is a description problem, and tuning it is the clinic in <LessonLink id="I3.3" />.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a git repo with something you can stage. The drafter is side-effect-free; you commit only if you choose to in the last step.
+
+1. Build the drafter: create the folder, `SKILL.md`, and `reference.md` from the walkthrough.
+2. Stage a real change with `git add`, then invoke the skill all three ways: a plain-language request, naming the skill, and `/conventional-commit` with a scope. Confirm you get a Conventional Commits message each time and that the scope you passed shows up.
+3. Run `/context` and find the skill. Note that `reference.md` is not in it until a message gets written that follows the link.
+4. Add `allowed-tools: Bash(git add *) Bash(git commit *) Bash(git status *)` and `disable-model-invocation: true` to the frontmatter. Run `/conventional-commit` again and let it commit.
+
+**Success looks like:** step 4 commits without prompting you for each `git` call, and asking Claude in plain words to "commit this" no longer triggers the skill, because you took its automatic invocation away.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Named arguments or positional?** Positional (`$1`, `$2`) is fine for one or two. Declare `arguments: [issue, branch]` in frontmatter when there are several and `$issue` reads clearer than `$2`. Both draw from the same typed arguments.
+
+**How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: they are executed, not read into context, so a bundled script does its work without ever costing tokens.
+
+**Does `allowed-tools` restrict the skill to those tools?** No. It pre-approves them for the turn so you are not prompted; every other tool is still available and still governed by your normal <LessonLink id="I1.2">permission rules</LessonLink>. To remove a tool, deny it, do not rely on leaving it off the allow list.
+
+**What if I pass arguments to a skill that has no `$ARGUMENTS`?** Claude Code appends `ARGUMENTS: <what you typed>` to the end of the skill so Claude still sees the input. Placeholders are how you *place* it precisely; without them the input still arrives, just at the bottom.
+
+**Can I run more than one skill at once?** Yes. Typing `/code-review /conventional-commit` at the start of a message loads both and passes any trailing text to each. Expansion stops at the first token that is not an inline skill.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="I3.3" /> is the pattern-and-troubleshooting lesson: injecting live context well, running a heavy skill in a subagent to keep it off the main thread, and the clinic for descriptions that trigger too much or not at all.
+
+<LessonLink id="I3.4" /> settles the question this skill sat next to the whole time. A commit format could arguably live in `CLAUDE.md` or a slash command instead. That resolver says which belongs where.
+
+<LessonLink id="I1.2" /> is the full treatment of the permission model that `allowed-tools` is a local shortcut into.
