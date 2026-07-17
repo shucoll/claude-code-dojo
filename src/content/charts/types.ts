@@ -48,6 +48,12 @@ export interface ChartBarSegment extends ChartCard {
  * absolute token cost. Unlike `ChartBarSegment.percent`, `tokens` survives a
  * feature being toggled off, which is what makes the Phase 2 simulator a
  * rendering change rather than a data rewrite.
+ *
+ * A ledger row measures its entries against `windowTokens` when set (shares of a
+ * capacity, with the remainder rendered as free space) and against their own sum
+ * when omitted (a breakdown of a total). Omit it whenever the entries are small
+ * relative to the capacity: startup overhead is ~4% of a 200k window, so the
+ * window-relative view rounds most entries to 0% and shows nothing.
  */
 export interface LedgerEntry extends ChartCard {
   /** Absolute cost. The source of truth; shares are derived. */
@@ -94,7 +100,7 @@ export type ChartRow =
   | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection; guided?: boolean }
   | { kind: 'bar'; segments: ChartBarSegment[]; label?: string; caption?: string }
   | { kind: 'grid'; items: ChartCard[]; label?: string; columns?: GridColumns; caption?: string }
-  | { kind: 'ledger'; entries: LedgerEntry[]; windowTokens: number; label?: string; caption?: string }
+  | { kind: 'ledger'; entries: LedgerEntry[]; windowTokens?: number; label?: string; caption?: string }
 
 export interface ChartDef {
   id: string

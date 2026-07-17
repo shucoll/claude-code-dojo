@@ -60,12 +60,17 @@ export interface LedgerEntry extends ChartCard {
 Added to the `ChartRow` union:
 
 ```typescript
-| { kind: 'ledger'; entries: LedgerEntry[]; windowTokens: number; label?: string; caption?: string }
+| { kind: 'ledger'; entries: LedgerEntry[]; windowTokens?: number; label?: string; caption?: string }
 ```
 
-`windowTokens` is the full context window, so free space is computed rather than invented, and the disclaimer in `caption` is about the entries' magnitudes rather than the arithmetic.
+**Amended 2026-07-16, during I2.1 authoring: `windowTokens` is optional.** As originally designed it was required, on the reasoning that free space should be computed rather than invented. The real docs numbers killed that: startup is 7,850 tokens against a 200,000-token window, so a window-relative breakdown renders 96% grey and **five of the seven entries round to 0% and vanish**. Decimal places don't rescue it either; a 0.06% sliver is invisible at any precision.
 
-Free space is `windowTokens - sum(tokens of enabled entries)`, **clamped at zero**. Overflow is only reachable through bad data (toggling can only reduce the sum), so the clamp keeps a mistuned ledger rendering as a full bar rather than producing a negative-width segment.
+A ledger therefore has two valid shapes:
+
+- **With `windowTokens`** — entries are shares of a capacity, and the remainder renders as free space, `windowTokens - sum(enabled tokens)`, **clamped at zero**. Overflow is only reachable through bad data (toggling can only reduce the sum), so the clamp keeps a mistuned ledger rendering as a full bar rather than producing a negative-width segment.
+- **Without it** — entries are shares of their own sum: a breakdown of a total, no free space. This is the only readable view when entries are a few percent of the capacity, and it's the one that makes Phase 2 toggling legible (switching on an MCP server moves a startup-relative bar and leaves a window-relative bar untouched).
+
+`context-cost-ledger` uses the second shape for its breakdown row and a plain `bar` row beneath it for the window-relative view, so "what makes up startup" and "what startup costs you" are answered separately rather than fighting for one axis.
 
 ### Phase 1 rendering: derive and delegate
 
@@ -97,9 +102,24 @@ Phase 2 replaces the delegation with toggle chips and per-entry itemization insi
 
 ### Data
 
-Entry costs come from I2.1's `docsSources` (`costs.md`, `context-window.md`, `features-overview.md`), pulled during authoring. Per §1.5 the numbers live in the chart data rather than in code, so a maintenance pass can retune them without touching the component, and the chart carries the required "representative numbers, not exact" disclaimer in `caption`.
+Entry costs are the official docs' own figures, from the interactive simulation embedded in `context-window.md` (verified 2026-07-16). Per §1.5 the numbers live in the chart data rather than in code, so a maintenance pass can retune them without touching the component, and the chart carries the required "representative numbers, not exact" disclaimer in `caption`.
 
-The eager/lazy distinction I2.1 teaches is carried by the entries themselves: `CLAUDE.md` and MCP tool definitions are non-toggleable fixed rent; skills appear as an index entry rather than their bodies.
+| Entry | Tokens |
+|---|---:|
+| System prompt | 4,200 |
+| Project `CLAUDE.md` | 1,800 |
+| Auto memory | 680 |
+| Skill descriptions | 450 |
+| `~/.claude/CLAUDE.md` | 320 |
+| Environment info | 280 |
+| MCP tool names | 120 |
+| **Total** | **7,850** |
+
+**The docs contradict the curriculum spec on the eager/lazy split.** The spec has I2.1 teaching that "CLAUDE.md and MCP tool definitions load up front and pay rent every session; skills load an index and pull their bodies on demand." MCP has since flipped: tool search is on by default, only names load (120 tokens), and `mcp.md` states that "adding more MCP servers has minimal impact on your context window." `ENABLE_TOOL_SEARCH=false` restores the old eager behavior.
+
+Per the authoring rule, docs win. The resulting model is cleaner than the spec's: progressive disclosure now describes **both** skills and MCP, and the eager set is down to the system prompt, `CLAUDE.md`, memory, and environment info.
+
+**This invalidates I5.3's spec'd premise** ("Every connected server's tool definitions load eagerly... which is why over-connecting is the classic intermediate mistake"). That lesson needs reframing when reached: the cost of over-connecting is now latency and tool-search noise, not context.
 
 ### Testing
 
@@ -107,9 +127,14 @@ The eager/lazy distinction I2.1 teaches is carried by the entries themselves: `C
 - `index.test.ts`: `targetsOf` returns ledger entries, so existing lesson-ref and anchor validation covers them automatically.
 - `Chart.test.tsx`: a `ledger` row dispatches to `LedgerView`.
 
+## Notes for Phase 2
+
+- **Derive the legend lines from `tokens`.** The Phase 1 chart hand-authors token counts into each entry's `lines` (`'4,200 tokens · you never see it'`), so the field the row kind exists for does not currently drive any rendering. Prose and data can therefore drift. `LedgerView` should format that line from `tokens` once it owns the legend, leaving `lines` for the descriptive half only.
+- **`toggleable` and `defaultOn` are dormant.** `defaultOn` is respected when summing, but nothing reads `toggleable` yet; it exists to mark which entries get a chip.
+
 ## Not in scope
 
-- **The Phase 2 simulator itself** (toggle chips, itemization, reset). Schedulable independently; this design's whole purpose is to make that a component-only change.
+- **The Phase 2 simulator itself** (toggle chips, itemization, reset). Independently schedulable; this design's whole purpose is to make that a component-only change.
 - **`context-window-simulator`'s Phase 2 upgrade.** Separate chart, separate path, genuinely expensive.
 - **Re-embedding `context-window-simulator` in I2.1.** The spec's Interactive row says "reuses `context-window-simulator`", but per the established rule a `reuses` note is a suggestion to evaluate, not a default. Re-embedding would place B2.2's chart on the page a second time, next to a chart covering adjacent ground. I2.1 links to B2.2 instead. Consistent with I1.2 and I1.4; recorded here because it departs from the spec.
 

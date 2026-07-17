@@ -48,6 +48,26 @@ test('an entry that is off is excluded from the sum and leaves the stack', () =>
   expect(within(bar).getByText('80%')).toBeInTheDocument()
 })
 
+test('without a window, entries are shares of their own sum and there is no free space', () => {
+  // The real startup ledger's shape: entries are a few percent of the window, so
+  // only the breakdown-of-a-total view is readable.
+  const startup: LedgerEntry[] = [
+    { id: 'system', title: 'System prompt', tokens: 4_200 },
+    { id: 'claude-md', title: 'Project CLAUDE.md', tokens: 1_800 },
+    { id: 'mcp', title: 'MCP tool names', tokens: 120 },
+  ]
+  render(<LedgerView row={{ entries: startup, label: 'Startup' }} onActivate={() => {}} />)
+
+  expect(screen.queryByText('Free space')).toBeNull()
+  const bar = screen.getByRole('group', { name: 'Startup' })
+  // 4,200 / 1,800 / 120 of a 6,120 total. Against a 200k window these would be
+  // 2%, 1%, and 0% — the entry would vanish.
+  const widths = Array.from(bar.children).map((child) =>
+    Math.round(parseFloat((child as HTMLElement).style.width)),
+  )
+  expect(widths).toEqual([69, 29, 2])
+})
+
 test('entries exceeding the window clamp free space to zero, never a negative width', () => {
   const over: LedgerEntry[] = [{ id: 'huge', title: 'Overstuffed', tokens: 150_000 }]
   render(<LedgerView row={{ entries: over, windowTokens: 100_000 }} onActivate={() => {}} />)
