@@ -161,6 +161,10 @@ footer.
    - **Say each point once.** Don't repeat an insight or a cross-link in two
      sections (e.g. a body step and the recap). Put it where it lands best.
    - **Avoid "honestly"** as a filler adverb.
+   - **No meta-narration of a section's own format.** Cut sentences that
+     describe the shape of what follows rather than teaching it. Banned shapes:
+     "No chart here, just an if/then walk", "here's a table", "what follows is",
+     "in this section we". Present the ladder/table/example directly.
 
      These are standing user preferences, flagged repeatedly across reviews.
      Grep the finished lesson before claiming it done:
