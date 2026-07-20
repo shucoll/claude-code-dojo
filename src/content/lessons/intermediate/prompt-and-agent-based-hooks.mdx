@@ -6,7 +6,7 @@ type: "core"
 order: 4
 estimatedMinutes: 7
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-17"
 prerequisites: ["I4.2"]
 references: ["I2.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
@@ -14,42 +14,104 @@ docsSources: ["https://code.claude.com/docs/en/hooks"]
 
 # Prompt-based and agent-based hooks
 
-## The problem
+## When a shell command is not enough
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+Every hook so far has been a shell command: it reads the event JSON, runs some logic, and decides. That works whenever the decision is something a script can compute. "Is this path under `migrations/`?" is a string match. "Is this command an `rm -rf`?" is a grep.
 
-## The concept
+Some conditions are not computable that way. "Does this edit weaken test coverage?" "Is this commit message actually descriptive?" "Is this a safe place to write a file?" A regex cannot answer those, because the answer needs judgment. For those, a hook can hand the decision to a model instead of a script. That is the same `type` field you already set to `command`, pointing at one of two more powerful, more expensive handlers.
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+The rule this lesson lands on: **shell when you can, prompt when you need judgment, agent only when the judgment needs tools.** The rungs go up in capability and up in cost at the same rate, so the discipline is to stay on the lowest rung that answers the question.
 
-## How it works
+## Rung one: the shell hook
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+The one you know. `type: "command"`, decides by running code, costs only execution time and no tokens. If the condition is expressible as a script, this is the answer, and the other two rungs are a mistake. A shell hook runs locally, returns instantly, and spends nothing on the model. Reach past it only when a script genuinely cannot make the call.
 
-## Walkthrough
+## Rung two: the prompt hook
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+When the decision needs a model to read and weigh, `type: "prompt"` sends your prompt plus the event JSON to a Claude model for a single-turn yes/no. No script, no tools, just a judgment.
 
-## Use-case scenarios
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Should Claude run this command: $ARGUMENTS\n\nConsider security implications.",
+            "model": "claude-opus-4-1-20250805",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+`$ARGUMENTS` is where the event JSON lands. The model must reply with a fixed shape:
 
-## When to use / when not to use
+```json
+{ "ok": true, "reason": "Optional explanation" }
+```
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+`ok: true` proceeds, `ok: false` blocks, and what "blocks" means is the same per-event story from <LessonLink id="I4.2" />: on `PreToolUse` the tool is denied, on `Stop` Claude cannot stop, on `PostToolUse` the reason is just shown. The `model` field is optional and defaults to a fast model; name a stronger one only when the judgment needs it. Everything else about the hook, the event, the matcher, the `if` clause, is unchanged from a shell hook. Only the handler is different.
 
-## Pitfalls
+## Rung three: the agent hook
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+When the judgment needs to look at more than the event JSON, when it has to read files, search the codebase, or reason across several steps, `type: "agent"` spawns a subagent that can use tools (Read, Grep, Glob) before it decides.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "A file is about to be written to $ARGUMENTS.\n\nCheck whether the target directory exists and is a safe location. Deny if it is a protected system directory.",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+It returns the same `{ "ok", "reason" }` shape and follows the same per-event blocking rules. The difference is that it can gather evidence first, which is what lets it answer questions a single prompt cannot. Agent hooks are **experimental**, so treat the config and capabilities as subject to change.
+
+## The cost that decides the rung
+
+A shell hook spends nothing on the model. The moment you climb to a prompt or agent hook, every firing of that event spends tokens and latency, because a model runs each time. This is the rent from <LessonLink id="I2.1" />, now billed per event rather than per session.
+
+That matters most on hot events. A prompt hook on `PreToolUse` runs a model inference before potentially every tool call in a turn. An agent hook is worse: its latency scales with the number of tool calls it makes to verify the condition, so a single guard can add several seconds and a real bill to every edit. On a once-per-turn `Stop` hook the cost is bounded; on a per-tool-call `PreToolUse` hook it compounds.
+
+So the ladder is a cost ladder as much as a capability one:
+
+| Rung | Decides by | Costs | Use when |
+|---|---|---|---|
+| Shell (`command`) | running a script | execution time only | the condition is computable |
+| Prompt | one model judgment | tokens + latency, every fire | judgment needed, no tools |
+| Agent | a model with tools | tokens + latency, scaling with tool calls | judgment needs to inspect files |
+
+Climb only when the rung below cannot answer. A prompt hook doing string matching a shell hook could have done is pure waste; an agent hook doing what a prompt could is worse.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a project where a few Bash commands are routine.
 
-## FAQ
+1. Add the prompt hook from rung two to `~/.claude/settings.json` (drop the `model` field to use the default fast model).
+2. Ask Claude to run a harmless command like `ls`. It should proceed, since the model returns `ok: true`.
+3. Ask it to run something the prompt would flag on security grounds. Watch it get blocked with the model's `reason`.
+4. Notice the latency: each command now waits on a model inference before running. That pause is the cost the table is about.
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Success looks like:** a hook that blocks on a judgment no regex could express, and a felt sense of what it costs on every fire, the trade-off that decides whether to use one.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="I4.5" /> closes the module: given a rule that keeps getting ignored, is the fix a better `CLAUDE.md` instruction, a skill, or a hook, and shell, prompt, or agent if it is a hook?
+
+<LessonLink id="I2.1" /> is the cost model this whole ladder rides on: every model-backed hook is context and latency spent per event, so the cheapest rung that works is the right one.
