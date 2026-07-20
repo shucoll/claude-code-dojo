@@ -6,21 +6,79 @@ type: "checkpoint"
 order: 5
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
 prerequisites: ["I1.4", "I2.3", "I3.4", "I4.5", "I5.4", "I6.4", "I7.4"]
 references: ["I1.4", "I3.4", "I4.5", "I5.4", "I6.4", "I7.3"]
+interactive:
+  - kind: "decision-tree"
+    spec: "mechanism-decision-tree"
 ---
 
 # Intermediate self-assessment
 
+Optional and ungraded. Skip it and nothing locks. Do it and you find out whether the level's central skill transferred: given a requirement, reaching for the mechanism that fits it.
+
 ## What you should be able to do
 
-{/* @@TODO@@ The competencies this checkpoint verifies (no gating; skippable). */}
+By the end of the level, four things:
+
+- **Read a requirement and name its mechanism**, justified by the resolver that owns the call: <LessonLink id="I4.5" />, <LessonLink id="I3.4" />, <LessonLink id="I5.4" />, <LessonLink id="I6.4" />.
+- **Build each one**: a hook, a subagent, a skill, and a permission rule.
+- **Package the result** as a plugin, per <LessonLink id="I7.2" />.
+- **Install it clean** in a project that has never seen it.
 
 ## The exercise
 
-{/* @@TODO@@ One ~10-minute hands-on task. */}
+A team hands you this policy. Your job is to make it real in a repository.
+
+```text
+TEAM POLICY
+
+1. Formatting is not optional. Every file we touch is formatted before
+   the change is considered done.
+2. Database work needs a specialist. Query and schema questions go to
+   someone who knows the data model, not whoever is nearest.
+3. Release notes ship weekly, generated from merged pull requests, in
+   our house format.
+4. Migrations are untouchable. Nobody edits a file under migrations/
+   without a human deciding to.
+```
+
+Work in your own project, or clone any repository with a build and a `migrations/` directory.
+
+**Step 1: map before you build.** For each of the four lines, decide the mechanism. Walk the master tree if a line is not obvious; the first question that fits settles it.
+
+<ChartEmbed id="mechanism-decision-tree" />
+
+**Step 2: implement each** in `.claude/`. Aim for the smallest version that works, not a production tool. A formatter hook that runs your one formatter. A subagent whose description names the data model and whose tools are scoped. A skill that reads merged PRs and writes the house format. A guard on `migrations/`.
+
+**Step 3: demo each** in a live session. Make an edit and watch it get formatted. Ask a database question and watch it route to the specialist. Invoke the release-notes skill. Try to edit a migration and watch it stop.
+
+**Step 4: package and install.** Turn the `.claude/` setup into a plugin, then install it in a fresh clone with `--plugin-dir` and confirm all four still fire.
 
 ## Self-check
 
-{/* @@TODO@@ Explicit success criteria the learner grades themselves against. */}
+Grade yourself against the mapping and the demos.
+
+**The expected mechanisms.** Four different ones, by design.
+
+| Policy line | Mechanism | Why, via the tree |
+|---|---|---|
+| Formatting is not optional | **Hook** (PostToolUse on `Write\|Edit`) | Must be guaranteed, and it runs an action → the hook branch |
+| Database needs a specialist | **Subagent** | Not deterministic; the need is a capability boundary and a knowledgeable delegate → the isolate branch |
+| Release notes, weekly, house format | **Skill** | A procedure repeated on some tasks, resident only as a description → the procedure branch |
+| Migrations are untouchable | **Permission rule** (deny Edit on `migrations/**`) | Must be guaranteed, and it stops an action → the enforce-by-stopping branch |
+
+The migration guard has a defensible second answer: a `PreToolUse` hook that blocks the path. Both enforce. The permission rule is the lighter of the two, since it is a settings line rather than a script, so prefer it unless you also need to log or transform, which is the tie-break from <LessonLink id="I4.5" />.
+
+**If your mapping put two of these on the same mechanism**, that is the finding. A `CLAUDE.md` note asking Claude to format is not the same as a hook that formats, because one is a request and one is guaranteed. A skill that "reminds" Claude not to touch migrations is not a guard, because it does not stop anything. Re-run those lines through the first question of the tree: does this have to be guaranteed?
+
+**The demos are the real grade.** A mechanism you can describe but not show working is not yet built. Each of the four should produce a visible result: the file changes, the question routes, the notes generate, the edit refuses.
+
+**The plugin closes it.** Installed in a clean clone, all four behaviors return with no manual setup. If one silently does nothing, it is almost always a path that still points at the old project rather than `${CLAUDE_PLUGIN_ROOT}`, which is the conversion trap from <LessonLink id="I7.2" />.
+
+## Where next
+
+This is the end of the taught level. <LessonLink id="I7.3" /> is the one-page model to return to when a future requirement does not obviously belong to any mechanism.
+
+<LessonLink id="I8.1" /> starts the guided project, where the same four mechanisms plus MCP get built on a real GitHub dashboard, and the environment is treated as a deliverable in its own right.
