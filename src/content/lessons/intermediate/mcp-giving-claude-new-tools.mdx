@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
 prerequisites: ["I1.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/mcp"]
@@ -16,40 +16,215 @@ docsSources: ["https://code.claude.com/docs/en/mcp-quickstart", "https://code.cl
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You are working a bug and the context lives somewhere Claude cannot reach. The stack trace is in Sentry, the reproduction steps are in a Linear ticket, and the affected rows are in a Postgres table. So you become the transport layer: open the tab, copy the error, paste it into the session, go back for the ticket, paste that too.
+
+Every paste is a snapshot that goes stale the moment you take it, and it is one-way. Claude can read what you pasted but cannot look up the next thing itself, cannot page through the other twelve errors, and cannot close the ticket when the fix lands. The <LessonLink id="I1.1">built-in tool belt</LessonLink> stops at the edge of your filesystem and shell, and most of what a working day touches lives past that edge.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+MCP, the Model Context Protocol, is an open standard for connecting an AI tool to an external system. An **MCP server** is a program that wraps some service (Sentry, GitHub, a database, a browser) and exposes it in a shape Claude can use. Connect one, and its capabilities join the tool belt alongside Read, Edit, and Bash.
+
+A server offers three kinds of thing:
+
+- **Tools**: actions Claude can call, like `create_issue` or `run_query`. This is the part you will use most.
+- **Resources**: readable content the server can hand over, addressed by a URI and pulled in with an `@` mention.
+- **Prompts**: canned prompt templates the server publishes, which show up in your `/` menu.
+
+The reason this is a standard rather than a pile of integrations is that the wrapping is somebody else's job. A team that runs a service writes one MCP server, and every MCP client can then use it. You are consuming that work, not doing it.
+
+What MCP does not do is create a new trust model. An MCP tool call goes through the same permission machinery as every built-in tool, so the <LessonLink id="I1.2">rules you already wrote</LessonLink> apply, with MCP tools named `mcp__server__tool`. MCP widens the tool belt. It does not loosen the belt.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### Transports
+
+A server is a program Claude Code talks to, and the transport is how it reaches it. Three matter in practice:
+
+| Transport | What it is | Add with | Use for |
+|---|---|---|---|
+| `stdio` | a local process Claude Code starts and pipes to | the default, no flag | tools needing your filesystem, a socket, a local browser |
+| `http` | a hosted service at a URL | `--transport http` | cloud services: Sentry, Notion, GitHub |
+| `sse` | an older streaming variant of HTTP | `--transport sse` | legacy servers only; deprecated in favor of `http` |
+
+Prefer `http` for anything remote. In JSON config the `http` type is also spelled `streamable-http`, which is the name the MCP specification uses, so entries copied from a server's own docs work unchanged. There is a fourth transport, `ws`, for servers that push events to you unprompted, configurable only in JSON.
+
+### Adding a server
+
+One command covers every case:
+
+```bash
+claude mcp add [--transport <type>] [--scope <scope>] <name> <url-or-command>
+```
+
+The name is yours to pick. It labels the server's tools in Claude's output and identifies it in later commands, so choose something short that you will recognize in a permission prompt.
+
+For a local server, everything after a `--` separator is the command Claude Code runs to start the process:
+
+```bash
+claude mcp add playwright -- npx -y @playwright/mcp@latest
+```
+
+That separator is load-bearing. Without it, the flags meant for your server get eaten as flags to `claude mcp add`.
+
+### Where the config lands
+
+By default the server is written at **local** scope: private to you, active only in the project you ran the command in. The other two scopes are `project` (a committed `.mcp.json`, so teammates get the server when they clone) and `user` (all your projects).
+
+| Scope | File |
+|---|---|
+| `local` (default) | `~/.claude.json`, under this project's entry |
+| `project` | `.mcp.json` in the project root |
+| `user` | `~/.claude.json`, top-level `mcpServers` key |
+
+Scope is fixed at add time, so moving a server means removing it and re-adding it with a different `--scope`. <LessonLink id="I5.2" /> takes this apart properly and maps it onto the scope framework from <LessonLink id="I1.3" />.
+
+### What lands in the session
+
+Once a server is connected, its tools appear as `mcp__<server>__<tool>`: the `query` tool on a server you named `db` is `mcp__db__query`. That full name is what you write in a permission rule, a subagent's tool list, or a hook matcher, so the naming is not cosmetic.
+
+The tool definitions themselves are not all loaded up front. Tool search is on by default, which means only tool names and the server's instructions load at startup, and Claude pulls in the full schema for a tool when it needs one. Connecting a server is cheap in context terms. <LessonLink id="I5.3" /> gets specific about the bill.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+Remote and local servers behave differently at the points where they break, so connect one of each.
+
+### Server one: a remote HTTP server
+
+The Claude Code docs server is a good first target. It is hosted, needs no account, and gives Claude full-text search over the official docs.
+
+```bash
+claude mcp add --transport http claude-code-docs https://code.claude.com/docs/mcp
+```
+
+It confirms with something like `Added HTTP MCP server claude-code-docs with URL: … to local config`, plus a `File modified:` line naming the file it wrote.
+
+Adding is not connecting, so check:
+
+```bash
+claude mcp list
+```
+
+You want `✔ Connected`. The statuses you may see instead:
+
+| Status | Meaning |
+|---|---|
+| `✔ Connected` | ready |
+| `! Needs authentication` | reachable, wants a browser sign-in or a token |
+| `! Connected · tools fetch failed` | connected but could not list tools; run `claude mcp get <name>` |
+| `✘ Failed to connect` | no usable response |
+
+Now use it. Start a session and name the server, so you can be sure the answer came through it rather than from Claude's own knowledge:
+
+```prompt
+Use the claude-code-docs server to look up what MCP_TIMEOUT does
+```
+
+The first call asks your permission, the same prompt any new tool triggers. Approve it, and the tool call in the output is labelled with the server name.
+
+### Server two: a local stdio server
+
+Playwright gives Claude a real browser it can drive. It runs through `npx`, so it needs Node 18 or later.
+
+```bash
+claude mcp add playwright -- npx -y @playwright/mcp@latest
+```
+
+Three differences from the remote case: no `--transport` flag, since stdio is the default; the `--` separator before the command; and `-y` so `npx` installs without prompting.
+
+Check it again with `claude mcp list`. The first check often reports `✘ Failed to connect` while `npx` is still downloading the package. Wait and re-run rather than debugging a problem that is about to fix itself.
+
+Then:
+
+```prompt
+Use playwright to open https://example.com and tell me the page title
+```
+
+A browser window opens and you watch it work, with tool calls labelled `playwright` and named for the action, like `browser_navigate`.
+
+### Verifying from inside a session
+
+`claude mcp list` runs in your shell. Inside a session, `/mcp` does the same job and more: it lists servers with their status, drills into any one of them to show its tools, and offers `Authenticate` and reconnect actions for servers that need them. When something is wrong mid-session, `/mcp` is where you look.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+- **You keep pasting stack traces from your error tracker.** Connect its MCP server. Claude queries the live issue itself, reads the full trace rather than the part you copied, and can look at the other occurrences you did not paste.
+
+- **You want Claude to check a schema before writing a query.** A database MCP server exposes the schema as a resource and querying as a tool, so Claude reads the real column types instead of inferring them from the model file, which may be out of date.
+
+- **You are fixing a rendering bug you can only describe.** A browser server (Playwright) lets Claude load the page, take the screenshot, and read the console itself, so the loop that used to run through you closes on its own.
+
+- **Your service has no CLI and a fiddly OAuth flow.** This is where MCP is at its strongest: the server handles the token dance once, and Claude gets structured results rather than scraped HTML.
+
+- **Near-miss: you connect a git MCP server so Claude can commit.** `git` is already a first-class CLI, and Claude already has Bash. You have added a connection, a process, and a class of failure to do something that worked. <LessonLink id="I5.4" /> is the resolver for this exact temptation, and its answer is often "use the CLI."
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+**Reach for an MCP server when:**
+
+- The service has no good CLI, or the CLI cannot do what you need.
+- Auth is the hard part and the server already solves it.
+- You want structured data back rather than text you have to parse.
+- The integration should be shared with the team, committed in `.mcp.json`.
+
+**Do not reach for one when:**
+
+- A CLI you already trust does the job. Bash plus a short skill is usually simpler and always cheaper.
+- You would be connecting it speculatively. Every server is a process or connection that can fail at startup, another auth to renew, and more tools competing for Claude's attention when it picks one.
+- You have not read what the server does. A server's output enters your context, which makes a third-party server part of your trust boundary. <LessonLink id="I5.3" /> closes on that.
+
+The cost is real but rarely where people expect it. It is not primarily context, because tool search keeps the startup footprint small. It is startup latency, one more moving part in your setup, and, for servers you did not write, trust.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **You forget the `--` before a local server's command.** Symptom: the server is added but the stored command is wrong or truncated, and it never connects. `claude mcp get <name>` shows you the command Claude Code actually saved. Remove and re-add with the separator in place.
+
+- **You add a server in one project and it is missing in the next.** Local scope is per project, and that is the default. Re-add with `--scope user` if you want it everywhere, or `--scope project` if the team should get it.
+
+- **You hand-write a JSON entry with a `url` but no `type`.** Claude Code reads a typeless entry as a stdio server and skips it, reporting that the entry needs `"type": "http"`. Always set `type` on remote servers.
+
+- **You edit `.mcp.json` and nothing changes.** That file is read at session start. Restart the session. If the servers still do not appear, run `/mcp` and look for a parse warning, since malformed entries are skipped quietly.
+
+- **A server connects but exposes no tools.** Usually a missing environment variable, such as an API key. Pass it with `--env KEY=value` at add time, or in the entry's `env` field, and check the server's docs for what it expects.
+
+- **A first connection times out.** The default startup timeout is 30 seconds and a cold `npx` download can beat it. Raise it for one run with `MCP_TIMEOUT=60000 claude`.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** any project directory, with Node 18+ available.
+
+1. Add the docs server: `claude mcp add --transport http claude-code-docs https://code.claude.com/docs/mcp`.
+2. Run `claude mcp list` and confirm `✔ Connected`.
+3. Start a session, run `/mcp`, select the server, and read its tool list. Note the `mcp__claude-code-docs__` prefix on the names.
+4. Ask it something the docs know and Claude might not: `Use the claude-code-docs server to find what MAX_MCP_OUTPUT_TOKENS controls`. Approve the permission prompt and watch the labelled tool call.
+5. Add the local server too: `claude mcp add playwright -- npx -y @playwright/mcp@latest`, wait for the download, and have it open a page for you.
+6. Remove both when you are done: `claude mcp remove claude-code-docs` and `claude mcp remove playwright`.
+
+**Success looks like:** two servers connected over different transports, their tools visible under `/mcp` with their prefixed names, and one answer each that Claude could not have produced without them.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**What does MCP solve that Bash does not?**
+Bash can already call any CLI, so for services with a good CLI the gap is smaller than it first looks. MCP wins on three things: auth it handles for you, structured results instead of text you parse out of stdout, and per-tool permission rules rather than one blunt rule on Bash. Where none of those apply, Bash is the better answer, which <LessonLink id="I5.4" /> argues in full.
+
+**What is a resource, as opposed to a tool?**
+A tool is an action Claude calls; a resource is content it reads. Resources are addressed as `@server:protocol://path` and behave like file mentions: type `@` and connected servers' resources appear in the autocomplete next to your files. `Can you analyze @github:issue://123 and suggest a fix?` pulls the issue in as an attachment.
+
+**What are MCP prompts?**
+Prompt templates a server publishes, which appear in your `/` menu as `/mcp__servername__promptname` and take space-separated arguments, like `/mcp__github__pr_review 456`. They are discovered from connected servers, so they show up without any config on your side.
+
+**Which transport should I pick?**
+You rarely pick. The server's documentation tells you what it is. Hosted services are `http`, things that run on your machine are `stdio`, and `sse` only appears on older servers that have not migrated.
+
+**Do MCP tools bypass my permission rules?**
+No. They are ordinary tools with the name `mcp__server__tool`, checked deny-then-ask-then-allow like everything else. You can allow one tool from a server and leave the rest prompting, which is finer-grained control than you get over a CLI behind a single Bash rule.
+
+**How do I stop using a server?**
+`claude mcp remove <name>`. If the same name exists at more than one scope, the command says so and you pass `--scope` to pick which copy goes.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="I5.2" /> takes the scope question seriously: which of the three files a server belongs in, how a committed `.mcp.json` shares servers with a team, how the OAuth flow runs for a remote server, and how to keep tokens out of committed config.
+
+<LessonLink id="I5.3" /> attaches the bill. What connecting servers actually costs now that tool search is the default, what happens when a tool returns more output than fits, and the security posture for servers you did not write.
+
+<LessonLink id="I5.4" /> is the resolver behind the near-miss above: MCP server, CLI through Bash, or a skill, and the cases where the honest answer is not MCP.
