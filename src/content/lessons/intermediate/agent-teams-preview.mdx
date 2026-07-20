@@ -6,7 +6,7 @@ type: "core"
 order: 4
 estimatedMinutes: 6
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
 prerequisites: ["I6.3"]
 references: ["I6.1", "I2.1"]
 docsSources: ["https://code.claude.com/docs/en/agent-teams"]
@@ -14,42 +14,54 @@ docsSources: ["https://code.claude.com/docs/en/agent-teams"]
 
 # Agent teams: preview
 
-## The problem
+Subagents gave you parallel work in <LessonLink id="I6.3" />: fan out several, each in its own window, each reporting back to you. There is a structurally different way to run many Claudes at once, and the intermediate map has a gap until you can place it.
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+This is a preview, not a how-to. It gives you enough to answer "should I care about agent teams yet?" and no more.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+An agent team is several Claude Code sessions working as peers, sharing a task list and messaging each other directly.
 
-## How it works
+One session is the lead. It spawns the others, but it does not sit between them: teammates claim tasks off a shared list, talk to each other, and challenge each other's findings without routing through the lead. Compare that to a subagent, which is an isolated delegate that can only report back to whoever spawned it and never sees another subagent.
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+The difference is a topology. Subagents are spokes around a hub. A team is a mesh.
 
-## Walkthrough
+## Against subagents
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+| | Subagents | Agent teams |
+|---|---|---|
+| **Context** | own window; result returns to the caller | own window; fully independent |
+| **Communication** | reports back to the caller only | teammates message each other directly |
+| **Coordination** | the caller manages all work | shared task list, teammates self-claim |
+| **Best for** | focused work where only the result matters | work that needs discussion between the workers |
+| **Token cost** | lower; the result is summarized back | higher; each teammate is a full Claude instance |
 
-## Use-case scenarios
+The deciding row is communication. If your parallel workers never need to hear from each other, subagents already do the job, more cheaply. The moment the workers need to share findings and disagree, the mesh is what subagents cannot give you.
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+## Why it costs more
 
-## When to use / when not to use
+A subagent spends tokens, then hands you a summary and disappears. That summary is the compression <LessonLink id="I2.1" /> credited delegation for.
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+A team removes that compression. Every teammate is a separate, full Claude session with its own context window, running for as long as the team does, and messages between them are more tokens on top. Cost scales with the number of active teammates, roughly linearly. Five teammates is close to five sessions' worth of spend, not one.
 
-## Pitfalls
+That is the trade the mesh buys. You pay for genuine parallel reasoning with agents that can argue, and you pay per agent.
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+## When to care
 
-## Try It
+The tasks that justify the cost share a shape: independent enough to parallelize, but interdependent enough that the workers benefit from talking.
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+- **Parallel review.** Three teammates on one PR, one per lens (security, performance, tests), synthesized by the lead. A single reviewer drifts toward one kind of issue; three in parallel do not.
+- **Competing hypotheses.** A confusing bug handed to several teammates told to disprove each other, like a scientific debate. Sequential investigation anchors on the first plausible theory; adversarial parallel investigation does not.
+- **Cross-layer features.** Frontend, backend, and tests, each owned by a teammate who will not touch the others' files.
 
-## FAQ
+Reach for a single session or subagents instead when the work is sequential, edits the same files, or carries many dependencies. Coordination overhead is real, and three focused teammates beat five scattered ones.
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+Two things to know before you go looking for the feature. It is **experimental and off by default**; you turn it on with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings or the environment, and it carries live limitations around resuming sessions and shutting teammates down. And the honest default answer to "should I use this today?" is usually no: the work has to genuinely need workers that talk to each other before the token bill and the coordination are worth it.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+The full treatment, spinning up a team, quality gates with `TeammateIdle` and `TaskCreated` hooks, split-pane display, and troubleshooting, lives in the Advanced level.
+
+<LessonLink id="I6.1" /> is the mechanism directly below this one. If the isolation that makes a subagent cheap is clear, the cost of removing it to build a team follows from it.
+
+<LessonLink id="I7.5" /> closes the level with an optional self-assessment: implement a small team policy by choosing mechanisms, then package the result.

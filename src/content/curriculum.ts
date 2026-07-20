@@ -891,7 +891,7 @@ export const curriculum: Level[] = [
             order: 4,
             estimatedMinutes: 6,
             volatility: 'volatile',
-            verifiedAgainstDocsAt: '2026-07-16',
+            verifiedAgainstDocsAt: '2026-07-20',
             prerequisites: ['I6.3'],
             references: ['I6.1', 'I2.1'],
             docsSources: ['https://code.claude.com/docs/en/agent-teams'],

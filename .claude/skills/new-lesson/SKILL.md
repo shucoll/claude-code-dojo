@@ -161,6 +161,13 @@ footer.
    - **Say each point once.** Don't repeat an insight or a cross-link in two
      sections (e.g. a body step and the recap). Put it where it lands best.
    - **Avoid "honestly"** as a filler adverb.
+   - **No unnecessary flourish clauses.** Cut the extra clever clause that adds
+     no information and often reads as aggressive or arch. It is usually a
+     trailing "not X" antithesis or a cute metaphor payoff tacked onto a
+     sentence that was already complete. Banned shapes: "so the room is on your
+     map, not so you furnish it yet", "and nothing more, which for most people
+     is the correct amount", "not one clever session". If a clause only
+     re-states the sentence with attitude, delete it; keep the plain version.
    - **No meta-narration of a section's own format.** Cut sentences that
      describe the shape of what follows rather than teaching it. Banned shapes:
      "No chart here, just an if/then walk", "here's a table", "what follows is",
