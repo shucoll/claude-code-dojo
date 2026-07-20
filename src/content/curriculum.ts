@@ -738,7 +738,7 @@ export const curriculum: Level[] = [
             order: 2,
             estimatedMinutes: 9,
             volatility: 'evolving',
-            verifiedAgainstDocsAt: '2026-07-16',
+            verifiedAgainstDocsAt: '2026-07-20',
             prerequisites: ['I5.1'],
             references: ['I1.3', 'I1.4'],
             docsSources: ['https://code.claude.com/docs/en/mcp', 'https://code.claude.com/docs/en/mcp-quickstart'],
