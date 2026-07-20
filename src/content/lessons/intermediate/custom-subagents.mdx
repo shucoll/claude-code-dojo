@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
 prerequisites: ["I6.1"]
 references: ["I1.2", "I3.1", "I5.1"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents"]
@@ -16,40 +16,338 @@ docsSources: ["https://code.claude.com/docs/en/sub-agents"]
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You have asked for a code review four times this week. Each time you typed some version of the same instructions: check error handling, flag anything that logs a secret, do not fix things, just tell me what you found. Each time the wording drifted, and once you forgot the "do not fix" part and Claude helpfully rewrote three files you were not ready to change.
+
+The built-in subagents from <LessonLink id="I6.1" /> gave you isolation. They did not give you a reviewer that already knows your standards, and they did not give you a delegate that is structurally incapable of editing.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+A custom subagent is a markdown file: YAML frontmatter that configures the delegate, and a body that becomes its system prompt.
+
+The file is a job description. The frontmatter says what the worker is allowed to touch, which model it thinks with, and when to call it in. The body says how to do the job. Once written, "review my changes" reaches a specialist with your standards preloaded and a tool set that makes the wrong outcome impossible rather than unlikely.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### Where the file goes
 
-## Walkthrough
+Identity comes from the `name` field rather than the filename or folder, and both directories are scanned recursively, so `agents/review/security.md` is fine for organization.
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+| Location | Scope | Priority |
+|---|---|---|
+| Managed settings | organization-wide | 1 (highest) |
+| `--agents` CLI flag | current session only, never written to disk | 2 |
+| `.claude/agents/` | this project; commit it for the team | 3 |
+| `~/.claude/agents/` | all your projects | 4 |
+| Plugin `agents/` directory | wherever the plugin is enabled | 5 (lowest) |
+
+The same scope logic as settings in <LessonLink id="I1.4" />, with the same instinct: personal habits go in `~/.claude/agents/`, anything encoding team standards belongs in the repository where it can be reviewed and improved like code.
+
+Claude Code watches both directories and picks up edits within a few seconds, so iterating on an agent does not mean restarting. The exception is creating a scope's very first agent file: the watcher only covers directories that existed at session start, so a brand new `agents/` folder needs a restart before its contents load.
+
+### Writing one
+
+Ask Claude to write it, or write the file yourself:
+
+```markdown
+---
+name: code-reviewer
+description: Reviews code for quality and security. Use proactively after changes.
+tools: Read, Grep, Glob, Bash
+model: inherit
+---
+
+You are a senior code reviewer. Report findings by priority and
+never modify files.
+```
+
+`/agents` no longer opens a creation wizard; running it prints a reminder to ask Claude or edit the directory directly. Asking Claude tends to be faster anyway, since it writes the frontmatter and you correct it.
+
+Only `name` and `description` are required. `description` is load-bearing beyond documentation: Claude reads it to decide when to delegate, so "reviews code" invites nothing and "use proactively after writing or modifying code" invites a lot.
+
+### The frontmatter worth knowing now
+
+| Field | Does |
+|---|---|
+| `tools` | allowlist; inherits everything if omitted |
+| `disallowedTools` | denylist; applied before `tools` is resolved |
+| `model` | `sonnet`, `opus`, `haiku`, `fable`, a full model ID, or `inherit` (the default) |
+| `skills` | skills whose full content is preloaded at startup |
+| `mcpServers` | servers this subagent can reach |
+| `memory` | `user`, `project`, or `local`; enables a persistent directory |
+| `permissionMode` | how this delegate handles permission prompts |
+| `maxTurns` | hard stop after N agentic turns |
+
+The rest (`hooks`, `effort`, `isolation`, `background`, `color`, `initialPrompt`) shows up in <LessonLink id="I6.3" /> and the Advanced level.
+
+### Restricting tools
+
+This is <LessonLink id="I1.2" />'s least privilege pointed at a delegate instead of at yourself. Use `tools` as an allowlist when you can name what the job needs:
+
+```yaml
+tools: Read, Grep, Glob, Bash
+```
+
+Use `disallowedTools` when the job needs almost everything:
+
+```yaml
+disallowedTools: Write, Edit
+```
+
+The two differ in what happens when your tool belt changes. An allowlist stays closed as you add MCP servers; a denylist keeps inheriting new capability. For a reviewer, the allowlist is the safer default. Set both and the denylist is applied first, so a tool named in both is gone.
+
+Both fields accept server-level MCP patterns. `mcp__github` or `mcp__github__*` covers every tool from that server, and `mcp__*` in `disallowedTools` strips MCP entirely.
+
+A restriction that names nothing real fails loudly: if no entry in `tools` resolves, the subagent refuses to launch and reports the entries it could not match, rather than starting with an empty tool belt and returning something confusing.
+
+A few tools depend on the main conversation's UI and never reach a subagent even when listed: `AskUserQuestion`, `EnterPlanMode`, `ScheduleWakeup`, `WaitForMcpServers`, and `ExitPlanMode` unless the agent's `permissionMode` is `plan`. A delegate cannot stop and ask you a question, which is worth knowing when you write its prompt: give it a rule for ambiguity rather than expecting it to check in.
+
+### Choosing a model
+
+`model` defaults to `inherit`. Naming a cheaper one is how a high-volume, low-judgment delegate stops costing Opus rates:
+
+```yaml
+model: haiku
+```
+
+Match the model to the reasoning the job needs, not to the job's importance. Scanning changed files for a fixed checklist runs well on a small model; reasoning about whether an architectural change is sound does not.
+
+When several sources disagree, resolution runs in this order: the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then a per-invocation model Claude passes, then the frontmatter, then your main conversation's model.
+
+### Preloading skills
+
+`skills` injects the full content of a skill into the subagent at startup:
+
+```yaml
+skills:
+  - api-conventions
+  - error-handling-patterns
+```
+
+This is <LessonLink id="I3.1" />'s procedures baked into a worker rather than discovered mid-task. The subagent starts already knowing your conventions instead of spending turns finding out.
+
+It controls preloading, not access. Without the field the subagent can still discover and invoke project, user, and plugin skills through the Skill tool. To stop that, drop `Skill` from `tools` or add it to `disallowedTools`.
+
+### Scoping MCP servers
+
+`mcpServers` grants servers per delegate, which is <LessonLink id="I5.1" />'s connections handed out selectively:
+
+```yaml
+mcpServers:
+  - playwright:
+      type: stdio
+      command: npx
+      args: ["-y", "@playwright/mcp@latest"]
+  - github
+```
+
+A string reuses the parent session's connection. An inline definition is scoped to this subagent alone, connected when it starts and disconnected when it finishes.
+
+Defining a server inline here rather than in `.mcp.json` keeps it out of your main conversation entirely. A browser-testing agent gets Playwright; your main session never sees those tools at all.
+
+### Persistent memory
+
+Subagents forget everything between invocations. `memory` gives one a directory that survives:
+
+```yaml
+memory: project
+```
+
+| Scope | Directory |
+|---|---|
+| `user` | `~/.claude/agent-memory/<name>/` |
+| `project` | `.claude/agent-memory/<name>/` |
+| `local` | `.claude/agent-memory-local/<name>/` |
+
+`project` is the recommended default, since it makes what the agent learns shareable through version control. With memory enabled the agent's system prompt gains instructions for reading and writing that directory plus the opening stretch of its `MEMORY.md`, and Read, Write, and Edit turn on automatically so it can maintain its own notes.
+
+That last part deserves a second look on a read-only agent. Memory grants write access to the memory directory's tooling, so an agent you built to never touch your code now holds Write and Edit. Worth accepting deliberately rather than discovering.
+
+Memory works when the agent is told to use it. Put the instruction in the body:
+
+```markdown
+Update your memory as you discover recurring issues, codebase patterns,
+and conventions this team follows. Keep notes concise.
+```
+
+## Walkthrough: a reviewer, then a test writer
+
+### The reviewer
+
+`.claude/agents/code-reviewer.md`:
+
+```markdown
+---
+name: code-reviewer
+description: Expert code review specialist. Reviews changes for quality, security, and maintainability. Use proactively immediately after writing or modifying code.
+tools: Read, Grep, Glob, Bash
+model: inherit
+memory: project
+---
+
+You are a senior code reviewer for this codebase.
+
+When invoked:
+1. Run `git diff` to see what changed
+2. Focus only on modified files
+3. Check your memory for issues this team has hit before
+4. Begin the review immediately, without asking what to look at
+
+Review for:
+- Error handling on every path that can fail
+- Secrets, keys, or tokens in code or logs
+- Input validation at trust boundaries
+- Naming that will confuse someone in six months
+- Test coverage for the changed behavior
+
+Report findings in three groups: Critical (must fix), Warnings
+(should fix), Suggestions (consider). Give a specific fix for each.
+
+You do not modify files. If a fix is obvious, describe it.
+
+After the review, add any recurring pattern you noticed to your memory.
+```
+
+Every line of frontmatter is doing work. `tools` has no Write or Edit, so "you do not modify files" is enforced rather than requested. `model: inherit` keeps review judgment on whatever you chose for the session. `memory: project` lets the reviewer accumulate the team's recurring mistakes, committed alongside the agent that learns them. The `description` says "proactively" and "immediately after writing code," which is what gets it invoked without you asking.
+
+Make some changes, then:
+
+```prompt
+@"code-reviewer (agent)" review my changes
+```
+
+What returns is the review, not the diff it read:
+
+```text
+● code-reviewer(review my changes)
+  ⎿ Done (11 tool uses · 31.4k tokens · 44s)
+
+  Critical (1)
+  - src/api/session.ts:42 logs the full token on refresh failure.
+    Log the token ID instead.
+
+  Warnings (2)
+  - src/api/session.ts:88 assumes refresh() resolves; the timeout
+    path rejects and is unhandled.
+  - No test covers the expired-token branch added in this change.
+
+  Suggestions (1)
+  - `doWork` in src/lib/queue.ts:12 says nothing about what it does.
+
+  Memory updated: unhandled rejection on refresh paths, third occurrence.
+```
+
+The eleven tool calls and the diff never entered your window.
+
+### The test writer
+
+Same pattern, different job, and the difference lands in `tools`:
+
+```markdown
+---
+name: test-writer
+description: Writes unit tests for code that lacks coverage. Use when asked to add tests or after new functions are written.
+tools: Read, Grep, Glob, Write, Edit, Bash
+model: sonnet
+---
+
+You are a test author for this codebase.
+
+When invoked:
+1. Read the target code and its existing tests
+2. Match the framework, file layout, and naming already in use
+3. Write tests covering the happy path, boundaries, and error paths
+4. Run the suite and fix your own failures before reporting
+
+Do not modify the code under test. If it is untestable as written,
+report that instead of changing it.
+
+Report what you added, what you deliberately did not cover, and why.
+```
+
+Writing tests means writing files, so Write and Edit are in. "Do not modify the code under test" cannot be enforced by tool restriction, since the same Edit tool serves both, so it lives in the prompt where it is a strong instruction rather than a guarantee. Worth being honest about the difference: the reviewer cannot edit your code, while the test writer is asked not to.
+
+```prompt
+@"test-writer (agent)" add tests for the new session refresh logic
+```
+
+`model: sonnet` is a deliberate downgrade from a session on Opus. Following existing test patterns is pattern-matching work, and it runs fine a tier down.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**You want reviews that get stricter over time.** Give the reviewer `memory: project` and tell it to record recurring issues. Six weeks in, it opens each review already knowing the three mistakes your team keeps making, and that knowledge is in version control rather than in one person's head.
+
+**You want a delegate that cannot touch production.** Build a read-only investigator: `tools: Read, Grep, Glob` and nothing else. No Bash means no `curl`, no deploy script, no `psql`. Isolation limits what it costs you; the tool list limits what it can do.
+
+**You want browser testing without browser tools in your main window.** Define the Playwright server inline under `mcpServers` in a `browser-tester` agent. Your main session's tool belt stays unchanged, which is the cost control from <LessonLink id="I5.3" /> applied per delegate.
+
+**You want a cheap first pass over many files.** A `haiku` agent with a narrow checklist can sweep a hundred files for one pattern and report the handful worth your attention.
+
+**The near-miss: you build a subagent for something you do once a month.** Writing the file, tuning the description until delegation fires reliably, and remembering it exists costs more than typing the request. A subagent earns its file when you have written the same instructions three or four times, and the fourth time is when you notice.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+**Build a custom subagent when:**
+
+- You keep spawning the same kind of worker with the same instructions.
+- The job needs a capability boundary you want enforced rather than requested.
+- A cheaper model would do the work fine and the volume makes that matter.
+- The delegate needs knowledge (skills, memory, a scoped server) that your main session should not carry.
+
+**Stay with a built-in or the main thread when:**
+
+- The task is one-off. `general-purpose` with a good prompt covers it.
+- The work needs back-and-forth. A subagent cannot ask you a question.
+- What you actually want is reusable instructions in your own context, which is a skill rather than a delegate. <LessonLink id="I3.4" /> draws that line.
+
+**What it costs.** Each custom agent's name and description load at session start so Claude knows delegation is available; the body and any preloaded skills load only when the agent runs. That makes a handful of agents nearly free and twenty of them a real line in `/context`, alongside a `description` field Claude has to disambiguate between. Running one costs its own tokens, billed as usual. Prune agents you no longer use, on the same reasoning as unused MCP servers.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **Claude never delegates to your new agent.** The `description` is vague or reads like a title. Rewrite it as a trigger condition: what kind of request, and when. "Use proactively after code changes" beats "code reviewer." Naming the agent explicitly with `@` is the reliable path while you tune it.
+
+- **The agent edits files you told it not to touch.** Instructions in the body are guidance; the tool list is enforcement. If it must not write, remove Write and Edit rather than asking twice.
+
+- **You add a tool to your session and the subagent silently gains it.** That is `disallowedTools` inheriting new capability by design. Allowlist anything you want held still.
+
+- **A new agent file does nothing until you restart.** The directory did not exist when the session started, so the watcher is not covering it. Subsequent edits to that file are picked up live.
+
+- **Two agent files share a `name`.** Only one loads, chosen by filesystem read order rather than by anything you can predict. `/doctor` reports duplicates in the same directory. Identity comes from `name`, so renaming the file does not fix it.
+
+- **You preload a skill and assume you have restricted the agent to it.** `skills` controls what starts loaded, not what can be reached. Restrict through `tools` or `disallowedTools`.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a project with uncommitted changes worth reviewing.
+
+1. Create `.claude/agents/code-reviewer.md` using the reviewer above. If the `agents` directory is new, restart Claude Code.
+2. Run `/context` and note the conversation-messages figure.
+3. Make a small change with an obvious flaw: a caught error that is swallowed, or a value logged that should not be.
+4. Invoke it: `@"code-reviewer (agent)" review my changes`.
+5. Read the report, then run `/context` again and compare. The report is in your window; the diff and the file reads are not.
+6. Ask it to fix what it found. It cannot, and the refusal comes from the tool list rather than from politeness.
+7. Change `model: inherit` to `model: haiku` and rerun without restarting. Compare the review's depth, and decide which the job deserves.
+
+**Success looks like:** a reviewer you did not have to instruct, a context window that barely moved, and a delegate that is structurally unable to edit your code.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Can a subagent spawn its own subagents?**
+Yes, if `Agent` is in its tools, which it is by default. Nesting keeps intermediate output out of your window even further down, since only the top-level agent's summary reaches you. Omit `Agent` from `tools` to prevent it.
+
+**How do I test an agent without committing a file?**
+Pass it as JSON with `--agents` when launching Claude Code. It exists for that session only, takes the same fields, and is useful for iterating before you decide the agent is worth keeping.
+
+**Can I run my whole session as one of these?**
+Yes: `claude --agent code-reviewer` starts a session where the main thread takes on that agent's system prompt, tools, and model. The agent's prompt replaces Claude Code's default entirely, so this is a different tool from delegating to it.
+
+**Do plugin-provided agents support all of this?**
+Not quite. `hooks`, `mcpServers`, and `permissionMode` are ignored on plugin subagents for security reasons. Copy the file into `.claude/agents/` if you need those fields. <LessonLink id="I7.1" /> covers plugin distribution.
+
+**What is in the agent's memory directory, and should I commit it?**
+Whatever the agent wrote, with `MEMORY.md` as the entry point Claude Code loads. With `memory: project` it lives in `.claude/agent-memory/` and committing it is the intent, since the accumulated knowledge is the value. Read it before the first commit: it is generated text going into your repository. Use `local` for anything project-specific you would rather not share.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="I6.3" /> turns these files into a working practice: how Claude decides to delegate on its own, running agents in the background while you keep typing, fanning several out in parallel, and chaining one agent's report into the next.
+
+<LessonLink id="I1.2" /> is the permission model these tool restrictions borrow from, if the allowlist and denylist mechanics feel worth a second pass.
