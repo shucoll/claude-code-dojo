@@ -6,7 +6,7 @@ type: "resolver"
 order: 5
 estimatedMinutes: 10
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-17"
 prerequisites: ["I4.1", "I3.1"]
 references: ["B3.1", "I3.4"]
 docsSources: ["https://code.claude.com/docs/en/hooks-guide", "https://code.claude.com/docs/en/features-overview"]
@@ -16,20 +16,69 @@ docsSources: ["https://code.claude.com/docs/en/hooks-guide", "https://code.claud
 
 ## The confusion
 
-{/* @@TODO@@ State exactly what people mix up and why the confusion exists. */}
+The complaint always arrives in the same words: *I told it to always do X, and it sometimes doesn't.* You wrote the rule in <LessonLink id="B3.1">`CLAUDE.md`</LessonLink>, it worked for a while, and then one long session later it quietly did not.
+
+The instinct is to write the instruction harder. Capitalize it. Add **IMPORTANT**. Repeat it at the top and the bottom. Sometimes that helps a little, which is the trap, because it suggests the problem is wording and the fix is more emphasis. An instruction is text Claude reads and weighs against everything else in the window, and under enough pressure any single line can lose. No phrasing converts advice into a guarantee.
+
+The real question is not how to word the rule. It is which mechanism the rule belongs to, and the three candidates do genuinely different jobs:
+
+**`CLAUDE.md` advises. A skill teaches. A hook enforces.**
+
+Pick the wrong one and no amount of tuning saves it. A hook cannot express a taste. A `CLAUDE.md` line cannot guarantee anything. Getting this fork right is the difference between a rule that mostly holds and one that always does.
 
 ## Side-by-side
 
-{/* @@TODO@@ Compare the options on: what it does, when it runs/loads, cost, who controls it, persistence. */}
+| | `CLAUDE.md` instruction | Skill | Hook |
+|---|---|---|---|
+| **What it is** | text Claude reads | a procedure Claude retrieves | machinery the harness runs |
+| **Acts** | on every turn, ambiently | when invoked or judged relevant | when a lifecycle event fires |
+| **Who decides it applies** | Claude | Claude, or you with `/command` | nobody, it always fires |
+| **Can it be missed?** | yes, under context pressure | yes, if the description misses | no |
+| **Can it use judgment?** | yes, it is all judgment | yes | not by default (see <LessonLink id="I4.4" />) |
+| **Costs** | its full length, every session | one index line until invoked | execution time on its event |
+| **Fails by** | being outweighed and skipped | never triggering | firing where you did not intend |
+
+The row that settles most arguments is "can it be missed." If your answer to "what happens if Claude skips this" is *something breaks*, you are looking for the column that cannot be skipped, and only one of these is machinery rather than words.
 
 ## Decision tree
 
-{/* @@TODO@@ The resolver logic as a flowchart (static clickable diagram in Phase 1). */}
+Work down this in order; the first match is your answer. It is one branch of the master tree in <LessonLink id="I7.3" />, narrowed to the three mechanisms people confuse most.
+
+1. **Can you state the rule as "on event X, always do Y," with no judgment needed?** ("After every edit, format the file." "Before any write to `migrations/`, refuse.") That is a hook, and it is the only option that converts "usually" into "always." Place it with the lifecycle map from <LessonLink id="I4.1" />.
+
+2. **Is it a multi-step procedure you want run on demand?** ("Cut a release: bump, changelog, tag, push.") That is a skill. There is no event to hang it on, because you decide when it happens, and it is too long to sit in `CLAUDE.md` paying rent every session.
+
+3. **Is it a standing fact or a preference that should shape how Claude writes, with no fixed trigger?** ("We use tabs." "Prefer composition over inheritance.") That is `CLAUDE.md`, and the honest expectation is *usually*, not *always*. If usually is genuinely not good enough, the rule was never a preference and you belong back at step 1.
+
+4. **Does the rule need judgment and a guarantee at the same time?** ("Block any edit that weakens test coverage.") A shell hook cannot judge it and an instruction cannot guarantee it, so this is the prompt or agent hook from <LessonLink id="I4.4" />, with the cost that comes with it.
+
+For the split between steps 2 and 3, when a procedure could arguably live in either home, <LessonLink id="I3.4" /> settles it on the trigger axis.
 
 ## Scenario walkthroughs
 
-{/* @@TODO@@ 5–8 rapid-fire scenarios, each stated then resolved with the recommended option + reasoning. */}
+Every one of these started as the same complaint.
+
+**"I told it to always run the formatter after editing, and it sometimes doesn't."**
+A hook. `PostToolUse` on `Edit|Write`, running your formatter. This is step 1: a named event, a fixed response, zero judgment. The instruction was never going to be reliable, not because it was badly written but because formatting is a mechanical consequence of an edit, and mechanical consequences belong to machinery. The recipe is in <LessonLink id="I4.3" />.
+
+**"I told it our release process and it skips steps."**
+A skill. There is no lifecycle event called "time to release," so there is nothing for a hook to fire on; you are the trigger. And the procedure is long, so keeping it in `CLAUDE.md` means paying for those forty lines in every session that has nothing to do with releasing. As a skill it costs one index line until you run `/release`, and the steps are in front of Claude in full when it matters.
+
+**"I told it to prefer functional style and it sometimes writes a class."**
+`CLAUDE.md` is already the right home, and the fix is calibration rather than a mechanism change. This is a taste that shapes generation, with no event and no procedure, so it lives as an ambient convention and you should expect it followed most of the time. If the deviation genuinely matters, the enforceable version is not better prose, it is a linter rule with a hook that runs it, which converts a preference into a check.
+
+**"I told it never to touch the migration files and one day it did."**
+A hook, `PreToolUse`, denying writes to that path. The tell is your own reaction to the failure: nobody shrugs at a modified migration. When the cost of one miss is high, "usually" is not a grade you can accept, and the mechanism has to be one that cannot be talked out of it.
+
+**"I told it to use our logger instead of `console.log` and it slips occasionally."**
+This one is genuinely on the line. As a convention it belongs in `CLAUDE.md`, and for most teams that is enough. It becomes a hook the moment a stray `console.log` reaching production is a real incident rather than a small annoyance, at which point the honest implementation is a lint rule enforced by a hook, not a more strongly worded instruction.
 
 ## Edge cases
 
-{/* @@TODO@@ Situations where two options are both defensible, and what tips the balance. */}
+**The instruction and the hook together.** For the rules that really matter, use both, and give each the job it is good at. The hook is the guarantee: it makes the bad outcome impossible. The `CLAUDE.md` line is the courtesy: it tells Claude the rule up front so it does not keep walking into a wall and having edits denied. Without the instruction the hook still protects you, but Claude wastes turns discovering the boundary; without the hook the instruction is back to being advice. The pair is belt and suspenders, and the belt is the hook.
+
+**A skill and a hook on the same workflow.** A `/release` skill runs the steps, and a `Stop` hook refuses to end the turn while the tests fail. The skill teaches the sequence, the hook guarantees the gate. They are not competing, because they answer different questions: what to do, and what must be true before this is over.
+
+**When a hook is more machinery than the rule deserves.** Enforcement has a maintenance cost: a script to keep working, a failure mode when it misfires, one more thing a new teammate has to understand. For a mild preference where an occasional miss costs you nothing, a `CLAUDE.md` line is the proportionate answer and a hook is over-engineering. Reserve enforcement for the rules whose violation you would actually have to undo.
+
+**When the instruction keeps failing and none of the above fits.** Before reaching for machinery, check whether the instruction is competing with too much else. A `CLAUDE.md` that has grown into a manual dilutes every line in it, and the rule may be getting missed because it is buried rather than because it needed enforcement. Trimming it, or scoping the rule to the paths it applies to, is covered in <LessonLink id="I2.2" />.
