@@ -48,7 +48,7 @@ export function Pathways() {
 
   return (
     <section className="mx-auto w-full max-w-4xl px-6 py-16">
-      <h2 className="mb-3 font-mono text-2xl font-semibold text-foreground">Three pathways</h2>
+      <h2 className="mb-3 font-mono text-3xl font-semibold text-foreground">Three pathways</h2>
       <p className="mb-10 max-w-xl text-muted-foreground">
         Each level builds on the last. Start wherever you are - every level's lessons are open to
         everyone.

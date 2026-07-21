@@ -44,7 +44,7 @@ const ICONS: Record<PillarIcon, ReactNode> = {
 export function WhatYoullLearn() {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-16">
-      <h2 className="mb-10 font-mono text-2xl font-semibold text-foreground">What you'll learn</h2>
+      <h2 className="mb-10 font-mono text-3xl font-semibold text-foreground">What you'll learn</h2>
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {PILLARS.map((pillar) => (
           <Card key={pillar.icon} className="flex flex-col gap-4">

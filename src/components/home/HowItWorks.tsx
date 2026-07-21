@@ -4,7 +4,7 @@ import { CLOSING, STEPS } from './homeContent'
 export function HowItWorks() {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-16">
-      <h2 className="mb-10 font-mono text-2xl font-semibold text-foreground">How it works</h2>
+      <h2 className="mb-10 font-mono text-3xl font-semibold text-foreground">How it works</h2>
 
       <ol className="grid grid-cols-1 gap-8 sm:grid-cols-3">
         {STEPS.map((step, i) => (
