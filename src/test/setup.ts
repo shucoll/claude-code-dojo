@@ -37,11 +37,12 @@ if (typeof window !== 'undefined' && typeof window.AnimationEvent === 'undefined
   window.AnimationEvent = AnimationEventShim as unknown as typeof AnimationEvent
 }
 
-// jsdom lacks matchMedia; provide a stub that reports light (matches: false).
+// jsdom lacks matchMedia; provide a stub that reports a light-themed desktop
+// viewport (min-width queries match, prefers-color-scheme: dark does not).
 if (typeof window !== 'undefined' && !window.matchMedia) {
   window.matchMedia = (query: string): MediaQueryList =>
     ({
-      matches: false,
+      matches: /min-width/.test(query),
       media: query,
       onchange: null,
       addEventListener: () => {},
