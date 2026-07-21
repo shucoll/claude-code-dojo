@@ -6,7 +6,8 @@ type: "milestone"
 order: 4
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
+teaches: ["hooks-as-gates", "migration-guard-hook", "stop-hook-test-gate"]
 prerequisites: ["I8.3"]
 references: ["I4.2", "I4.3"]
 docsSources: ["https://code.claude.com/docs/en/hooks", "https://code.claude.com/docs/en/hooks-guide"]
@@ -14,18 +15,265 @@ docsSources: ["https://code.claude.com/docs/en/hooks", "https://code.claude.com/
 
 # Hooks as quality gates
 
+The environment so far records its standards and mostly trusts everyone to follow them. `CLAUDE.md` asks for formatting and passing tests; the permission policy denies the worst edits. What it cannot yet do is *guarantee* any of it. A convention is a request Claude usually honors. This milestone converts three of those requests into machinery that holds every time, whether Claude is paying attention or not.
+
+Three of them are quality gates, each a recipe from <LessonLink id="I4.3" /> aimed at this project: format every edit, freeze the shipped migrations, and refuse to call the work done while a test is red. A fourth hook, a desktop notification, rides along as a personal convenience, and it is here to show where a hook belongs when the standard is yours rather than the team's.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Arm three quality gates in the committed `.claude/settings.json` and its `.claude/hooks/` scripts: a `PostToolUse` formatter, a `PreToolUse` guard that seals `.env` and freezes shipped migrations while still allowing new ones, and a `Stop` gate that runs the suite and blocks completion on failure. Then add a fourth hook, a desktop notification, in your personal scope, so the gates the team shares and the convenience that stays yours live in different files. When this milestone is done, the standards enforce themselves.
+
+**Environment:** the PulseBoard repository, with `jq` installed (the guard scripts parse their input with it). The hooks act on this project only.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Format every edit
+
+Formatting that depends on Claude remembering to format will drift. A `PostToolUse` hook on the editing tools runs your formatter on whatever file was just written, so the working tree stays clean without anyone asking.
+
+<WhenLang is="javascript">
+
+Add this to the `hooks` key of `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path' | xargs npx prettier --write --ignore-unknown"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`PostToolUse` fires after the edit lands, the `Edit|Write` matcher keeps it off reads and Bash calls, and `--ignore-unknown` tells Prettier to skip file types it does not handle rather than erroring on them, which is the noise failure mode from <LessonLink id="I4.3">I4.3</LessonLink> handled up front.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+Add this to the `hooks` key of `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in *.py) ruff format \"$f\";; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+`PostToolUse` fires after the edit lands, the `Edit|Write` matcher keeps it off reads and Bash calls, and the `case` guard runs `ruff format` only on `.py` files, so an edit to HTML or JSON does not make Ruff error, which is the noise failure mode from <LessonLink id="I4.3" /> handled up front.
+
+</WhenLang>
+
+Test it by asking Claude to add a badly indented function to a source file, then look at the file on disk. It is formatted, though you never asked.
+
+### 2. Freeze the shipped migrations, keep `.env` sealed
+
+This is the promise <LessonLink id="I8.1" /> made and deferred. The permission policy already denies edits to `.env`, but the migration rule needed something a permission rule cannot express: *new migration files are fine, edits to shipped ones are not*. A `PreToolUse` hook can tell them apart, because it can check whether the file already exists on disk.
+
+Save `.claude/hooks/protect-files.sh`:
+
+```bash
+#!/bin/bash
+# protect-files.sh: seal secrets and git internals; freeze shipped migrations
+input=$(cat)
+file_path=$(echo "$input" | jq -r '.tool_input.file_path // empty')
+
+deny() {
+  jq -n --arg r "$1" '{
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "deny",
+      permissionDecisionReason: $r
+    }
+  }'
+  exit 0
+}
+
+# Always sealed.
+for pattern in ".env" ".git/"; do
+  if [[ "$file_path" == *"$pattern"* ]]; then
+    deny "Blocked: $file_path is a protected path. Do not edit it directly."
+  fi
+done
+
+# Migrations: a new file is allowed, a shipped one is frozen.
+if [[ "$file_path" == *"migrations/"* && -e "$file_path" ]]; then
+  deny "Blocked: $file_path is a shipped migration. Add a new migration instead of editing this one."
+fi
+
+exit 0
+```
+
+Make it executable and register it, scoped to the editing tools:
+
+```bash
+chmod +x .claude/hooks/protect-files.sh
+```
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `-e "$file_path"` test is the whole trick. When Claude writes a brand-new migration the file does not exist yet, so the guard lets it through; the next time anything tries to edit that same file, it exists, so the guard denies it with a reason Claude can read. That is the "new yes, edits no" rule a static permission deny could not carry, from <LessonLink id="I4.2" />'s decision-control contract.
+
+Test all three cases: ask Claude to edit `.env` (denied), to edit an existing file under `migrations/` (denied, with the add-a-new-migration reason), and to create a new file under `migrations/` (allowed). The `$CLAUDE_PROJECT_DIR` in the command is the project root, and it is a different variable from the `${CLAUDE_PLUGIN_ROOT}` you will meet when this becomes a plugin in <LessonLink id="I8.7" />.
+
+### 3. Make "done" mean green
+
+The strongest gate is on the `Stop` event, which fires when Claude is about to end its turn. A `Stop` hook that runs the tests and blocks on failure changes what finishing means: Claude cannot declare the work done while a test is red, because the hook will not let the turn end.
+
+Save `.claude/hooks/run-tests.sh`:
+
+<WhenLang is="javascript">
+
+```bash
+#!/bin/bash
+# run-tests.sh: refuse to finish while the suite is red
+if npm test >/tmp/pulseboard-tests.log 2>&1; then
+  exit 0
+fi
+echo "Tests are failing. Keep working until they pass:" >&2
+tail -20 /tmp/pulseboard-tests.log >&2
+exit 2
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+#!/bin/bash
+# run-tests.sh: refuse to finish while the suite is red
+if pytest >/tmp/pulseboard-tests.log 2>&1; then
+  exit 0
+fi
+echo "Tests are failing. Keep working until they pass:" >&2
+tail -20 /tmp/pulseboard-tests.log >&2
+exit 2
+```
+
+</WhenLang>
+
+Make it executable and register it on `Stop`:
+
+```bash
+chmod +x .claude/hooks/run-tests.sh
+```
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-tests.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The exit codes are the contract from <LessonLink id="I4.2" />: on `Stop`, exit `2` means the turn may not end, and whatever the script wrote to stderr is handed back to Claude as the reason. So a failing suite keeps Claude working, with the last twenty lines of output as its brief. Passing tests exit `0` and the turn ends normally.
+
+Test it by asking Claude to add a feature with a deliberately failing test, then telling it you are done. Watch it be unable to stop: the hook runs the suite, sees red, and sends Claude back to fix it.
+
+One edge to know. If Claude genuinely cannot make the suite pass, this gate can loop. The `Stop` input carries a `stop_hook_active` flag, set to `true` once the turn is already continuing because of a stop hook; a production version checks that flag to cap retries rather than blocking forever. For this project the suite is small and the loop terminates when it goes green.
+
+### 4. Notify yourself, in your own scope
+
+The three gates so far are the team's standards, which is why they live in the committed `.claude/settings.json`: anyone who clones the repo inherits them. A desktop notification when Claude needs you is a different kind of thing. It is a personal convenience, and forcing it on every teammate would be wrong. So the same hooks mechanism goes in a different scope.
+
+Keep it local to this project by putting it in `.claude/settings.local.json`, your personal, gitignored settings file from <LessonLink id="I1.3" />:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "osascript -e 'display notification \"Claude Code needs your attention\" with title \"PulseBoard\"'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+On Linux swap the command for `notify-send`; on Windows, a PowerShell `MessageBox`. Narrow the empty matcher to `permission_prompt` for approval requests only, or `idle_prompt` for the finished-and-waiting case.
+
+Because `.claude/settings.local.json` is gitignored, this hook stays yours: it does not get committed and no teammate inherits it. Confirm it is ignored (add it to `.gitignore` if it is not already), since a committed local-settings file defeats the point of the scope.
+
+If you would rather be notified in *every* project, put the same block in `~/.claude/settings.json` instead. At user scope it fires across all your Claude Code sessions, not just PulseBoard. Local scope keeps it to this project; user scope makes it global. Pick by how far you want the convenience to reach.
+
+Test it by asking Claude to do something that needs approval, then switching to another window and waiting for the notification.
+
+### 5. Verify and commit
+
+Run `/hooks` and confirm all four appear: `PostToolUse`, `PreToolUse`, and `Stop` from `.claude/settings.json`, and `Notification` from `.claude/settings.local.json`. The listing names the source file for each, so you can see the three team gates and your personal one side by side, in their different scopes. The three committed gates share the one `hooks` object in `.claude/settings.json`, alongside the `permissions` block from <LessonLink id="I8.1" />.
+
+```prompt
+Commit the three team hooks and their scripts under .claude/, with a message naming each gate, then push. Leave .claude/settings.local.json alone; it is gitignored.
+```
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- A `PostToolUse` formatter that keeps the tree clean on every edit.
+- A `.claude/hooks/protect-files.sh` guard sealing `.env` and `.git/`, and freezing shipped migrations while permitting new ones.
+- A `.claude/hooks/run-tests.sh` gate on `Stop` that blocks completion while the suite is red.
+- All three team gates registered in the committed `.claude/settings.json`, plus a personal `Notification` hook in the gitignored `.claude/settings.local.json`, all listed under `/hooks`.
+
+**Done looks like:** an edit gets auto-formatted, an edit to a shipped migration is refused with a reason, a turn with a failing test cannot end until the test is fixed, and a notification reaches you when Claude is waiting, while `/hooks` shows the team gates and your personal hook in their separate scopes.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+The transferable idea is the difference between a request and a guarantee. Everything before this milestone asked Claude to behave: format your edits, leave migrations alone, make sure tests pass. Asking works most of the time. A guarantee is what covers the times it does not. A hook runs on the event no matter what, so the standard holds on the run where Claude was moving fast and would otherwise have skipped it.
+
+The `Stop` gate is the sharpest version, because it changes an incentive rather than blocking an action. Before it, "done" was Claude's judgment that the work looked finished. After it, "done" has a definition the project enforces: the suite is green. You did not ask Claude to value passing tests more highly. You made finishing impossible without them, which is a stronger thing than any instruction in `CLAUDE.md` could be, and the reason <LessonLink id="I4.5" /> put hooks at the bottom of its ladder as the mechanism for what must be guaranteed.
+
+Scope did quiet work here too. The three gates are the project's, so they are committed and every clone inherits them. The notification is yours, so it sits in a scope that travels with you and not with the repository, local to this project or global across your sessions. Same hooks mechanism, sorted by whose standard it is, which is the scope decision from <LessonLink id="I1.3" /> applied to hooks.
+
+Next milestone, <LessonLink id="I8.5" />: you add a subagent review board, a read-only code reviewer and a test-writer, and wire them into the rhythm so review happens in a fresh context before the work is called complete.
