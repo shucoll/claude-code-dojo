@@ -95,7 +95,9 @@ export function Sidebar() {
                 <ChevronIcon open={isOpen} />
                 <span className="font-mono text-sm font-semibold">{level.title}</span>
               </span>
-              <Badge tone={pct === 100 ? 'success' : 'neutral'}>{pct}%</Badge>
+              {level.modules.length > 0 && (
+                <Badge tone={pct === 100 ? 'success' : 'neutral'}>{pct}%</Badge>
+              )}
             </button>
 
             <AnimatePresence initial={false}>
