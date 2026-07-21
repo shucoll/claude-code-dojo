@@ -1,0 +1,248 @@
+---
+id: "B5.2"
+slug: "plan-a-feature-in-plan-mode"
+title: "Plan a feature in plan mode"
+type: "milestone"
+order: 2
+estimatedMinutes: 20
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-14"
+prerequisites: ["B5.1"]
+teaches: ["plan-mode-cycle", "plan-review"]
+references: ["B3.3", "B3.5"]
+docsSources: ["https://code.claude.com/docs/en/permission-modes"]
+---
+
+# Plan a feature in plan mode
+
+Shelf boots and answers a health check. Now it needs to actually hold things. The first real feature is **tagging**: create items with an optional tag, and list items filtered by tag. You could just ask for it. Instead you are going to design it in plan mode first, because unlike the health check, this change touches more than one file.
+
+## Goal for this stage
+
+Add two behaviors to Shelf, built through a complete plan-mode cycle:
+
+- `POST /items` with `{ title, tag }` creates an item and returns it with `201`.
+- `GET /items?tag=scifi` returns only the items with that tag.
+
+The artifact is a working tagging feature. The skill is the cycle that produced it: explore, get a plan, **review the plan critically**, approve, execute, review the diff.
+
+**Environment:** your Shelf repo from <LessonLink id="B5.1" />. You committed the scaffold there, so you have a clean baseline to diff against and rewind to if needed.
+
+## Steps
+
+### 1. Enter plan mode, and know why
+
+The health check did not need a plan. It was one file and one obvious line; per the ladder in <LessonLink id="B3.5" />, you just do those. Tagging is different: it changes the database schema, the data layer in `db.js`, and the routes in `server.js`. That is three touch points you do not fully hold in your head at once, the threshold <LessonLink id="B3.3" /> describes for reaching for plan mode.
+
+Enter it by pressing `Shift+Tab` to cycle to **plan** (the status bar shows the mode), or prefix a single prompt with `/plan`, or launch with `claude --permission-mode plan`. In plan mode Claude reads files and explores but cannot edit anything. Edits stay blocked until you approve a plan, so there is no risk in letting it look around.
+
+### 2. Ask for a plan, not code
+
+<WhenLang is="javascript">
+
+```prompt
+We're adding tags to Shelf. I want to create items with an optional tag
+(POST /items with {title, tag}) and list items filtered by tag
+(GET /items?tag=...). Read server.js and db.js, then write a plan: what
+changes in each file, the schema change, and the test you'll add. Don't
+write code yet.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+We're adding tags to Shelf. I want to create items with an optional tag
+(POST /items with {title, tag}) and list items filtered by tag
+(GET /items?tag=...). Read app.py and db.py, then write a plan: what
+changes in each file, the schema change, and the test you'll add. Don't
+write code yet.
+```
+
+</WhenLang>
+
+Claude explores and comes back with something like this:
+
+<WhenLang is="javascript">
+
+```text
+Plan: add tagging to Shelf
+
+1. db.js — create the items table with an id, title, and tag column.
+   Add addItem(title, tag) to insert a row and return it. Add an optional
+   tag filter to listItems(tag).
+2. server.js — accept tag in the POST /items body; read ?tag= in
+   GET /items and pass it to listItems.
+3. tests/items.test.js — post a tagged item, assert GET /items?tag=
+   returns only matching items.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```text
+Plan: add tagging to Shelf
+
+1. db.py — create the items table with an id, title, and tag column.
+   Add add_item(title, tag) to insert a row and return it. Add an optional
+   tag filter to list_items(tag).
+2. app.py — accept tag in the POST /items body; read ?tag= in
+   GET /items and pass it to list_items.
+3. tests/test_items.py — post a tagged item, assert GET /items?tag=
+   returns only matching items.
+```
+
+</WhenLang>
+
+### 3. Review the plan (this is the part beginners skip)
+
+The ceremony of plan mode is worth nothing if you rubber-stamp the plan. Its whole value is that you get to interrogate the approach *before* a single line is written, when changing your mind costs a sentence instead of a re-run. Read the plan against these questions every time:
+
+- **Does it touch the right files, and only those?** Tagging belongs in the data layer and the routes. If the plan wants to add a new file or touch `public/`, ask why before approving.
+- **Does it respect your conventions?** Your `CLAUDE.md` says all database access lives in one file. A plan that runs SQL from the route layer violates that. Catch it here, in one line of the plan, not later across a diff.
+- **Where is the test?** A plan with no verification is one you cannot check. This plan names a test; if it had not, you would ask for one now.
+- **Is there hidden scope?** Watch for "add a separate tags table," "add tag validation," or "migrate existing data." Those may be more than you asked for. Trimming scope is free while it is still just a plan.
+- **What about data that already exists?** Items created in the last milestone have no tag. Does the schema allow a null tag? A plan-time question that heads off a runtime surprise.
+
+If any answer is wrong, do not approve. Choose **keep planning** at the prompt and give feedback, or press `Ctrl+G` to open the plan in your editor and fix it directly before Claude proceeds.
+
+### 4. Approve, then execute
+
+When the plan holds up, approve it. Claude presents the plan and asks how to proceed; the options include approving and reviewing each edit manually, approving and accepting edits, or approving and letting it run in auto mode. For a change this size, reviewing each edit is a fine default. Approving exits plan mode and Claude starts writing the code it just described.
+
+### 5. Read the diff against the plan
+
+The plan told you what to expect. Now confirm the code matches it, reading the diff line by line rather than skimming. The data layer gains the two functions:
+
+<WhenLang is="javascript">
+
+```javascript
+// db.js
+export function addItem(title, tag) {
+  const info = db.prepare('INSERT INTO items (title, tag) VALUES (?, ?)').run(title, tag ?? null)
+  return { id: info.lastInsertRowid, title, tag: tag ?? null }
+}
+
+export function listItems(tag) {
+  if (tag) {
+    return db.prepare('SELECT * FROM items WHERE tag = ? ORDER BY id').all(tag)
+  }
+  return db.prepare('SELECT * FROM items ORDER BY id').all()
+}
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+# db.py
+def add_item(title, tag=None):
+    with _connect() as conn:
+        cur = conn.execute("INSERT INTO items (title, tag) VALUES (?, ?)", (title, tag))
+        return {"id": cur.lastrowid, "title": title, "tag": tag}
+
+def list_items(tag=None):
+    with _connect() as conn:
+        if tag:
+            rows = conn.execute("SELECT * FROM items WHERE tag = ? ORDER BY id", (tag,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM items ORDER BY id").fetchall()
+        return [dict(row) for row in rows]
+```
+
+</WhenLang>
+
+And the routes call into it, staying thin the way your conventions asked:
+
+<WhenLang is="javascript">
+
+```javascript
+// server.js
+app.post('/items', (req, res) => {
+  const { title, tag } = req.body
+  if (!title) return res.status(400).json({ error: 'title is required' })
+  res.status(201).json(addItem(title, tag))
+})
+
+app.get('/items', (req, res) => {
+  res.json(listItems(req.query.tag))
+})
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+# app.py
+@app.post("/items")
+def create_item():
+    data = request.get_json(silent=True) or {}
+    title = data.get("title")
+    if not title:
+        return jsonify(error="title is required"), 400
+    return jsonify(db.add_item(title, data.get("tag"))), 201
+
+@app.get("/items")
+def get_items():
+    return jsonify(db.list_items(request.args.get("tag")))
+```
+
+</WhenLang>
+
+The route layer has no SQL in it. The plan said all data access stays in one file, the diff proves it did, and you confirmed that by reading rather than trusting.
+
+### 6. Verify the feature
+
+Start the server and exercise the new endpoints:
+
+<WhenLang is="javascript">
+
+```bash
+curl -s -X POST localhost:3000/items \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Dune","tag":"scifi"}'
+# {"id":1,"title":"Dune","tag":"scifi"}
+
+curl -s "localhost:3000/items?tag=scifi"
+# [{"id":1,"title":"Dune","tag":"scifi"}]
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+curl -s -X POST localhost:5000/items \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Dune","tag":"scifi"}'
+# {"id":1,"tag":"scifi","title":"Dune"}
+
+curl -s "localhost:5000/items?tag=scifi"
+# [{"id":1,"tag":"scifi","title":"Dune"}]
+```
+
+</WhenLang>
+
+Run the test suite too, so the endpoint ships with the test your convention requires. When both pass, commit the feature as one focused change.
+
+## The artifact
+
+At the end of this stage, Shelf can:
+
+- Create a tagged item: `POST /items` returns `201` with the new item.
+- Filter by tag: `GET /items?tag=` returns only matching items.
+- Reject a missing title with `400`.
+
+And there is a test proving it, plus one commit that contains exactly this feature. **Done looks like:** the two curl calls above return what the comments show, the tests are green, and the diff you committed matches the plan you approved.
+
+## Reasoning recap
+
+Plan mode's ceremony is worth it when a change touches multiple files you do not fully hold in your head. The health check did not qualify; tagging did. Learning to feel that line is half the lesson.
+
+The other half is that the leverage is not the plan, it is the **review** of the plan. A wrong approach caught at plan time costs one sentence of feedback. The same mistake caught in the diff costs a re-run. Caught after you ship, it costs a debugging session. Reviewing the plan is how you move a correction as early as it can possibly go, which is the cheapest place to make it.
+
+Next milestone, <LessonLink id="B5.3" />: you deliberately break Shelf and recover it, first with `/rewind` and then with git, so that recovery stops being scary and starts being a tool.

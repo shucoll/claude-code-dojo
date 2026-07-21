@@ -1,0 +1,9 @@
+After acting, Claude reads what came back: test output, error messages, the diff
+it just made. It decides whether the step worked and what to do next.
+
+If the tests still fail, it loops back to gather more context and tries again,
+course-correcting from what it just learned.
+
+This self-checking is why an agent can handle multi-step work that would take
+many chat round trips. It closes the feedback loop itself instead of handing
+each result back to you.

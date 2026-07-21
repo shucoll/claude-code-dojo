@@ -1,0 +1,196 @@
+---
+id: "I5.2"
+slug: "mcp-scopes-auth-and-team-sharing"
+title: "MCP scopes, auth, and team sharing"
+type: "core"
+order: 2
+estimatedMinutes: 9
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-20"
+prerequisites: ["I5.1"]
+references: ["I1.3", "I1.4"]
+docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/mcp-quickstart"]
+---
+
+# MCP scopes, auth, and team sharing
+
+## The problem
+
+You connected a server in <LessonLink id="I5.1" /> and it worked. Then you opened a different project and its tools were gone. Meanwhile a teammate pulls your branch, asks Claude to check the error tracker, and gets told there is no such tool, because the server you added lives in a file on your laptop that they will never see.
+
+Both symptoms come from one decision you made without noticing: `claude mcp add` defaults to local scope. Scope is not new machinery. It is the same three-way split from <LessonLink id="I1.3" />, carrying a different payload, and once you see it that way the rest of MCP's configuration story is small: where the entry is written, how a committed file shares it, and how credentials stay out of that file.
+
+## The three scopes
+
+| Scope | Loads in | Shared with team | Stored in |
+|---|---|---|---|
+| `local` (default) | current project only | no | `~/.claude.json`, under this project's path |
+| `project` | current project only | yes, via version control | `.mcp.json` in the project root |
+| `user` | all your projects | no | `~/.claude.json`, top-level `mcpServers` |
+
+```bash
+claude mcp add --transport http stripe https://mcp.stripe.com                    # local
+claude mcp add --transport http paypal --scope project https://mcp.paypal.com/mcp # project
+claude mcp add --transport http hubspot --scope user https://mcp.hubspot.com/anthropic # user
+```
+
+One naming trap: MCP's "local scope" is not the same file as the local *settings* scope you learned in <LessonLink id="I1.3">I1.3</LessonLink>. Settings use `.claude/settings.local.json` inside the project; MCP local-scoped servers go in `~/.claude.json` in your home directory, keyed by the project path. Same word, different file.
+
+When a server name is defined at more than one scope, Claude Code connects once and takes the whole entry from the highest-precedence source. Fields are not merged.
+
+**local → project → user → plugin-provided → claude.ai connectors**
+
+The three scopes match duplicates by name. Plugins and connectors match by endpoint, so one pointing at the same URL as a server above it counts as the same server.
+
+Scope is fixed when the server is added. Moving one means removing and re-adding it:
+
+```bash
+claude mcp remove sentry --scope local
+claude mcp add --transport http sentry --scope project https://mcp.sentry.dev/mcp
+```
+
+## Sharing with a team
+
+Project scope writes `.mcp.json` at the repository root. Commit it, and cloning the repo brings the servers with it:
+
+```json
+{
+  "mcpServers": {
+    "sentry": {
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp"
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    }
+  }
+}
+```
+
+This is configuration as code for your tool belt, in the same spirit as a committed `CLAUDE.md`: a new teammate gets the working setup by cloning rather than by following a wiki page.
+
+The first time Claude Code sees a project-scoped server it asks you to approve it. That prompt exists because a repository you cloned should not be able to launch processes on your machine on your behalf. Approve it once and the answer is remembered. If you need to undo a decision, including a rejection you now regret:
+
+```bash
+claude mcp reset-project-choices
+```
+
+`.mcp.json` is read at session start, so edits need a restart before they take effect.
+
+## Keeping secrets out of the committed file
+
+A committed file that holds a token is a leaked token. Claude Code expands environment variables inside `.mcp.json`, which is how a shared entry stays shared without carrying anyone's credentials:
+
+- `${VAR}` expands to the value of `VAR`.
+- `${VAR:-default}` expands to `VAR` if set, otherwise the default.
+
+Expansion works in `command`, `args`, `env`, `url`, and `headers`, which covers both machine-specific paths and per-developer secrets:
+
+```json
+{
+  "mcpServers": {
+    "api-server": {
+      "type": "http",
+      "url": "${API_BASE_URL:-https://api.example.com}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${API_KEY}"
+      }
+    }
+  }
+}
+```
+
+The committed file now says *every developer authenticates with their own key*, and the key itself lives in each developer's environment. That closes the hygiene loop <LessonLink id="B1.3" /> opened: the secret never enters the repository, and never enters a prompt.
+
+If a referenced variable is unset with no default, the config still loads. Claude Code reports a missing-variable warning for that server in `claude mcp list` and passes the literal `${VAR}` text through, which usually surfaces as a confusing auth failure rather than an obvious one. Set the variable, or give it a `:-default`.
+
+## Walkthrough: authenticating a remote server
+
+Servers behind OAuth (Sentry, Linear, Notion) take a browser sign-in once, after which tokens are stored and refreshed for you.
+
+Add the server as normal:
+
+```bash
+claude mcp add --transport http sentry https://mcp.sentry.dev/mcp
+```
+
+`claude mcp list` now shows `! Needs authentication`. That status means the server is reachable and answered with `401` or `403`, which is what a healthy unauthenticated server does. Claude Code also shows a startup notice when configured servers need sign-in, so it will surface without you asking.
+
+Start a session and open the panel:
+
+```prompt
+/mcp
+```
+
+Select `sentry`, press Enter, and choose `Authenticate`. Your browser opens the provider's sign-in page. Approve there, and the status flips to connected back in the terminal. If the browser does not open, copy the URL printed in the terminal. If the redirect fails after you sign in, paste the full callback URL from the address bar into the prompt Claude Code shows.
+
+You can also do this without a session:
+
+```bash
+claude mcp login sentry
+```
+
+On a machine with no browser, such as an SSH session, it prints the URL rather than trying to open one, and you paste the redirect back. Connect with `ssh -t` so the paste step has an interactive terminal, or force that mode with `--no-browser`. `claude mcp logout sentry` clears the stored credentials.
+
+Then use it:
+
+```prompt
+What Sentry projects do I have access to?
+```
+
+Not every remote server uses OAuth. Some take a static token at add time instead:
+
+```bash
+claude mcp add --transport http github https://api.githubcopilot.com/mcp/ \
+  --header "Authorization: Bearer $GITHUB_TOKEN"
+```
+
+The two paths do not mix. If you set an `Authorization` header and the server rejects it, Claude Code reports a failed connection rather than falling back to OAuth, so a bad token looks like a broken server. Remove the header if you meant to sign in through the browser.
+
+## Pitfalls
+
+- **You add a server, switch projects, and its tools are missing.** Local scope is per project and it is the default. Re-add with `--scope user` for yourself everywhere, or `--scope project` for the team here.
+
+- **You commit `.mcp.json` with a token in it.** Rotate the token, then move it to `${API_KEY}` and set the variable in your environment. A committed secret is compromised the moment it is pushed, not the moment someone reads it.
+
+- **A teammate says the shared server does nothing.** They either have not approved it yet (`/mcp` shows it pending) or they are missing an environment variable your entry expands. `claude mcp list` names both problems.
+
+- **A server that worked yesterday now needs authentication again.** The stored refresh token was rejected. Open `/mcp` and choose Re-authenticate, or run `claude mcp login <name>`.
+
+## Try It
+
+**Environment:** a git repository you can commit to.
+
+1. Add a server at project scope: `claude mcp add --transport http claude-code-docs --scope project https://code.claude.com/docs/mcp`.
+2. Open `.mcp.json` at the repo root and read the entry it wrote.
+3. Run `claude mcp get claude-code-docs` and confirm it reports project scope.
+4. Edit the entry by hand to route the URL through a variable: `"url": "${DOCS_MCP_URL:-https://code.claude.com/docs/mcp}"`. Restart the session and confirm it still connects, now via the default.
+5. Set `DOCS_MCP_URL` to a deliberately wrong value and restart. Watch the connection fail, which proves the expansion is live rather than decorative.
+6. Unset it, restart, and confirm the fallback works again.
+
+**Success looks like:** a server defined in a file you could commit, connecting through an expanded variable, with no credential anywhere in the repository.
+
+## FAQ
+
+**Which scope should I default to?**
+`user` for anything you personally want everywhere (a browser server, a docs server). `project` for anything the team needs to reproduce your setup. `local`, the default, for experiments and for servers whose config you do not want shared. If you find yourself re-adding the same server in project after project, it wanted user scope.
+
+**How do I tell which scope a server came from?**
+`claude mcp get <name>` reports the scope holding its definition. Useful when a server behaves unexpectedly and you suspect a higher-precedence entry is shadowing the one you just edited.
+
+**Can I have the same server at two scopes deliberately?**
+Yes, and precedence decides. A common pattern is a project-scoped entry for the team plus a local-scoped override pointing at your own instance. Local wins, and the entry is taken whole, so your override must be complete rather than a patch on the shared one.
+
+**Where do OAuth tokens actually live?**
+Not in any config file, which is why signing in is per machine and `.mcp.json` stays safe to commit. Tokens are stored securely by Claude Code and refreshed automatically; `claude mcp logout <name>`, or "Clear authentication" in `/mcp`, removes them.
+
+**What happens in a non-interactive run?**
+There is no `/mcp` panel in `claude -p` or an SDK run, so the OAuth flow cannot start. Claude is told the server's tools are unavailable pending authorization, so it can name the server that needs signing in rather than acting as though it were never configured. Complete the sign-in from an interactive session first.
+
+## Where next
+
+<LessonLink id="I5.3" /> attaches the bill to all of this: what connected servers actually cost now that tool search is the default, what happens when a tool returns more output than fits, and how to think about trusting a server you did not write.
+
+<LessonLink id="I1.4" /> is the general resolver for the question this lesson answered for one payload: given any piece of configuration, which file does it belong in.

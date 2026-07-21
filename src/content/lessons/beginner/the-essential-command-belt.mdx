@@ -1,0 +1,88 @@
+---
+id: "B2.3"
+slug: "the-essential-command-belt"
+title: "The essential command belt"
+type: "core"
+order: 3
+estimatedMinutes: 10
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-09"
+prerequisites: ["B2.1"]
+teaches: ["slash-commands", "command-belt"]
+references: ["B2.2"]
+docsSources: ["https://code.claude.com/docs/en/commands", "https://code.claude.com/docs/en/interactive-mode"]
+interactive:
+  - kind: "diagram"
+    spec: "command-belt-reference"
+---
+
+# The essential command belt
+
+## The problem
+
+Type `/` into Claude Code and a menu drops down with dozens of entries. Plugins add more. MCP servers add more still. It looks like a language you have to learn before you can get anything done.
+
+You do not. Almost everything you will ever want, you get by asking in plain English. The commands exist for the handful of jobs that plain English cannot do, because they act on **the session itself** rather than on your code.
+
+This lesson is the map, deliberately not the territory. Nothing here is explained in depth. Each entry tells you what it does in one line and where to go when you need the depth.
+
+## Commands versus just typing
+
+The distinction is simpler than it looks, and it explains why the list is short.
+
+**Typing normally** sends a message to Claude. Claude reads it, decides what to do, and uses tools. "Fix the failing test," "explain this function," "commit my changes." Anything you want *done to your code* is a sentence, not a command.
+
+**A slash command** does not go to Claude at all. It tells the Claude Code harness to do something to your session: wipe it, summarize it, resume it, show you what it costs. Claude is not asked and cannot refuse. `/clear` is not a request to forget; it is the conversation being replaced.
+
+So the rule is: **if it acts on your code, say it. If it acts on your session, command it.**
+
+There is a third category that is neither. `Esc`, `!`, and `@` are keys and prefixes you type into the prompt box, not commands you invoke. They are also the three you will use most.
+
+## The belt
+
+Everything worth knowing, grouped by how often you will actually reach for it. The seven in the first group are the ones to memorize; the rest you can look up. Click any entry to go to the lesson that teaches it.
+
+<ChartEmbed id="command-belt-reference" />
+
+Two pairs are worth pulling apart now, because they are the ones beginners conflate.
+
+**`/context` and `/usage` sound alike and answer different questions.** `/context` asks how full *this session's window* is right now, which is what governs whether Claude starts forgetting (that is <LessonLink id="B2.2" />). `/usage` asks what you have *spent*, which governs your bill. A session can look nearly empty to `/context` while `/usage` shows plenty consumed, because every turn you already sent was paid for even after compaction discarded it.
+
+**`/clear` and `/compact` both give you room, and lose different things.** `/compact` summarizes the conversation and keeps working. `/clear` starts a fresh conversation with empty context, and the old one is still there under `/resume`. Which to reach for is a genuine decision with real trade-offs, and it gets its own lesson: <LessonLink id="B2.4" />.
+
+## Two habits worth more than the list
+
+**Type `/` and read the menu.** It is filterable as you type, and it shows what *your* install actually has, including commands from plugins and MCP servers that no written reference can predict. This is why `/help` needs no lesson.
+
+**Press `Esc` early.** New users watch Claude head down a wrong path and wait politely for it to finish. Interrupt. It keeps the work done so far and hands control back. Steering costs one keypress; letting a bad turn run to completion costs context you then have to compact away.
+
+## Try It
+
+**Environment:** the public repo you cloned in <LessonLink id="B2.1" />, or any scratch directory. Nothing here writes to your code.
+
+1. Start Claude and type `/` on its own. Scroll the menu. Notice how many entries you have never needed.
+2. Run `/context`. Note the percentage used.
+3. Run `!` followed by a shell command, for example `! git status`, and watch its output land in the session.
+4. Ask Claude a question about a file using `@` to name it exactly.
+5. Ask Claude to do something slow, like "read every file in this repo and summarize each one," then press `Esc` after a few seconds.
+6. Run `/context` again, then `/usage`. Confirm they report different things.
+
+**Success criteria:** you interrupted a turn without losing the session, you used `@` and `!` without asking Claude to do it for you, and you can state in one sentence how `/context` differs from `/usage`.
+
+## FAQ
+
+**Which commands do I actually need daily?** The seven marked in the grid: `/help`, `/context`, `/compact`, `/clear`, `/resume`, `/rewind`, `/model`. Realistically you will use `Esc`, `@`, and `!` even more, and those are not commands at all.
+
+**What is the difference between a slash command and just typing?** Typing sends a message to Claude, which then decides what to do. A slash command instructs the harness directly and never reaches Claude. Act on your code by asking; act on your session by commanding.
+
+**Do I have to memorize the rest?** No. Type `/` and the menu filters as you type. The grid above exists so you know what *exists*, not so you can recite it.
+
+**Why is `/init` not in the daily seven?** You run it roughly once per project, not once per day. Same for `/memory`. Both are covered in <LessonLink id="B3.1" />.
+
+**Where did `/context` come from? It is not in every command list.** It is a core command and the one that makes <LessonLink id="B2.2" /> actionable, so it belongs on any honest beginner belt.
+
+**Can I make my own commands?** Yes, and skills appear in the same `/` menu alongside built-ins. That is Intermediate material; for now, know that the menu is not a fixed list.
+
+## Where next
+
+You now know what exists and, more usefully, what you can safely ignore. The next lesson takes the one decision this list deliberately dodged and resolves it properly: <LessonLink id="B2.4" /> works out when to reach for `/clear`, when for `/compact`, when to start a new session, and when what you actually wanted was `/rewind`. After that, <LessonLink id="B2.5" /> covers `/resume` and the fact that closing your terminal loses nothing.

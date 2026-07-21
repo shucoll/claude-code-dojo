@@ -18,12 +18,19 @@ function heading(title: string): ComponentType {
   }
 }
 
-/** The advanced lesson body also exposes a `#chart-demo` anchor for scroll-restore tests. */
+/**
+ * The advanced lesson body exposes a `#chart-demo` anchor and a `data-lesson-link`
+ * anchor, so scroll-restore tests can target both a CSS anchor and the `#lref-N`
+ * ordinal a LessonLink records.
+ */
 function subagentsBody(): ComponentType {
   return function SubagentsBody() {
     return (
       <>
         <h1>Subagents</h1>
+        <a href="/learn/beginner/basics/what-is-cc" data-lesson-link data-testid="fixture-lref">
+          a cross link
+        </a>
         <div id="chart-demo">
           <button type="button">Beginner</button>
         </div>

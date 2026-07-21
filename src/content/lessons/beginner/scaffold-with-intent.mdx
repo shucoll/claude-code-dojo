@@ -1,0 +1,240 @@
+---
+id: "B5.1"
+slug: "scaffold-with-intent"
+title: "Scaffold with intent"
+type: "milestone"
+order: 1
+estimatedMinutes: 20
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-14"
+teaches: ["config-before-code", "project-scaffold"]
+references: ["B3.1", "B4.1"]
+docsSources: ["https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/best-practices"]
+---
+
+# Scaffold with intent
+
+Welcome to the project. Over six milestones you will build **Shelf**, a small local web app for tracking things you want to read or watch: add items, tag them, search them. It is deliberately small enough to finish and real enough to make you explore, plan, verify, and recover, which is every habit the level taught, now under load.
+
+**Pick your language before you start.** Shelf is built twice, once in JavaScript and once in Python, and this whole module follows the one you choose. Use the language switcher (top right) to select **JavaScript** or **Python**; your choice carries through all six milestones. Every prompt, file, and command below changes to match it.
+
+<WhenLang is="javascript">
+
+You will build Shelf as a **Node + Express** REST API backed by **SQLite**, with a plain static page for the UI. No framework on the front end, no build step, nothing to deploy.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+You will build Shelf as a **Flask** REST API backed by **SQLite**, with a plain static page for the UI. No framework on the front end, no build step, nothing to deploy.
+
+</WhenLang>
+
+## Goal for this stage
+
+Get the project set up the right way round: **write `CLAUDE.md` before any code exists**, then scaffold a booting server against it. When this milestone is done you will have a server that answers a health check, an empty storage layer, and a `CLAUDE.md` that visibly shaped the code Claude wrote.
+
+**Environment:** a brand-new empty directory (`mkdir shelf && cd shelf`). Nothing here can break anything you own, so work freely; you will turn it into a git repo once the scaffold exists.
+
+## Steps
+
+### 1. Write the conventions first, in `CLAUDE.md`
+
+Before Claude writes a line of code, you write the file that tells it how. This is the inversion that gives the milestone its name. You already met `CLAUDE.md` in <LessonLink id="B3.1" />; here you author one for a project that does not exist yet.
+
+A tempting shortcut is `/init`, which generates a starter `CLAUDE.md` for you. It will not help here, and knowing why matters: `/init` works by *reading your existing codebase* to detect its stack, commands, and patterns. An empty directory has nothing to read. When there is no code yet, intent has to be authored by hand. That is not a limitation to route around. It is the work: deciding the conventions yourself instead of letting them accrete.
+
+Create `CLAUDE.md` in the empty directory with the stack you are about to build, the commands that *will* exist, and the conventions you want honored from the first file:
+
+<WhenLang is="javascript">
+
+```markdown
+# Shelf
+
+A small local REST API for a personal reading/watch list: add, tag,
+and search items. No auth, no deployment. It runs on your machine.
+
+## Stack
+- Node + Express (HTTP server)
+- SQLite via better-sqlite3 (single-file storage, synchronous API)
+- Static front end in public/ (plain HTML/CSS/JS, no framework)
+
+## Commands
+- `npm start` runs the server on http://localhost:3000
+- `npm test` runs the test suite (node:test + supertest)
+
+## Conventions
+- One responsibility per file: routes in server.js, all DB access in db.js.
+- Every new endpoint ships with a test in tests/.
+- Return JSON with the right status code: 201 on create, 404 when missing.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```markdown
+# Shelf
+
+A small local REST API for a personal reading/watch list: add, tag,
+and search items. No auth, no deployment. It runs on your machine.
+
+## Stack
+- Flask (HTTP server)
+- SQLite via the sqlite3 standard library (single-file storage)
+- Static front end in public/ (plain HTML/CSS/JS, no framework)
+
+## Commands
+- `flask --app app run` runs the server on http://localhost:5000
+- `pytest` runs the test suite
+
+## Conventions
+- One responsibility per file: routes in app.py, all DB access in db.py.
+- Every new endpoint ships with a test in tests/.
+- Return JSON with the right status code: 201 on create, 404 when missing.
+```
+
+</WhenLang>
+
+Notice what is *not* in there: no file-by-file description, no explanation of what Express or Flask is, nothing Claude could infer by reading the code once it exists. `CLAUDE.md` earns its place by holding what Claude cannot guess, which is your decisions.
+
+### 2. Scaffold against the file you just wrote
+
+Now prompt Claude to build the skeleton. The prompt carries a clear goal and a finish line it can check, the shape from <LessonLink id="B4.1" />. The finish line here is "a health check that returns 200," which is the smallest thing that proves the server actually boots.
+
+<WhenLang is="javascript">
+
+```prompt
+Read CLAUDE.md. Scaffold the project it describes: an Express server in
+server.js with a GET /health route that returns {status: "ok"}, a db.js that
+opens a better-sqlite3 database at shelf.db, a public/index.html placeholder,
+package.json with the start and test scripts, and one test in tests/ that
+asserts GET /health returns 200. Then run the test.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Read CLAUDE.md. Scaffold the project it describes: a Flask app in app.py with
+a GET /health route that returns {"status": "ok"}, a db.py that opens a sqlite3
+database at shelf.db, a public/index.html placeholder, a requirements.txt, and
+one test in tests/ that asserts GET /health returns 200. Then run the test.
+```
+
+</WhenLang>
+
+Claude produces a tree that already obeys your conventions:
+
+<WhenLang is="javascript">
+
+```text
+shelf/
+├── CLAUDE.md
+├── package.json
+├── server.js          routes only
+├── db.js              all database access
+├── shelf.db
+├── public/
+│   └── index.html
+└── tests/
+    └── health.test.js
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```text
+shelf/
+├── CLAUDE.md
+├── requirements.txt
+├── app.py             routes only
+├── db.py              all database access
+├── shelf.db
+├── public/
+│   └── index.html
+└── tests/
+    └── test_health.py
+```
+
+</WhenLang>
+
+Read the health route it wrote. This is the payoff of writing `CLAUDE.md` first: you asked for nothing about JSON or status codes in the prompt, yet the route returns JSON because your conventions said to.
+
+<WhenLang is="javascript">
+
+```javascript
+// server.js
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' })
+})
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+# app.py
+@app.get("/health")
+def health():
+    return jsonify(status="ok")
+```
+
+</WhenLang>
+
+### 3. Boot it, then commit
+
+Verify the artifact yourself rather than trusting the scaffold. Start the server, hit the health check, and run the test.
+
+<WhenLang is="javascript">
+
+```bash
+npm start
+# in a second terminal:
+curl localhost:3000/health
+# {"status":"ok"}
+npm test
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+flask --app app run
+# in a second terminal:
+curl localhost:5000/health
+# {"status":"ok"}
+pytest
+```
+
+</WhenLang>
+
+Once the health check answers and the test passes, make it a repo:
+
+```prompt
+git init, then commit everything with a message describing the scaffold.
+```
+
+## The artifact
+
+At the end of this stage you have:
+
+- A `CLAUDE.md` you authored before any code, checked into git.
+- A server that boots and answers `GET /health` with `{"status": "ok"}`.
+- An empty storage module wired to a SQLite file, ready for real data next milestone.
+- A `public/` placeholder page.
+- One passing test, proving the "every endpoint ships with a test" rule was true from the first route.
+
+**Done looks like:** the server starts, the health check returns 200, the test suite is green, and there is one commit in the history.
+
+## Reasoning recap
+
+The lesson of this milestone is **config before code**. Instructions written after habits form are corrections; instructions written first are foundations. Because your conventions existed before the scaffold, the very first file Claude produced already followed them, and you got to *watch* that happen instead of cleaning it up afterward.
+
+This is why `/init` is the wrong reflex on an empty directory: it derives conventions from code that already exists, which is the opposite of what you want at the start of a project. When there is nothing to derive from, you lead with intent. Everything you build on top of this scaffold, the tagging feature, search, the refactor, inherits the standard you set here for free.
+
+Next milestone, <LessonLink id="B5.2" />: you add the first real feature, tagging, through a full plan-mode cycle, so the change is designed before it is written.

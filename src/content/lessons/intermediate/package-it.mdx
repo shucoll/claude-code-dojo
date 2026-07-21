@@ -1,0 +1,168 @@
+---
+id: "I8.7"
+slug: "package-it"
+title: "Package it"
+type: "milestone"
+order: 7
+estimatedMinutes: 25
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-07-20"
+teaches: ["environment-as-plugin", "reproducible-environment", "defend-the-choices"]
+prerequisites: ["I8.6"]
+references: ["I7.2"]
+docsSources: ["https://code.claude.com/docs/en/plugins", "https://code.claude.com/docs/en/plugins-reference"]
+---
+
+# Package it
+
+The environment works, and it lives in one repository's `.claude/`. A teammate who wants the same setup on a different project has nothing to install. This final milestone makes the environment portable: the reusable half becomes a versioned plugin that installs as a unit, and you prove it by loading it into a clean clone. Then you write down why every mechanism choice was the right one, which is the reflection that closes the level.
+
+## Goal for this stage
+
+Convert the reusable half of PulseBoard's environment, the skills, agents, hooks, and MCP config, into a versioned `pulseboard-dev` plugin with its paths rewritten so it works from anywhere. Validate it, load it into a fresh clone to prove reproducibility, and write an `ENVIRONMENT.md` that defends each choice against the level's five resolvers.
+
+**Environment:** the PulseBoard repository, complete through <LessonLink id="I8.6" />, with `claude plugin` available.
+
+## Steps
+
+### 1. Decide what packages and what stays
+
+Not everything in `.claude/` belongs in a plugin, and sorting it is the first real step. The test from <LessonLink id="I7.2" /> is "would I want this in a second project?"
+
+| Component | Packages? | Why |
+|---|---|---|
+| `release-notes`, `standup-summary` skills | yes | reusable procedures, and plugin components |
+| `code-reviewer`, `test-writer` agents | yes | reusable delegates |
+| the three quality-gate hooks | yes | reusable automation |
+| the GitHub `.mcp.json` | yes | a plugin can ship an MCP config |
+| `CLAUDE.md` and `.claude/rules/` | no | project instructions, not a plugin component |
+| the permission policy | no | belongs in the settings scopes, not a plugin |
+| the personal `Notification` hook | no | yours, and it lives in your local settings |
+
+The line falls between the **mechanisms**, which are reusable, and the **project's own policy and conventions**, which are not. The plugin carries the review board and the release-notes skill anywhere. `CLAUDE.md`, the rules, and the permission deny stay with PulseBoard, because they describe this project rather than a way of working.
+
+### 2. Scaffold the plugin and move the components
+
+Build the plugin next to the repository, not inside `.claude/`.
+
+```bash
+mkdir -p pulseboard-dev/.claude-plugin
+```
+
+Write `pulseboard-dev/.claude-plugin/plugin.json`, with a `version` so teammates get updates when you bump it rather than on every commit:
+
+```json
+{
+  "name": "pulseboard-dev",
+  "description": "PulseBoard's dev environment: release-notes and standup skills, the review board, the quality-gate hooks, and the GitHub MCP server.",
+  "version": "1.0.0",
+  "author": { "name": "Your Name" }
+}
+```
+
+Then move each component to its home at the plugin root. Only `plugin.json` sits inside `.claude-plugin/`; everything else sits above it.
+
+```bash
+cp -r .claude/skills pulseboard-dev/
+cp -r .claude/agents pulseboard-dev/
+cp .mcp.json pulseboard-dev/
+mkdir -p pulseboard-dev/hooks pulseboard-dev/scripts
+cp .claude/hooks/*.sh pulseboard-dev/scripts/
+```
+
+Create `pulseboard-dev/hooks/hooks.json` and paste in the `hooks` object from `.claude/settings.json`, dropping the `permissions` block, which is not coming along. The result is a tree that carries its own everything:
+
+```text
+pulseboard-dev/
+├── .claude-plugin/
+│   └── plugin.json
+├── skills/
+│   ├── release-notes/{SKILL.md, template.md}
+│   └── standup-summary/SKILL.md
+├── agents/{code-reviewer.md, test-writer.md}
+├── hooks/hooks.json
+├── scripts/{protect-files.sh, run-tests.sh}
+└── .mcp.json
+```
+
+### 3. Fix the addressing
+
+This is the step that fails silently if you skip it. The hook commands in `hooks.json` still point at `${CLAUDE_PROJECT_DIR}/.claude/hooks/...`, a path that will not exist once the plugin is installed somewhere else. Rewrite the two script-based hooks to `${CLAUDE_PLUGIN_ROOT}`, which resolves to wherever the plugin was installed:
+
+```json
+{
+  "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/protect-files.sh"
+}
+```
+
+```json
+{
+  "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/run-tests.sh"
+}
+```
+
+The distinction from <LessonLink id="I7.2" /> is what makes the plugin portable. `${CLAUDE_PLUGIN_ROOT}` locates a script *you shipped*; `${CLAUDE_PROJECT_DIR}` points at the *user's project*. The scripts themselves still act on the user's files, checking the path in the hook input and running the suite in their working directory, so only the reference to the script location changes. The inline auto-format hook needs no rewrite, because it ships no script.
+
+Getting these backwards is the conversion bug that fires the hook, fails to find the command, and shows you nothing.
+
+### 4. Validate, then prove it in a clean clone
+
+Check the structure before trusting it:
+
+```bash
+claude plugin validate ./pulseboard-dev --strict
+```
+
+`--strict` turns a misspelled field from a warning into a failure. Fix anything it reports.
+
+Now the reproducibility test. Clone PulseBoard into a fresh directory, remove the packaged components from that clone's `.claude/` so nothing shadows the plugin (agents override same-named plugin agents), and load the plugin from your working copy:
+
+```bash
+claude --plugin-dir ../pulseboard-dev
+```
+
+Confirm all four kinds of component arrived. The skills answer under their namespaced names, `/pulseboard-dev:release-notes` and `/pulseboard-dev:standup-summary`. The agents appear in `/context` under Custom Agents. The GitHub server connects under `/mcp`. And the hooks fire: trigger an edit and watch it format, try to edit a shipped migration and watch it refuse. Run `/reload-plugins` after any fix rather than restarting.
+
+### 5. Write ENVIRONMENT.md
+
+The last artifact is a document, and writing it is how you find out whether you can defend the environment or only operate it. Create `ENVIRONMENT.md` in the repository, one row per mechanism choice, each checked against the resolver that owns the decision:
+
+```markdown
+# PulseBoard environment
+
+| Choice | Mechanism | Why this and not the alternatives |
+|---|---|---|
+| Stack, commands, conventions | CLAUDE.md + rules/ | ... (see I1.4) |
+| Never read .env; freeze migrations | permission deny + a hook | ... (see I4.5) |
+| release-notes, standup | skills | ... (see I3.4) |
+| format / protect / test-gate | hooks | ... (see I4.5) |
+| GitHub access | MCP server | ... (see I5.4) |
+| code review, test authoring | subagents | ... (see I6.4) |
+```
+
+Fill each "why" from the resolver named beside it: <LessonLink id="I1.4" /> for where configuration lives, <LessonLink id="I3.4" /> for skill versus `CLAUDE.md` versus command, <LessonLink id="I4.5" /> for hook versus instruction, <LessonLink id="I5.4" /> for MCP versus the `gh` CLI, <LessonLink id="I6.4" /> for subagent versus the main thread. A choice you cannot justify against its resolver is one to revisit now, while the whole system is in front of you.
+
+### 6. Commit and push
+
+```prompt
+Commit the pulseboard-dev plugin and ENVIRONMENT.md with a message describing
+the packaged environment, then push.
+```
+
+## The artifact
+
+At the end of this stage, and the level, you have:
+
+- A working GitHub dashboard, built and shipped through a configured environment.
+- A versioned `pulseboard-dev` plugin bundling the skills, agents, hooks, and MCP config, its script paths rewritten to `${CLAUDE_PLUGIN_ROOT}`, validated and proven to load into a clean clone.
+- An `ENVIRONMENT.md` justifying every mechanism choice against the level's five resolvers.
+
+**Done looks like:** `claude plugin validate --strict` passes, a fresh clone with the plugin loaded has the skills, agents, hooks, and MCP server all working, and every row of `ENVIRONMENT.md` names both the mechanism and the reason it beat the alternatives.
+
+## Reasoning recap
+
+The level opened by claiming the environment is a deliverable. This milestone is the proof. What began as scattered convenience in one repository is now a unit with a version, a validation command, and a reproducibility test it passes, which is the same standard you would hold any shipped artifact to.
+
+A plugin is not the whole environment; it is the reusable half. Sorting the two, the mechanisms that travel from the project's own policy and conventions that stay home, is what separates packaging an environment from copying a directory and hoping. A way of working is portable; a specific project is not.
+
+That completes the Intermediate level. You can configure Claude Code's full substrate, reach for the mechanism a requirement actually calls for, and ship the result as something a teammate could install. The Advanced level takes this to production: parallel and autonomous work, CI and automation, governance and cost at organizational scale, and building on the Agent SDK. It opens by mirroring what you hold now, the system map in <LessonLink id="I7.3" /> and the reproducible environment you just shipped.

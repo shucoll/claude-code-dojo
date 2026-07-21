@@ -1,0 +1,133 @@
+---
+id: "B1.4"
+slug: "install-and-authenticate"
+title: "Install and authenticate"
+type: "core"
+order: 4
+estimatedMinutes: 12
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-07-06"
+prerequisites: ["B1.2"]
+teaches: ["installation", "authentication", "updates"]
+references: ["B1.3"]
+docsSources: ["https://code.claude.com/docs/en/setup", "https://code.claude.com/docs/en/quickstart", "https://code.claude.com/docs/en/troubleshoot-install", "https://code.claude.com/docs/en/desktop-quickstart", "https://www.anthropic.com/supported-countries"]
+---
+
+# Install and authenticate
+
+> **Install steps change often.** This lesson gives you the shortest reliable path from nothing to a working `claude` command, but the [official setup guide](https://code.claude.com/docs/en/setup) and [install troubleshooting](https://code.claude.com/docs/en/troubleshoot-install) are the source of truth. If a command here ever disagrees with the docs, trust the docs.
+
+## Before you start
+
+You need three things:
+
+- **A supported system.** macOS 13+, Windows 10 (1809+), or Linux (Ubuntu 20.04+, Debian 10+, Alpine 3.19+), with 4 GB or more of RAM, an x64 or ARM64 processor, and an internet connection.
+- **A paid plan.** Claude Code requires a Pro, Max, Team, Enterprise, or Anthropic Console account. The free Claude.ai plan does not include it.
+- **A terminal you are comfortable opening.** If you would rather skip the terminal entirely, the [Desktop app](https://code.claude.com/docs/en/desktop-quickstart) installs Claude Code behind a graphical interface, and everything from the <LessonLink id="B1.2">surface tour</LessonLink> still applies.
+
+## Install
+
+Find your system, run the one command, and you are done. The **native installer** is the recommended path everywhere; it needs no Node.js and updates itself.
+
+### macOS, Linux, or WSL
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash
+```
+
+On macOS you can also install through Homebrew if you prefer: `brew install --cask claude-code`.
+
+### Windows
+
+Run the command that matches your shell. In **PowerShell**:
+
+```powershell
+irm https://claude.ai/install.ps1 | iex
+```
+
+In **CMD**:
+
+```batch
+curl -fsSL https://claude.ai/install.cmd -o install.cmd && install.cmd && del install.cmd
+```
+
+Not sure which shell you are in? Your prompt starts with `PS C:\` in PowerShell and `C:\` (no `PS`) in CMD. Git for Windows is optional; installing it lets Claude use the Bash tool instead of PowerShell for shell commands. If your projects live in WSL, open your WSL terminal and use the macOS/Linux command above instead.
+
+## Verify it worked
+
+```bash
+claude --version
+```
+
+A version number means you are set. For a fuller health check (PATH, updates, authentication), run:
+
+```bash
+claude doctor
+```
+
+If `claude --version` reports "command not found," skip to [Pitfalls](#pitfalls-when-install-goes-sideways) below; it is almost always a PATH fix.
+
+## Log in
+
+Start Claude in any folder and follow the browser prompt:
+
+```bash
+claude
+```
+
+The first run opens your browser to authenticate. Sign in with your paid Claude account. On a remote or SSH machine where the browser cannot redirect back, press `c` to copy the login URL, open it on your own computer, and paste the code back into the terminal.
+
+## Staying updated
+
+The native install **updates itself** in the background, and the new version takes effect the next time you launch. Homebrew and WinGet installs are manual: run `brew upgrade claude-code` or `winget upgrade Anthropic.ClaudeCode` periodically. To pull the newest version immediately on any install, run `claude update`.
+
+## Pitfalls (when install goes sideways)
+
+Nearly every failed install is one of these. The full catalog, with an error-to-fix lookup table, lives in the [install troubleshooting guide](https://code.claude.com/docs/en/troubleshoot-install).
+
+- **`command not found: claude` (any platform).** The install worked, but its folder is not on your PATH. The installer puts `claude` at `~/.local/bin/claude` on macOS/Linux or `%USERPROFILE%\.local\bin\claude.exe` on Windows. Add that directory to your PATH and open a new terminal. On macOS/Linux with Zsh:
+
+  ```bash
+  echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+  ```
+
+- **Wrong command for your shell (Windows).** `'irm' is not recognized` means you are in CMD, not PowerShell. `The token '&&' is not valid` means the opposite. `A parameter cannot be found that matches parameter name 'fsSL'` means you ran the macOS/Linux `curl` command inside PowerShell. The fix in every case: use the command that matches your shell from the Install section above.
+
+- **`syntax error near unexpected token '<'`, or a `403` (macOS/Linux).** The install URL returned a web page instead of the script, usually a regional block or a corporate proxy. If you are in a [supported country](https://www.anthropic.com/supported-countries), try an alternative installer (`brew install --cask claude-code` on macOS, `winget install Anthropic.ClaudeCode` on Windows), or set `HTTPS_PROXY` to your proxy and retry.
+
+- **Login will not complete over SSH or WSL.** The browser opens on the wrong machine and cannot redirect back. Press `c` to copy the URL, open it on your local machine, and paste the code back into the terminal.
+
+## Try It
+
+This is the module's one hands-on exercise, and it is what everything so far was building toward: reach a working `claude`.
+
+1. Install using the command for your system above.
+2. Verify with `claude --version`.
+3. Make an empty folder and start Claude inside it:
+
+   ```bash
+   mkdir claude-demo && cd claude-demo
+   claude
+   ```
+
+4. Approve the trust dialog (you met it in <LessonLink id="B1.3" />), then ask one thing, like "what can you help me do in an empty folder?"
+
+**Success criteria:** `claude --version` prints a version, the browser login completes, the trust dialog appears and you accept it, and Claude answers your question inside the session. That is a full agentic session on your own machine.
+
+## FAQ
+
+**Which install method should I pick?** The native installer (the `curl` or `irm` command for your OS). It auto-updates and needs no Node.js. Reach for Homebrew or WinGet only if you already manage software that way, and remember they update manually.
+
+**What are the system requirements?** macOS 13+, Windows 10 (1809+), or Linux (Ubuntu 20.04+, Debian 10+, Alpine 3.19+); 4 GB or more of RAM; an x64 or ARM64 CPU; and an internet connection.
+
+**How do I log in?** Run `claude` and complete the browser sign-in with a paid account. The free Claude.ai plan does not include Claude Code access.
+
+**How do I update?** Native installs update themselves in the background. Homebrew and WinGet update manually, or run `claude update` on any install to grab the latest right now.
+
+**How do I know it's working?** `claude --version` prints a version, and `claude doctor` runs a full health check of your PATH, updates, and login.
+
+**What do I do when install fails?** Match your exact error message in the [install troubleshooting guide](https://code.claude.com/docs/en/troubleshoot-install); its lookup table maps each message to a fix. The pitfalls above cover the most common cases.
+
+## Where next
+
+That is the setup. With Claude installed and authenticated, you have already met the trust dialog from <LessonLink id="B1.3" />, and you are one prompt away from the agentic loop you saw in <LessonLink id="B1.1" />. From here the course shifts from "what it is" to "using it well": your first real working session, how the context window works, and the everyday command belt that makes Claude Code quick to drive.

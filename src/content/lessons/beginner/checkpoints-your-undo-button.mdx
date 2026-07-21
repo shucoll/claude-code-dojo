@@ -1,0 +1,161 @@
+---
+id: "B3.4"
+slug: "checkpoints-your-undo-button"
+title: "Checkpoints: your undo button"
+type: "core"
+order: 4
+estimatedMinutes: 11
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-09"
+prerequisites: ["B2.3"]
+teaches: ["checkpoints", "rewind", "undo"]
+references: ["B2.3", "B2.4"]
+docsSources: ["https://code.claude.com/docs/en/checkpointing"]
+---
+
+# Checkpoints: your undo button
+
+## The problem
+
+Claude has been working for ten minutes. It refactored four files, and somewhere in there it made things worse. You are not sure exactly where it went wrong, only that three edits ago everything was fine.
+
+Your options feel bad. Ask Claude to undo it, and you are asking the thing that made the mess to remember precisely what it did. Reach for `git`, except you did not commit before starting, because you never do. Fix it by hand, and you are now doing the work you delegated.
+
+There is a fourth option you have already brushed against. In <LessonLink id="B2.3" /> it was one line on a reference grid. In <LessonLink id="B2.4" /> it was the reset that is not a reset. Here it is properly.
+
+## The concept
+
+**Before Claude edits any file, it snapshots that file.** Automatically, every time, with no ceremony from you. Those snapshots are checkpoints, and `/rewind` walks you back to any of them.
+
+The mental model that keeps you out of trouble:
+
+> **Checkpoints are seatbelts. Git is the vehicle.**
+
+A seatbelt is automatic, always on, and saves you in the specific accident it was designed for. It is not transport, it is not a history of where you have been, and you would not plan a journey around it. Checkpoints are session-level undo. Git is permanent, shared, deliberate history. **Checkpoints do not replace git**, and the moment you start treating them as if they do is the moment you lose work.
+
+## How it works
+
+### What gets checkpointed
+
+Two things, and knowing which is which explains everything else.
+
+**Your code**, snapshotted before each of Claude's file edits. Only edits made through Claude's file-editing tools.
+
+**Your conversation**, at every prompt you send. Every user prompt creates a new checkpoint.
+
+Checkpoints persist across sessions, so you can close your terminal, resume tomorrow, and still rewind to this morning. They are cleaned up along with the session after 30 days.
+
+### How to rewind
+
+```prompt
+/rewind
+```
+
+Or press `Esc` twice, which is faster and is the way you will actually do it.
+
+One catch worth knowing before it confuses you: **double-`Esc` only opens the rewind menu when the prompt input is empty.** If you have typed something, the first double-`Esc` clears your draft instead (it is saved to history, so `Up` brings it back). This is the same `Esc Esc` that <LessonLink id="B2.1" /> mentioned and set aside.
+
+The menu lists every prompt you sent this session. Pick the point you want to return to, then choose what to do with it. There are three restores and two summarizes, and confusing the two families is the most common mistake here.
+
+**The restores change state:**
+
+| Choice | Code | Conversation |
+|---|---|---|
+| Restore code and conversation | Reverted | Reverted |
+| Restore conversation | Untouched | Reverted |
+| Restore code | Reverted | Untouched |
+
+"Restore code" is the one you want most often: put the files back, keep the conversation, so Claude still knows what you were trying to do and why its last attempt was wrong.
+
+**The summarizes change nothing on disk.** They compress part of the conversation to free context, which is why they belong to <LessonLink id="B2.2" />'s world rather than this one:
+
+- **Summarize from here** replaces the selected message and everything after it. Your early setup survives in full.
+- **Summarize up to here** replaces everything before it. Your recent work survives in full.
+
+Either way the original messages stay in the session transcript, so Claude can still look them up if it needs the detail. This is `/compact` with a scalpel, as <LessonLink id="B2.4" /> put it.
+
+After restoring the conversation, or summarizing from here, the prompt from the message you selected is put back in your input box, ready to re-send or edit. That is the loop: rewind, rewrite the prompt that went wrong, try again.
+
+### One rescue worth remembering
+
+If you ran `/clear` earlier in the same Claude Code process and immediately regretted it, open the rewind menu. At the top is an extra entry offering the previous session. This is the safety net under `/clear` that <LessonLink id="B2.4" /> promised.
+
+## Walkthrough
+
+Claude has just refactored a function and broken it.
+
+**1. Do not ask Claude to fix it.** It will try, and now you have two changes to reason about instead of one.
+
+**2. Press `Esc` `Esc`** on an empty prompt. The menu lists your prompts.
+
+**3. Select the prompt just before the bad change.** The one where things were still fine.
+
+**4. Choose "Restore code."** Files go back. The conversation stays, so Claude remembers the whole attempt, including that it failed.
+
+**5. Re-prompt, better.** Your original wording is sitting in the input box if you restored the conversation; otherwise just type it again with what you learned:
+
+```prompt
+same refactor, but keep the early return. last time you inlined it and broke the null case.
+```
+
+That is the entire technique. It turns a bad edit from a setback into information.
+
+There is a second use, which changes how you work rather than how you recover. Because undo is cheap and automatic, **you can tell Claude to try the risky thing.** Speculative refactor, unfamiliar library, approach you are not sure about. If it fails, rewind. Careful planning is not always cheaper than a fast experiment you can cleanly discard.
+
+## When not to use it
+
+The when-not is what this lesson turns on, and it is a single rule.
+
+**`/rewind` is not a replacement for git.** Use it for quick, session-level recovery, and keep using version control for everything git is for: commits, branches, shared history, anything you would be upset to lose.
+
+Concretely, commit before you start a risky change. Then you have two undo levels: `/rewind` for "that edit was wrong," `git checkout` for "that whole hour was wrong." Checkpoints expire after 30 days, live only on this machine, and cover only what Claude edited. Git does not, is not, and does not.
+
+The cost of rewinding is near zero, which is why the temptation is to lean on it too hard.
+
+## Pitfalls: what rewind cannot undo
+
+The limitations are not edge cases. They are the difference between a seatbelt and a vehicle, and each one is a real way people lose work.
+
+- **Bash commands are not tracked.** If Claude ran `rm file.txt`, `mv old.txt new.txt`, or a script that rewrote things, rewind will not bring any of it back. Only edits made through Claude's file-editing tools are snapshotted. This is the big one, because a destructive command feels exactly like a destructive edit while you watch it happen.
+- **Anything outside your machine is gone for good.** A pushed commit, a deployed change, an API call, a database migration, an email. Rewind restores local files. It cannot un-send. This is why Claude asks before commands with external side effects.
+- **Your own edits are not tracked.** Checkpoints cover files Claude edited in this session. If you changed a file by hand in your editor, rewind does not know about it. Nor does it know about a second Claude session editing the same repo, unless it happens to touch the same files.
+- **Restoring code does not restore your understanding.** After "restore code and conversation" Claude has forgotten the failed attempt entirely, so it may cheerfully make the same mistake. Usually you want "restore code" alone, keeping the conversation, so the failure stays in context as something to avoid.
+- **Confusing summarize with restore.** Summarize is a context operation and touches no files. Restore is a file operation. Choosing "Summarize from here" when you wanted your code back will leave the bad edit exactly where it is.
+- **Waiting too long.** The 30-day cleanup takes the session and its checkpoints together. Not a daily concern; a real one for "I'll fix that branch next month."
+
+## Try It
+
+**Environment:** the public repo you cloned in <LessonLink id="B2.1" />. You are about to deliberately break it, which is fine, because it is a throwaway clone.
+
+1. Start Claude and ask it to make a real edit to a source file, for example "add input validation to the main exported function." Accept it.
+2. Now break something on purpose: *"actually, delete the validation and also remove the function's error handling."* Accept that too. Your code is now worse.
+3. Press `Esc` `Esc` on an empty prompt. Read the list of your prompts.
+4. Select the prompt from step 2, choose **Restore code**, and confirm with `! git diff` that the damage is gone and the step-1 validation is still there.
+5. Ask Claude what you just did. It should still remember, because the conversation was not restored.
+6. Now the limitation. Ask Claude to run a shell command that deletes a file, for example *"run `rm README.md`"*, and approve it. Rewind again and try to get it back.
+
+**Success criteria:** step 4 restores your code while Claude still remembers the attempt. Step 6 does **not** restore the file, and you can explain why: it was a bash command, not a file edit. Recover it with `git checkout README.md`, which is the lesson.
+
+## FAQ
+
+**What is automatically checkpointed?** Your files, snapshotted before each edit Claude makes through its file-editing tools, and your conversation, at every prompt you send. No setup required.
+
+**How do I rewind?** Run `/rewind`, or press `Esc` twice on an empty prompt. Pick a prompt from the list, then choose to restore code, conversation, or both.
+
+**What does rewind not restore?** Anything Claude changed with a bash command (`rm`, `mv`, scripts), anything with an effect outside your machine (pushes, deploys, API calls), files you edited yourself, and changes from other concurrent sessions.
+
+**Is this a replacement for git?** No. Checkpoints are local undo: session-scoped, machine-local, expiring after 30 days, covering only Claude's file edits. Git is permanent, shareable history. Commit before risky work and you have both.
+
+**What is the difference between restore and summarize?** Restore changes state, reverting code or conversation. Summarize only compresses conversation to free context and touches no files. They share a menu and do unrelated jobs.
+
+**Should I restore the conversation too?** Usually not. Keeping the conversation means Claude remembers the failed attempt and will not repeat it. Restore both only when the conversation itself is what went wrong.
+
+**Can I rewind after closing my terminal?** Yes. Checkpoints persist across sessions, so resume the session and the menu is still there.
+
+**I ran `/clear` by mistake. Anything I can do?** Open the rewind menu. If it is the same Claude Code process, the previous session is offered at the top.
+
+## Where next
+
+You have the safety net, and you know exactly what it does not catch. That completes the picture: <LessonLink id="B3.1" /> and <LessonLink id="B3.2" /> tell Claude what it should know, <LessonLink id="B3.3" /> constrains what it can do, and checkpoints recover from what it did anyway.
+
+One question remains open in the module, and it is the one that separates deliberate users from lucky ones. Plan mode, asking Claude for a plan, and simply prompting all produce something that looks like a plan, at very different costs. <LessonLink id="B3.5" /> works out which one this task actually deserves, and it is honest about the cases where the ceremony is not worth it.

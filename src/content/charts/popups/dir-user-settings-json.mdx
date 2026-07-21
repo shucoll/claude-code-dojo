@@ -1,0 +1,5 @@
+Your defaults across every project. Same shape as a project's `settings.json`: permissions, hooks, env, plugins.
+
+Use it for what should follow you everywhere, like a theme or a rule you always want in force.
+
+It is the weakest of the three scopes you control: any project or local settings file overrides it. Permission rules are the exception worth remembering. They merge across scopes rather than override, so a `deny` written here still blocks, even against a project-level `allow`.

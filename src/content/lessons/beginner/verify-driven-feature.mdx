@@ -1,0 +1,214 @@
+---
+id: "B5.4"
+slug: "verify-driven-feature"
+title: "Verify-driven feature"
+type: "milestone"
+order: 4
+estimatedMinutes: 20
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-14"
+prerequisites: ["B5.3"]
+teaches: ["acceptance-criteria", "verify-driven-prompting"]
+references: ["B4.1", "B4.2"]
+docsSources: ["https://code.claude.com/docs/en/best-practices"]
+---
+
+# Verify-driven feature
+
+Shelf can filter by tag. The last feature is **search**: find an item by its title. But the real subject of this milestone is not search, it is *how you ask for it*. You are not going to say "add search." You are going to say "add search that passes these exact checks, and prove it." That difference is the highest-leverage upgrade to your prompting in the whole level.
+
+## Goal for this stage
+
+Build title search, `GET /items?q=<text>`, where the acceptance criteria live in the prompt and Claude has to demonstrate them with tests before the task counts as done. The criteria:
+
+- Searching `dune` finds `Dune` (**case-insensitive**).
+- Searching `mat` finds `The Matrix` (**partial match**).
+- Searching `zzzzz` returns `[]` (**empty array, not an error, not null**).
+
+The artifact is a search endpoint that passes its own acceptance tests. The transferable skill is a prompt shape you will reuse for every feature you ever build.
+
+**Environment:** your Shelf repo, restored to working order at the end of <LessonLink id="B5.3" />.
+
+## Steps
+
+### 1. Decide what "correct" means before you prompt
+
+This is the habit from <LessonLink id="B4.1" />: name the finish line. Here it is unusually concrete, three cases you can check. Deciding them *before* writing the prompt is what separates "produces plausible code" from "produces code that demonstrably works." The plausible-looking version is the trap the best practices call the trust-then-verify gap: it returns something for every query and looks fine until a real search misses.
+
+Notice the criteria are chosen to be adversarial on purpose. "Case-insensitive" is only proven by searching lowercase `dune` for a capitalized `Dune`. "Empty on miss" is only proven by a query that matches nothing. Weak criteria prove nothing.
+
+### 2. Put the criteria in the prompt, and demand proof
+
+Bake the acceptance cases straight into the prompt, and require Claude to run tests and show you the output:
+
+<WhenLang is="javascript">
+
+```prompt
+Add title search to Shelf: GET /items?q=<text> returns items whose title
+contains the text. It must satisfy these cases:
+- searching "dune" finds "Dune" (case-insensitive)
+- searching "mat" finds "The Matrix" (partial match)
+- searching "zzzzz" returns [] (empty array, not an error)
+Write tests in tests/ for all three cases, implement it, run the tests, and
+show me the output. It isn't done until they pass.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Add title search to Shelf: GET /items?q=<text> returns items whose title
+contains the text. It must satisfy these cases:
+- searching "dune" finds "Dune" (case-insensitive)
+- searching "mat" finds "The Matrix" (partial match)
+- searching "zzzzz" returns [] (empty array, not an error)
+Write tests in tests/ for all three cases, implement it, run the tests, and
+show me the output. It isn't done until they pass.
+```
+
+</WhenLang>
+
+That single change does the work. The check now lives *inside* the prompt, so the loop closes on its own: Claude writes the code, runs the tests, reads the result, and keeps going until they pass. Without it, you are the verification loop, catching each mistake by eye.
+
+### 3. Read the tests before the code
+
+When Claude reports success, read the **test file first**, before the implementation. The tests are your acceptance criteria turned into something executable, and a green checkmark only means something if the tests assert what you actually asked for.
+
+<WhenLang is="javascript">
+
+```javascript
+// tests/search.test.js
+test('search matches title case-insensitively', async () => {
+  await request(app).post('/items').send({ title: 'Dune', tag: 'scifi' })
+  const res = await request(app).get('/items?q=dune')   // lowercase query
+  assert.ok(res.body.some((item) => item.title === 'Dune'))
+})
+
+test('search returns an empty array when nothing matches', async () => {
+  const res = await request(app).get('/items?q=zzzzz')
+  assert.equal(res.status, 200)
+  assert.deepEqual(res.body, [])
+})
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+# tests/test_search.py
+def test_search_is_case_insensitive(client):
+    client.post("/items", json={"title": "Dune", "tag": "scifi"})
+    res = client.get("/items?q=dune")   # lowercase query
+    assert any(item["title"] == "Dune" for item in res.get_json())
+
+
+def test_search_returns_empty_when_no_match(client):
+    res = client.get("/items?q=zzzzz")
+    assert res.status_code == 200
+    assert res.get_json() == []
+```
+
+</WhenLang>
+
+Check the detail that carries the whole feature: the case-insensitive test searches lowercase `dune` for a capitalized `Dune`. A lazier test that searched `Dune` for `Dune` would pass while proving nothing. This is the one thing to verify by hand, that the test encodes your real criterion, not a weaker one that happens to be green.
+
+### 4. See the proof, then the implementation
+
+Claude runs the suite and shows the output:
+
+<WhenLang is="javascript">
+
+```text
+✔ search matches title case-insensitively
+✔ search matches on a partial title
+✔ search returns an empty array when nothing matches
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```text
+tests/test_search.py::test_search_is_case_insensitive PASSED
+tests/test_search.py::test_search_matches_partial_title PASSED
+tests/test_search.py::test_search_returns_empty_when_no_match PASSED
+```
+
+</WhenLang>
+
+Only now is the implementation worth reading, and it is small, because the tests did the hard part of pinning down the behavior:
+
+<WhenLang is="javascript">
+
+```javascript
+// db.js
+export function searchItems(query) {
+  return db.prepare('SELECT * FROM items WHERE title LIKE ? ORDER BY id').all(`%${query}%`)
+}
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+# db.py
+def search_items(query):
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM items WHERE title LIKE ? ORDER BY id", (f"%{query}%",)
+        ).fetchall()
+        return [dict(row) for row in rows]
+```
+
+</WhenLang>
+
+The case-insensitivity you demanded comes free from SQLite's `LIKE`, which the test confirms rather than assumes.
+
+### 5. Verify once by hand, then commit
+
+Trust the tests, but land the plane yourself with a single manual check:
+
+<WhenLang is="javascript">
+
+```bash
+curl -s "localhost:3000/items?q=dune"
+# [{"id":1,"title":"Dune","tag":"scifi"}]
+curl -s "localhost:3000/items?q=zzzzz"
+# []
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+curl -s "localhost:5000/items?q=dune"
+# [{"id":1,"tag":"scifi","title":"Dune"}]
+curl -s "localhost:5000/items?q=zzzzz"
+# []
+```
+
+</WhenLang>
+
+Commit the feature and its tests together as one change.
+
+## The artifact
+
+Shelf now has search, and it is proven, not assumed:
+
+- Case-insensitive title match.
+- Partial-title match.
+- An empty array, never an error, when nothing matches.
+
+**Done looks like:** the three search tests pass, a manual `curl` returns what the comments show, and the feature plus its tests are one commit.
+
+## Reasoning recap
+
+A verification target is the single highest-leverage change you can make to how you prompt. Without one, "looks done" is the only signal available, and *you* become the verification loop, noticing every mistake by eye. Put the acceptance criteria in the prompt and demand proof, and the loop closes itself: Claude writes, runs, and iterates until the checks pass. This is the Verify step from <LessonLink id="B4.2" />, moved to the *start* of the task instead of tacked on at the end.
+
+The subtle skill underneath it is reading the test, not just the checkmark. A passing test that does not encode your real criterion, one that searches `Dune` to "prove" case-insensitivity, is a green light on a broken feature. The criterion belongs in the prompt, the proof belongs in the test, and your job is to confirm the test actually matches the criterion. Do that, and a green suite means what it says.
+
+Next milestone, <LessonLink id="B5.5" />: the feature work is nearly done, so you take on a longer job, rounding out edit and delete, that pushes the context window. You will practice keeping a long session healthy under pressure.

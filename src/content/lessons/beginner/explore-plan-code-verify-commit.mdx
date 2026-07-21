@@ -1,0 +1,149 @@
+---
+id: "B4.2"
+slug: "explore-plan-code-verify-commit"
+title: "Explore, Plan, Code, Verify, Commit"
+type: "workflow"
+order: 2
+estimatedMinutes: 14
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-10"
+prerequisites: ["B3.3", "B4.1"]
+teaches: ["workflow-loop", "explore-plan-code-verify-commit"]
+references: ["B2.4", "B3.1", "B3.4", "B3.5"]
+docsSources: ["https://code.claude.com/docs/en/best-practices", "https://code.claude.com/docs/en/common-workflows"]
+interactive:
+  - kind: "diagram"
+    spec: "beginner-workflow-map"
+  - kind: "diagram"
+    spec: "agentic-loop-diagram"
+---
+
+# Explore, Plan, Code, Verify, Commit
+
+## The loop you already own
+
+Every lesson in this level was a piece of one thing. Plan mode, checkpoints, the verifiable prompt, `CLAUDE.md`, the resets: separately they are features. Assembled, they are a single loop you can run on real code without holding your breath.
+
+This is that assembly. There is almost nothing new to learn here, which is intentional. You are going to take a public repository you have never opened, and make a real change to it, using only moves you already have.
+
+It helps to see the two loops that are running. Inside every turn, Claude runs its own loop, the one from <LessonLink id="B1.1" />:
+
+<ChartEmbed id="agentic-loop-diagram" />
+
+That is Claude's inner loop, and it is automatic. Your job is the *outer* loop that wraps it: deciding what to explore, what to plan, when to let it code, how to verify, and when to commit. Five stages, and a branch for when verification fails.
+
+<ChartEmbed id="beginner-workflow-map" />
+
+Every stage on that map links back to the lesson that taught it, so from here on it doubles as your table of contents for the whole level. Let us walk it once, end to end.
+
+## The five stages
+
+Read this as the shape; the walkthrough below runs it for real.
+
+1. **Explore** — understand before you change. Ask the codebase questions in **plan mode** (<LessonLink id="B3.3" />), so Claude reads and explains but cannot touch your source.
+2. **Plan** — get a plan you can read and correct while mistakes are still cheap sentences. How much plan the task deserves is the judgment call from <LessonLink id="B3.5" />.
+3. **Code** — approve the plan, let Claude implement, and read each diff before you accept it, as in <LessonLink id="B2.1" />.
+4. **Verify** — run the check Claude can read for itself: tests, a build, a screenshot. This is the habit from <LessonLink id="B4.1" />, and it is the stage people skip.
+5. **Commit** — a small, single-concern commit with a message Claude drafts from the actual diff. The full git treatment is <LessonLink id="B4.3" />.
+
+And the branch that makes it survive contact with reality: **when verify fails, steer, do not restart.** More on that after the walkthrough.
+
+## Guided walkthrough
+
+**Environment:** a small public repository you have never read. Anything modest works, a CLI utility or a single-purpose library you can find on GitHub. What matters is that you do *not* know this code, because the whole workflow exists to handle that. Clone it and let Claude do the reading.
+
+```bash
+git clone https://github.com/some-org/some-small-tool.git
+cd some-small-tool
+claude
+```
+
+### Explore
+
+Do not ask for a change yet. Enter plan mode with `Shift+Tab` (twice from Manual), so nothing can be edited while you look around, and ask the questions you would ask a senior engineer on their first day:
+
+```prompt
+give me the tour: what does this project do, how is it structured, where's the
+entry point, and how are tests run here?
+```
+
+Claude reads freely and answers. Follow up until the shape is clear. Because you are in plan mode, you can let it roam without watching every step, and none of your working tree can change.
+
+### Plan
+
+Now name the change, and ask for a plan rather than an edit:
+
+```prompt
+I want to add a --quiet flag that suppresses the normal progress output.
+What needs to change, and where? Create a plan.
+```
+
+Read the plan the way you read a diff: right files, only what you asked, nothing surprising. If it misunderstood, correct it and let it re-plan, which is far cheaper than correcting code:
+
+```prompt
+that also touches the logging config, which is out of scope. plan again without it.
+```
+
+For a change this small you might skip the plan and just prompt, and <LessonLink id="B3.5" /> is about when to make that call. Here we plan on purpose, because you do not know the code.
+
+### Code
+
+Approve the plan. Claude offers you a mode to continue in; pick **review each edit manually** the first several times. Now it implements, and you do the one job that does not delegate: read each diff before accepting it. A diff that touches a file the plan never mentioned is your signal to stop and ask why.
+
+### Verify
+
+This is the stage that separates a session you watched from one you can trust. Do not eyeball the change and call it done. Hand Claude the check and let it close its own loop, per <LessonLink id="B4.1" />:
+
+```prompt
+run the test suite and show me the output. if anything fails, fix the root cause
+and run it again. also add a test that asserts --quiet produces no progress output.
+```
+
+Claude runs the tests, reads the results, fixes what broke, and re-runs, coming back to you with evidence rather than a claim:
+
+```text
+✓ 47 passed, 1 added (quiet-mode suppresses progress)
+```
+
+If there were no tests to run, verification is still the rule, not the exception: a build that passes, a manual run whose output you check, a `--help` that now lists the flag. No check, no "done."
+
+### Commit
+
+Let Claude write the commit message from the diff it just made. Messages drafted from the actual change are usually better than the one-liner you would have typed:
+
+```prompt
+commit this with a descriptive message, one concern only, then show me the message before you finalize.
+```
+
+That closes the loop. The map's arrow from **Commit** back to **Explore** is the real shape of a working session: you do not do this once, you do it once per change, and each lap is small enough to review.
+
+## When verify fails: steer, don't restart
+
+The failure branch is not an exception to the workflow. It *is* the workflow, most days. Verify fails, and the instinct is to throw everything out and start over. Usually that is wrong.
+
+**First, steer.** The context is still full of everything useful: what you were trying to do, what Claude just tried, why it failed. Spend that context instead of discarding it. Interrupt with `Esc` if it is heading the wrong way (<LessonLink id="B2.1" />), and redirect with what the failure taught you:
+
+```prompt
+the new test fails because --quiet still prints the summary line. suppress that too, then re-run.
+```
+
+**If a bad edit is the problem, rewind, don't debug the mess.** A wrong change three edits back is one `Esc Esc` and "Restore code" away from gone, keeping the conversation so Claude remembers the attempt. That is what <LessonLink id="B3.4" /> is for.
+
+**Only reset when steering stops working.** If you have corrected the same failure two or three times and it keeps coming back, the context is now polluted with dead ends, and more steering makes it worse, not better. That is the moment for the resets of <LessonLink id="B2.4" />: `/clear` and start fresh with a sharper prompt that bakes in what you learned. Knowing *which* reset, and recognizing that moment before minute twenty, is its own skill, and it is the subject of <LessonLink id="B4.4" />.
+
+The ladder, in one line: **steer first, rewind a bad edit, reset only when steering has clearly stopped paying off.**
+
+## Variations & pitfalls
+
+- **Trivial changes skip stages.** A typo or a one-line guard does not need explore-and-plan. If you could describe the diff in one sentence, just prompt it and read the result, per <LessonLink id="B3.5" />. The loop is a default, not a ritual.
+- **Skipping Verify.** The most common and most expensive omission. A change that "looks done" and was never checked is how plausible, wrong code ships. If you cannot name a check, you have not finished defining the task.
+- **Giant commits.** Letting five unrelated changes pile into one commit makes the diff unreviewable and a later revert all-or-nothing. One concern per commit; more in <LessonLink id="B4.3" />.
+- **Restarting when you should steer.** Throwing out a session on the first failure discards the context that would have fixed it faster. Steer first.
+- **Steering forever when you should reset.** The opposite failure. Correcting the same thing five times pollutes the context further each time. After a couple of failed corrections on the same issue, `/clear` beats a sixth attempt.
+- **Planning everything.** Ceremony is not rigor. Plan mode on a typo fix costs a cycle and teaches you nothing; save it for code you do not know or changes that span files.
+
+## Where next
+
+You now have the loop, and a map that links every stage back to where it was taught. This is the workflow the rest of your Claude Code life is built on; everything past this level makes individual stages faster or more powerful, but the shape stays.
+
+Two lessons finish the module by deepening the stages you just ran. <LessonLink id="B4.3" /> is the Commit stage in full: letting Claude branch, commit, and open PRs while keeping the history reviewable, and fixing a bad commit with git rather than `/rewind`. <LessonLink id="B4.4" /> is the failure branch in full: the smells that tell you a session is doomed, and the three-strikes rule for when to bail.

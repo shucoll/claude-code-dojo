@@ -1,0 +1,162 @@
+---
+id: "I1.3"
+slug: "settings-scopes-and-the-claude-directory"
+title: "Settings, scopes, and the .claude directory"
+type: "core"
+order: 3
+estimatedMinutes: 12
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-16"
+prerequisites: ["I1.2"]
+references: ["B3.1"]
+docsSources: ["https://code.claude.com/docs/en/claude-directory", "https://code.claude.com/docs/en/settings", "https://code.claude.com/docs/en/debug-your-config"]
+interactive:
+  - kind: "diagram"
+    spec: "dot-claude-directory-map"
+---
+
+# Settings, scopes, and the .claude directory
+
+## The problem
+
+<LessonLink id="I1.2" /> had you writing rules into a settings file without ever asking which one. There are three you could have picked, and they do not all mean the same thing: one ships to your teammates, one stays on your machine, one follows you into every project you open.
+
+That question gets louder from here. Everything the rest of this level teaches (skills, hooks, MCP servers, subagents) is a file in a specific place, and putting it in the wrong place is the single most common way an intermediate setup quietly fails. Worse, when something does not apply, you usually cannot tell whether the file never loaded, loaded from somewhere you did not expect, or got overridden by another scope.
+
+This lesson is the tour of the filesystem, the one rule that settles which file wins, and the inspection workflow that turns all of this from guesswork into something you can just look up.
+
+## The concept
+
+There are **three scopes you control, and one you do not**.
+
+- **User** (`~/.claude/`): you, in every project.
+- **Project** (`.claude/` in the repo, committed): your team, in this project.
+- **Local** (`.claude/settings.local.json`, gitignored): you, in this project only.
+- **Managed**: your organization's policy, deployed by IT. It cannot be overridden by anything, and it gets its own treatment in Advanced.
+
+The rule connecting them is the one you would guess: **the more specific scope wins.** Local beats project, project beats user. Managed beats everyone.
+
+Two directories carry almost all of it, and they mirror each other. Your project's `.claude/` holds what the team shares; your home directory's `~/.claude/` holds the same shapes, one scope wider.
+
+## The directory tour
+
+Here is the whole thing. Click any entry to open what it holds, or to jump to the lesson that teaches it.
+
+<ChartEmbed id="dot-claude-directory-map" />
+
+Walking it top to bottom:
+
+**`CLAUDE.md`** is the one you already know from <LessonLink id="B3.1" />: project instructions, loaded into context at the start of every session. It sits at the repo root, not inside `.claude/`.
+
+**`.claude/settings.json`** is the team's configuration: permissions (the rules you wrote last lesson), hooks, environment variables, and enabled plugins. It is committed, so cloning the repo gets you the whole policy. One structural fact surprises everyone eventually: **hooks have no file of their own.** They live under a `"hooks"` key inside this file, and a standalone hooks file is simply never read.
+
+**`.claude/settings.local.json`** is the same shape, but yours alone and gitignored. When Claude Code creates it, it adds the ignore entry for you. Create it by hand and that is your job.
+
+**`.claude/rules/`**, **`.claude/skills/`**, and **`.claude/agents/`** are where the rest of this level lands: topic-scoped instructions, invocable procedures, and custom subagents respectively. Each gets its own module, and each is a directory of files rather than a key in a settings file.
+
+**`.mcp.json`** is the exception that catches people. Project MCP servers live in a file at the **repository root**, not inside `.claude/`, and `settings.json` does not read an `mcpServers` key at all. Put servers in the wrong one of those two places and they never appear.
+
+**`~/.claude/`** mirrors the project directory: `settings.json`, `CLAUDE.md`, `skills/`, `agents/`. Same shapes, applied everywhere you work.
+
+**`~/.claude.json`** is the trap. Despite the name it is not a settings file: it holds app state, your login session, and per-project trust. Putting `permissions` or `hooks` in it does nothing, silently. The configuration you want is `~/.claude/settings.json`. A file called `.claude.json` and a directory called `.claude/` sit side by side in your home directory, one character apart.
+
+## Which file wins
+
+When the same key is set in more than one place, this is the order, top to bottom:
+
+| Priority | Scope | Where | Who it is for |
+|---|---|---|---|
+| 1 | Managed | system path, deployed by IT | your organization; unoverridable |
+| 2 | CLI flags | the command you typed | this session only |
+| 3 | Local | `.claude/settings.local.json` | you, this project |
+| 4 | Project | `.claude/settings.json` | your team, this project |
+| 5 | User | `~/.claude/settings.json` | you, everywhere |
+
+So if your user settings say one thing and the project says another, the project wins. If your local file disagrees with both, your local file wins. This is why "I set it globally and it did not apply" is almost always a project or local file quietly overriding you.
+
+**Permission rules are the exception.** They do not override across scopes, they **merge**. Every scope's rules are pooled and then evaluated by the deny > ask > allow order from <LessonLink id="I1.2" />. The practical consequence: a `deny` written at *any* scope beats an `allow` written at *any* other. Your user-level deny is not overridden by a project-level allow, and a managed deny cannot be loosened by anything you write.
+
+## Commit it or gitignore it
+
+One question settles nearly every case: **would a teammate cloning this repo want this?**
+
+- **Yes, commit it:** `CLAUDE.md`, `.claude/settings.json`, `.claude/rules/`, `.claude/skills/`, `.claude/agents/`, `.mcp.json`. These describe how the *project* works, and sharing them is the point.
+- **No, keep it local:** `.claude/settings.local.json`. Anything about *your machine* or *your preference*: an absolute path only you have, a permission you personally want, an experiment.
+- **No, put it in your home directory:** anything about *you* that should follow you into every project.
+
+Each direction has its own failure mode. Commit something machine-specific and you break a teammate's setup with an absolute path that does not exist for them. Keep something project-defining local and every new teammate re-derives it by hand. And a secret belongs in neither: not in a committed file, and not pasted into a local one either. Environment variable expansion is how secrets stay out of committed config, which <LessonLink id="I5.2">MCP's configuration lesson</LessonLink> walks through properly.
+
+## Verify what actually loaded
+
+Every question above has a command that answers it. Stop guessing and ask.
+
+Start broad:
+
+```text
+/context
+```
+
+It breaks down everything occupying the window right now: system prompt, tools, MCP tools, subagents *with the source each loaded from*, memory files, and skills. If your `CLAUDE.md` is not in that breakdown, it did not load, and no amount of rewording the instruction will help.
+
+Then narrow by category:
+
+| Command | Answers |
+|---|---|
+| `/status` | which settings sources are active, including whether managed settings are in effect |
+| `/permissions` | the resolved allow/deny/ask rules, and the file each came from |
+| `/memory` | memory file locations across user and project scopes |
+| `/skills` | available skills, from project, user, and plugin sources |
+| `/hooks` | the hooks actually registered, grouped by event |
+| `/mcp` | connected servers and their status |
+| `/doctor` | a setup checkup: invalid settings files, duplicate installs, and proposed fixes |
+
+And when you cannot tell whether the problem is *your* config at all, cut it out entirely:
+
+```bash
+claude --safe-mode
+```
+
+That launches with every customization disabled: CLAUDE.md, skills, plugins, hooks, MCP servers, custom commands and agents. If the problem disappears, one of those surfaces is the cause and the commands above will tell you which. If it persists, the cause is somewhere else and you have just saved yourself an hour.
+
+## Pitfalls
+
+Every one of these is a silent failure, which is why they cost so much time.
+
+- **Config in `~/.claude.json`.** You put `permissions` or `hooks` in it, nothing happens, and nothing warns you. They belong in `~/.claude/settings.json`.
+- **Hooks in a standalone file.** There is no project-level hooks file. Hooks go under the `"hooks"` key in a settings file, and `/hooks` showing nothing is the tell.
+- **`.mcp.json` in the wrong place.** It belongs at the repository root. Inside `.claude/` it is ignored, and an `mcpServers` key in `settings.json` is ignored too.
+- **A `settings.json` value that seems ignored.** The same key is almost certainly set in `settings.local.json`, which outranks it. `/status` and `/permissions` will show you.
+- **A hand-made `settings.local.json` getting committed.** Claude Code only adds the gitignore entry when it creates the file itself. Make it yourself and you have to ignore it yourself, or your machine-specific paths land in your teammate's checkout.
+- **Expecting a subdirectory `CLAUDE.md` at startup.** Nested files load on demand, when Claude reads a file in that directory, not at launch. Absence from `/context` at session start is normal, not broken.
+
+## Try It
+
+**Environment:** your own project, or any small public repo you have cloned. Everything here is inspection plus one gitignored file, so nothing touches the repo's committed config. If you are using a repo you care about, note that step 4 writes `.claude/settings.local.json`, which is ignored by git anyway.
+
+1. Run `/status`. Note which settings sources are active, and whether managed settings are in effect.
+2. Run `/context`. Find the memory files section. Confirm whether this project's `CLAUDE.md` actually loaded, and note what else is already spending context before you typed anything.
+3. Run `/permissions`. For each rule, read the file it came from. If you did the last lesson's Try It, your three rules should name `settings.local.json`.
+4. Prove precedence to yourself. Put a key in `.claude/settings.json` and the same key with a different value in `.claude/settings.local.json`. Restart, then confirm the local value is the one in effect.
+5. Run `claude --safe-mode` and `/context` again. Compare: everything missing from this run is something *you* configured.
+
+**Success criteria:** you can name every settings file currently in effect, say which one won for the key you tested and why, and state from evidence rather than belief whether your `CLAUDE.md` loaded.
+
+## FAQ
+
+**Which file should I actually put this in?** That is the subject of <LessonLink id="I1.4" />, the next lesson.
+
+**What are managed settings?** Organization-wide policy deployed by IT to a system path, outranking everything including CLI flags. If `/status` says they are in effect, some decisions are not yours to make. Advanced covers deploying them.
+
+**Is `.claude/settings.local.json` gitignored automatically?** Yes, when Claude Code creates it. If you create it by hand, add it to `.gitignore` yourself.
+
+**Why do my permission rules not follow the precedence table?** Because permission rules merge across scopes instead of overriding. Every scope's rules pool together, then deny > ask > allow decides. A deny anywhere beats an allow anywhere.
+
+**Does `.mcp.json` really not live in `.claude/`?** It really does not. Repository root. This one costs people an afternoon roughly once.
+
+**Do I have to restart after editing settings?** Not for hooks: edits take effect in the running session after a brief delay. If `/hooks` still shows the old definition, run it again to refresh.
+
+## Where next
+
+You now have the map, the precedence rule, and the ability to inspect what loaded rather than guess. What you do not have yet is a decision procedure. Knowing that local beats project does not tell you where your API key path, your team's test command, or your "never touch migrations" rule each belong.
+
+<LessonLink id="I1.4" /> resolves that, and closes out this module. After that, <LessonLink id="I2.1" /> picks up a thread this tour kept brushing against: everything in these directories costs context before you type a word, and the next module is about spending that budget deliberately.

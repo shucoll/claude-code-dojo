@@ -1,0 +1,10 @@
+Not a settings file, despite the name.
+
+This is Claude Code's own app state: your login session, user-scoped and local-scoped MCP servers, per-project trust and allowed-tools state, and assorted caches. You rarely edit it by hand.
+
+It is also the most common configuration mistake there is. Putting `permissions`, `hooks`, or `env` in here does nothing at all, silently. Those belong in `~/.claude/settings.json`.
+
+Read the two paths slowly, because they are one character apart and completely different things:
+
+- `~/.claude.json` is a **file** sitting in your home directory. App state.
+- `~/.claude/` is a **directory** sitting next to it. Your configuration.

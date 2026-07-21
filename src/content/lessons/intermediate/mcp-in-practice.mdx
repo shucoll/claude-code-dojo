@@ -1,0 +1,206 @@
+---
+id: "I5.3"
+slug: "mcp-in-practice"
+title: "MCP in practice (and its costs)"
+type: "core"
+order: 3
+estimatedMinutes: 13
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-07-20"
+prerequisites: ["I5.2"]
+references: ["I2.1", "I1.2"]
+docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/costs", "https://code.claude.com/docs/en/security"]
+---
+
+# MCP in practice (and its costs)
+
+## The problem
+
+Somewhere between your first server and your fifth, someone tells you to be careful: MCP servers flood your context with tool definitions, so connect them sparingly. It is the most repeated piece of intermediate MCP advice, and people ration their connections on the strength of it, going back to pasting from a browser tab to save a budget they never measured.
+
+That advice described a real default that no longer exists. Meanwhile the costs that *are* real go unmentioned, because they show up somewhere nobody was told to look.
+
+## What connecting actually costs
+
+Tool search is on by default. Only tool names and server instructions load at session start, and the full schema for a tool loads when Claude needs that tool. In the startup ledger from <LessonLink id="I2.1" />, every MCP tool name you can reach comes to roughly 120 tokens, which is the smallest line on the board. The docs put it plainly: adding more MCP servers has minimal impact on your context window.
+
+So the headline answer to "what do tool definitions cost my context" is *almost nothing, until they are used*. If you have been rationing servers, you were following a rule whose reason expired.
+
+Three costs survive that correction, and they are the ones to manage.
+
+### 1. Tool output, which is the real context cost
+
+A server's tool definitions are cheap. Its *results* are not. One query against a wide table, one fetch of a verbose issue with every comment, one log search, and you have spent more context than a whole session's startup.
+
+Claude Code puts rails on this:
+
+| Behavior | Value |
+|---|---|
+| Warning threshold | output over 10,000 tokens |
+| Default maximum | 25,000 tokens |
+| Raise the maximum | `MAX_MCP_OUTPUT_TOKENS` |
+| Over the persist threshold | result written to disk, replaced by a file reference |
+
+```bash
+export MAX_MCP_OUTPUT_TOKENS=50000
+claude
+```
+
+Raising the ceiling is worth doing for servers that legitimately return a lot, like a database schema tool. It is worth resisting when the real problem is that you asked for too much, because the ceiling exists to stop a single call eating the window.
+
+If you write servers, a tool can raise its own limit by declaring `_meta["anthropic/maxResultSizeChars"]` in its `tools/list` entry, up to 500,000 characters. That applies to text content regardless of `MAX_MCP_OUTPUT_TOKENS`, so users of your server do not have to change an environment variable to use it. Tools returning images stay subject to the token limit either way.
+
+### 2. Latency and moving parts
+
+Every connected server is a connection to establish or a process to launch at startup, inside a 30-second timeout. A stdio server that shells out to `npx` pays a cold start. A remote server pays the network, and can be down. If Claude needs a tool from a server still connecting, your request waits for it.
+
+This is the cost that scales with the number of servers you leave connected, and it is paid on every session rather than every call.
+
+### 3. Selection pressure
+
+Tool search means Claude searches a list of tool names to find the right one. Twelve servers exposing three hundred tools is not a context problem, but it is a haystack, and the wrong tool chosen confidently is more expensive than any token count.
+
+The docs' own cost guidance is blunt about the comparison: CLI tools like `gh`, `aws`, `gcloud`, and `sentry-cli` remain more context-efficient than MCP servers, because they add no per-tool listing at all. <LessonLink id="I5.4" /> is where that argument gets settled properly.
+
+### Measuring it rather than guessing
+
+Two commands end the speculation:
+
+- **`/context`** breaks down what is occupying the window right now, by category, MCP tools included.
+- **`/usage`** attributes recent usage to skills, subagents, plugins, and individual MCP servers, each as a percentage of the total. Press `d` or `w` to switch between the last 24 hours and the last 7 days.
+
+Per-server attribution is what turns "I think that server is expensive" into a number. The figures come from local session history on this machine, so they miss usage from other devices.
+
+## Walkthrough: three integrations
+
+Three servers worth having, each showing a different auth and cost shape.
+
+### Sentry: reading production errors
+
+```bash
+claude mcp add --transport http sentry https://mcp.sentry.dev/mcp
+```
+
+Authenticate through `/mcp` as in <LessonLink id="I5.2" />, then work against live data:
+
+```prompt
+What are the most common errors in the last 24 hours?
+```
+
+```prompt
+Which deployment introduced these new errors?
+```
+
+**Cost shape:** results are bounded and structured, so this rarely troubles the output limit. The second question is the one that justifies the server, because answering it means correlating errors against releases, which is not a thing you would paste into chat.
+
+### GitHub: reviewing pull requests
+
+GitHub's remote server takes a fine-grained personal access token as a header rather than an OAuth flow:
+
+```bash
+claude mcp add --transport http github https://api.githubcopilot.com/mcp/ \
+  --header "Authorization: Bearer $GITHUB_PAT"
+```
+
+`claude mcp add` saves the configuration without validating the credential, so a bad token is accepted here and shows up later as a failed connection. Check with `/mcp` before assuming it works.
+
+```prompt
+Review PR #456 and suggest improvements
+```
+
+**Cost shape:** this is the one to watch. A PR with a large diff and a long comment thread can push a single tool result past the warning threshold. It is also the integration with the strongest CLI alternative, since `gh` does much of this at zero listing cost.
+
+### Postgres: querying your own data
+
+```bash
+claude mcp add --transport stdio db -- npx -y @bytebase/dbhub \
+  --dsn "postgresql://readonly:pass@prod.db.com:5432/analytics"
+```
+
+```prompt
+Show me the schema for the orders table
+```
+
+```prompt
+Find customers who haven't made a purchase in 90 days
+```
+
+**Cost shape:** unbounded by default, which makes it the best argument for the output limit existing. A careless `select *` against a large table is the call that gets truncated or persisted to disk. Note the `readonly` user in that DSN: the connection string is your blast radius, and a read-only role is the cheapest guardrail available.
+
+Pair that with the permission layer from <LessonLink id="I1.2" />. MCP tools are ordinary tools named `mcp__server__tool`, so you can allow the schema-reading tool outright and leave the query tool on `ask`, which is finer control than a CLI behind one Bash rule.
+
+## When to connect / when to disconnect
+
+**Connect when:**
+
+- The service has no adequate CLI, or auth through the CLI is painful.
+- You want structured results rather than parsed text.
+- The integration is worth committing for the team in `.mcp.json`.
+
+**Disconnect when:**
+
+- You added it for one task last month and have not used it since. Run `/mcp` and disable it. Startup latency and selection noise are both paid for by servers you are not using.
+- A CLI you already trust covers it.
+- You cannot say what the server does with your data.
+
+The discipline that replaces the old ration-your-servers advice is not "connect freely." It is **connect deliberately and prune regularly**, because the bill moved from startup to latency, selection, and per-call output.
+
+## Pitfalls
+
+- **A tool result gets truncated and Claude works from a partial answer.** The symptom is a warning about output size, then a confident conclusion drawn from half a dataset. Narrow the request (a `LIMIT`, a date range, specific fields) before raising `MAX_MCP_OUTPUT_TOKENS`.
+
+- **You raise the output limit globally to fix one server.** Now every server may spend 50,000 tokens on a single call. Prefer narrowing the query, or ask the server's author for the per-tool annotation.
+
+- **Startup gets slower and you blame the model.** Each connected server is a startup connection with a 30-second budget. `claude mcp list` shows which ones are slow or failing; disable the ones you are not using.
+
+- **You keep a server connected for a capability you never invoke.** It costs latency, adds to the haystack, and, for a third-party server, keeps a trust relationship open for no return.
+
+- **You assume a connected server means an authorized one.** A remote server can be reachable and still rejecting your token. `/mcp` shows the real status, and a stale OAuth token surfaces as tools that silently do not work.
+
+## Try It
+
+**Environment:** a session with at least one MCP server connected.
+
+1. Run `/context` and note what MCP tools occupy. Compare it against the system prompt and `CLAUDE.md` lines. This is the reframe, measured on your own machine rather than taken on trust.
+2. Make a deliberately greedy call through a server: a broad query, or a fetch of a long issue thread. Watch for the output warning.
+3. Run `/context` again and compare. One call should dwarf what the connection itself cost.
+4. Run `/usage` and press `d`. Find the per-server attribution and see which of your servers is actually spending your budget.
+5. Run `/mcp` and disable any server you have not used this week. Restart and notice the startup difference.
+
+**Success looks like:** a number for what a connection costs, a much larger number for what one call costs, and one fewer server connected than when you started.
+
+## FAQ
+
+**So connecting servers is free?**
+Close to free in context terms at startup, which is where people were told to worry. Not free in latency, in selection quality, or in what a call returns. The tax was repealed; the bills that remain are just itemized somewhere else.
+
+**Can I get the old eager-loading behavior back?**
+Yes. `ENABLE_TOOL_SEARCH=false` loads every schema up front, which is what every server used to do. `ENABLE_TOOL_SEARCH=auto` loads schemas up front when they fit inside 10% of the window and defers the rest. Both are escape hatches for environments where tool search is unavailable or you need deterministic loading, not everyday settings.
+
+**How many servers is too many?**
+There is no per-server cap; the practical limit is your context budget, and that budget is no longer the binding constraint. The better question is how many you have used in the last month. Selection noise and startup latency scale with connections, so the answer is behavioral rather than numeric.
+
+**What if a server returns something enormous every time?**
+Ask whether the tool supports pagination or filtering first. Then consider `MAX_MCP_OUTPUT_TOKENS` for that workflow, or ask the author to add the `anthropic/maxResultSizeChars` annotation. Results past the persist threshold are written to disk and replaced by a file reference, so nothing is lost, but Claude then has to read the file to use it.
+
+## The part that is not about tokens
+
+A server's output enters your context, and Claude acts on what is in its context. That makes every connected server a source of instructions, whether or not its authors intended it to be.
+
+A malicious or compromised server can return text engineered to read as a directive: a "helpful note" appended to an issue body, a comment in a query result telling Claude to read `.env` and include it in the next commit. This is prompt injection, and MCP output is one of its cleanest delivery surfaces, alongside files and web pages. The Advanced level dissects the attack and the full defense stack. At this level, five habits carry most of the protection.
+
+What to do at this level:
+
+- **Prefer servers you wrote or vendors you already trust.** Anthropic reviews connectors against listing criteria before adding them to the directory, but does not security-audit or manage any MCP server. Directory presence is not an audit.
+- **Read what a stdio server runs.** It is a process on your machine with your permissions. `claude mcp get <name>` shows the exact command.
+- **Scope the credential, not the trust.** The read-only Postgres role above is worth more than any amount of caution, because it holds even when your judgment does not.
+- **Keep permission rules on MCP tools.** `deny` and `ask` rules apply to `mcp__server__tool` names, so a server that suddenly wants to write can be stopped by policy you wrote before you had a reason to distrust it.
+- **Prune.** Every server you disconnect is a trust relationship closed.
+
+Claude Code asks for trust verification the first time it sees a new MCP server, which is a real checkpoint rather than a formality. That prompt is disabled in non-interactive runs with `-p`, so an automated pipeline connects without asking anyone.
+
+## Where next
+
+<LessonLink id="I5.4" /> is the resolver this lesson keeps pointing at: given that a good CLI adds no listing cost and needs no server, when is an MCP server the right call, and when is the honest answer "use `gh`"?
+
+<LessonLink id="I2.1" /> holds the startup ledger these numbers sit inside, if you want the full picture of what a session loads before you type.

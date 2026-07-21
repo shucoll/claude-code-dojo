@@ -1,0 +1,115 @@
+---
+id: "B1.3"
+slug: "what-claude-can-see-and-touch"
+title: "What Claude can see and touch"
+type: "core"
+order: 3
+estimatedMinutes: 10
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-07-06"
+prerequisites: ["B1.2"]
+teaches: ["trust-model", "working-directory-scope", "permission-prompts", "secrets-hygiene"]
+references: ["B1.1"]
+docsSources: ["https://code.claude.com/docs/en/how-claude-code-works", "https://code.claude.com/docs/en/security", "https://code.claude.com/docs/en/permissions"]
+---
+
+# What Claude can see and touch
+
+## The problem
+
+You are about to hand an AI agent a command over your machine, and a reasonable voice in your head asks: what can it actually reach? Can it read every file I own? Open a connection to the internet? Push to `main` while my back is turned? Before you install anything, it is worth knowing exactly where the fence around Claude Code sits, so you trust it for the right reasons instead of either fearing it or over-trusting it.
+
+## The concept
+
+Claude Code's safety model comes down to **one boundary and two gates**.
+
+- **The boundary** is where Claude Code lives: the folder you start it in. It reads freely inside that folder, and it can only *change* files inside it.
+- **Gate one** is the **trust dialog**: a one-time check the first time you open a new folder, confirming you meant to point Claude at these files.
+- **Gate two** is the **permission prompt**: the ongoing check that stops Claude before anything with side effects (editing a file, running a command, reaching the network) and asks you first.
+
+Everything below is those three ideas in detail. You met the second gate in passing in <LessonLink id="B1.1" />; here is how all three fit together.
+
+## How it works
+
+### The boundary: what it can see, what it can change
+
+There is an important asymmetry between reading and writing.
+
+- **Reading** reaches a little wider than the project. Claude can read the files in your folder and its subfolders, and it can read files *outside* it too when a task needs them, for example a system library or an installed dependency. It also sees your terminal (any command you could run, it can run) and your git state: current branch, uncommitted changes, recent history.
+- **Writing** is strictly confined. Claude Code can only write to the folder where it was started and its subfolders. To change a file in a parent directory, it has to ask for explicit permission first. That write boundary is the hard security line.
+
+Two things it does *not* do on its own: it does not roam your entire disk making changes, and it does not quietly reach the internet. Network commands like `curl` and `wget`, and web fetches, are not auto-approved. They prompt like any other risky action, and web fetches run in a separate context so a malicious page cannot easily hijack your session.
+
+### Gate one: the trust dialog
+
+The first time you launch Claude Code in a folder, before it does anything, it asks whether you trust that folder:
+
+```text
+Do you trust the files in this folder?
+
+  /Users/you/projects/shelf
+
+Claude Code can read and edit files here and run
+commands. A folder can also ship its own settings
+that grant extra access; those apply only after you
+trust it.
+
+❯ 1. Yes, I trust this folder
+  2. No, continue without these permissions
+```
+
+Why ask? Because a project you cloned can carry its own Claude Code settings that *grant* capability, like pre-approved commands or extra readable directories. The trust dialog is your chance to say "yes, I opened this on purpose" before any of those project-supplied permissions take effect. Answer **Yes** and the trust is remembered for that project, so you see this once per folder, not every launch. (One exception: if you start Claude in your home directory, trust is not saved to disk and the prompt returns each time, a gentle nudge to run it from an actual project folder instead.)
+
+### Gate two: permission prompts
+
+After trust, the everyday gate is the permission prompt. Claude Code starts from **read-only by default**: safe commands like `ls`, `cat`, and `git status` just run. The moment it wants to do something with consequences, it stops and asks. A prompt to edit a file looks roughly like this:
+
+```text
+Claude wants to edit  src/checkout.test.ts
+
+  + expect(total).toBe(42)
+  - expect(total).toBe(41)
+
+❯ 1. Yes
+  2. Yes, and don't ask again this session
+  3. No, tell Claude what to do differently
+```
+
+Two details are worth internalizing, because "allow always" does not mean the same thing everywhere:
+
+- For **file edits**, "don't ask again" lasts **until the session ends**. Next session, Claude asks again.
+- For **shell commands**, "don't ask again" is **saved permanently** for that command in that project. Approve `npm test` once with "don't ask again" and it stops prompting for `npm test` there, for good.
+
+Option 3 is not just "no": you tell Claude what to do differently and it adjusts. Rejecting a change never leaves you stuck.
+
+### What always asks
+
+Some actions ignore any loosening and prompt by default, because they reach past the write boundary or off your machine entirely: pushing to git, deleting data, editing files outside the project, and running network commands. These are the actions a local undo cannot reverse, which is why they get the firmest gate.
+
+(The prompts above are representative; the exact wording and options shift as the product evolves, but the behavior behind them is what matters.)
+
+## Secrets hygiene
+
+The permission system guards *actions*. Secrets are about *data*, and that part is on you. A short checklist:
+
+- **Never paste a secret into a prompt.** API keys, passwords, and tokens typed into the conversation become part of that conversation. Point Claude at the code that uses the secret, not the secret itself.
+- **Treat `.env` and credential files as readable.** To Claude, `.env` is an ordinary readable file. If you would rather it never read one, you can add a rule that denies reading it (`Read(.env)`); that control comes later in the course, but know the exposure now.
+- **Keep secrets in the environment, not the source.** Environment variables and a secret manager beat hardcoded keys, for Claude and for everyone else.
+- **Your login is stored safely.** Claude Code keeps your own auth token in the OS keychain or a protected file, not in your project, so trusting a folder does not expose your account.
+- **Read network and external-service prompts before approving.** A command that phones out is the one most worth a second look.
+
+## FAQ
+
+**Can it read all my files?** It reads inside your project freely, and it can read files outside it (like system libraries or dependencies) when a task calls for them. What it cannot do is *change* anything outside the folder you started it in without asking. It is not scanning your whole disk on its own.
+
+**Can it access the internet?** Not freely. Web fetches and network commands such as `curl` and `wget` are not auto-approved, so they prompt like any other action with side effects, and web fetches are isolated in their own context to blunt malicious pages.
+
+**Will it push to git without asking?** No. `git push` is a shell command with external side effects, so by default it prompts every time until you deliberately allow it. Local, reversible steps like a commit can be allowed, but anything that leaves your machine keeps asking.
+
+**What is "project trust"?** It is gate one: the one-time confirmation, the first time you run Claude in a new folder, that you trust that folder's files before any capability its settings would grant takes effect. You answer once and it is remembered per project.
+
+**What are permission prompts, and why do they appear?** They are gate two: the ongoing checkpoint for anything with side effects. Read-only work runs without interruption; edits, commands, and network calls stop to ask. They exist so nothing consequential happens without you seeing it first. They are a feature, not friction.
+
+## Where next
+
+You now know the boundary (your working directory) and the two gates (trust once, then approve as you go). <LessonLink id="B1.4" /> gets Claude Code installed so you can meet both firsthand on your first launch. Later, the course turns these gates into dials: **permission modes** let you loosen or tighten prompting for a whole session at once, and **permission rules** let you pre-approve the exact commands you trust so the safe ones stop interrupting. For now, the defaults are tuned to keep you in control, which is all you need to get started.

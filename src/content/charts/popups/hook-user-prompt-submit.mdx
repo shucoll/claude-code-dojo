@@ -1,0 +1,6 @@
+Fires once per turn, the moment you send a prompt and before Claude reads it.
+There is no matcher: it fires on every prompt.
+
+Use it to validate or enrich what you typed, or to inject just-in-time context
+(the current branch, an open ticket) so every turn starts from real state rather
+than whatever happens to still be in the window.

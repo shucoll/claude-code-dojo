@@ -1,0 +1,150 @@
+---
+id: "B4.3"
+slug: "git-and-claude-code"
+title: "Git and Claude Code"
+type: "core"
+order: 3
+estimatedMinutes: 11
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-10"
+prerequisites: ["B2.1"]
+teaches: ["git-with-claude", "commits-branches-prs", "git-recovery"]
+references: ["B3.4", "B4.2"]
+docsSources: ["https://code.claude.com/docs/en/quickstart", "https://code.claude.com/docs/en/common-workflows"]
+---
+
+# Git and Claude Code
+
+## The problem
+
+You just ran the workflow from <LessonLink id="B4.2" /> and the change is good. Now comes the part you always do by hand: `git status`, stare at the diff, try to remember what half of it was for, write a commit message that says "fixes" and nothing else, push, then click through the GitHub UI to open a PR.
+
+Claude can do all of that, and write a better commit message than you were going to, because it just watched the whole change happen. The catch is that git is the one place where "undo" stops being free. A checkpoint is a seatbelt; a pushed commit is out in the world. So the question is not really *can* Claude do git, it is *how do you let it* without losing the reviewability that makes git worth using.
+
+## The concept
+
+Claude is a fully competent git operator. It reads history, stages changes, writes commits, creates branches, opens pull requests, and untangles merge conflicts, all through natural language:
+
+```prompt
+what files have I changed, and what's the diff?
+```
+
+The thing that makes this safe is a single discipline: **you stay the reviewer.** Claude does the mechanical work, and you keep ownership of three decisions that a fast, willing operator should not make alone: what goes in a commit, what the message says, and whether it leaves your machine. Get those three right and Claude's speed is pure upside. Skip them and you get a tidy, fast-moving, unreviewable history, which is worse than a messy one you understand.
+
+## How it works
+
+Everything routes through the same git and `gh` commands you would run yourself; Claude just types them, reads the output, and reacts. Worth installing the GitHub CLI (`gh`) first, because Claude uses it for anything involving GitHub and unauthenticated API calls hit rate limits fast.
+
+The operations you will actually use:
+
+- **Inspect.** *"what have I changed?"*, *"show me the last 5 commits"*, or point it at history: *"look through this file's git history and summarize how the API evolved."*
+- **Commit.** *"commit this with a descriptive message."* Claude reads the staged diff and writes the message from what actually changed.
+- **Branch.** *"create a branch called feature/quiet-flag and move my changes onto it."*
+- **Pull request.** *"create a PR."* Claude pushes, runs `gh pr create`, and drafts the title and body from the diff. Creating a PR with `gh` auto-links the session to it, so you can return later with `claude --from-pr 123`.
+- **Resolve conflicts.** *"help me resolve these merge conflicts,"* walking each one with you.
+
+Two things Claude will not do silently, and both are protections you met in <LessonLink id="B3.3" />: it asks before commands with external effects, so a `push` is a decision you confirm, and it cannot auto-approve writes to `.git` internals in any normal permission mode.
+
+## Walkthrough: branch, commit, PR
+
+Pick up right where <LessonLink id="B4.2" /> left off: the change is made and verified, sitting uncommitted on your main branch.
+
+**1. Get it onto a branch.** You forgot to branch first, which is normal:
+
+```prompt
+move these uncommitted changes onto a new branch called feature/quiet-flag
+```
+
+**2. Commit, one concern, message drafted from the diff.**
+
+```prompt
+commit this. one concern only. show me the message before you finalize it.
+```
+
+Claude reads the diff and proposes something specific, because it saw the change rather than guessing at it:
+
+```text
+add --quiet flag to suppress progress output
+
+Adds a --quiet boolean flag parsed in cli.ts and threaded into the
+reporter, which now no-ops on progress events when set. Covered by a
+new test asserting no progress lines are emitted under --quiet.
+```
+
+Read it. This is the review step, and it is thirty seconds. Does the message match what you actually did? Is it really one concern? If the diff bundles an unrelated fix, now is when you say *"split the logging tweak into its own commit."*
+
+**3. Open the PR.**
+
+```prompt
+push the branch and open a PR. describe the change and call out anything a reviewer should look at closely.
+```
+
+Claude pushes (you confirm the push), runs `gh pr create`, and writes a description from the diff. Read that too before it goes up, and ask it to flag risks: *"add a note about the edge case where progress is already disabled."* The docs are blunt about this: review Claude's PR before submitting.
+
+That is the loop. You wrote nothing, and reviewed everything that mattered.
+
+## When a commit is wrong: git, not /rewind
+
+This closes the loop <LessonLink id="B3.4" /> opened. Checkpoints are seatbelts; git is the vehicle. `/rewind` restores Claude's file edits in your session. It **cannot** un-commit, and it certainly cannot un-push. A bad commit is a git problem, and git already has the tools:
+
+- **Bad commit, not pushed yet.** Amend it: *"the last commit message is wrong, fix it"* (`git commit --amend`), or *"undo the last commit but keep my changes staged"* (a soft reset) if the contents were wrong.
+- **Bad commit, already pushed.** Do **not** rewrite shared history. Revert it: *"revert commit abc123 with a new commit explaining why."* `git revert` adds a commit that undoes the change, which is safe because it never edits history other people have pulled.
+
+The rule underneath: reach for `/rewind` while you are still editing, and reach for git once you have committed. They cover different halves of "undo," and using the session tool for a git-shaped problem is how people lose work.
+
+## Use-case scenarios
+
+- **You finished a verified change and want it in.** → *"branch, commit with a message from the diff, open a PR."* The happy path above.
+- **Your working tree has two unrelated changes.** → *"commit the auth fix and the README update as two separate commits."* Claude splits them; one concern per commit keeps each reviewable and each revert surgical.
+- **You want to understand a gnarly function before touching it.** → *"summarize this file's git history and why the API looks like this."* This is a read, and one of the most underused things Claude does well.
+- **Near-miss: a wrong commit you already pushed.** It is tempting to say *"delete that commit."* Don't. On a pushed branch that means rewriting history others may have, and Claude force-pushing history you don't understand is the wrong-tool trap. Revert instead.
+
+## When to use it, and when not to
+
+| Let Claude drive | Keep your hands on the wheel |
+|---|---|
+| Writing commit messages from the diff | Deciding what belongs in a commit (you set the concern) |
+| Creating branches and PRs | Approving the push, every time |
+| Reverting or amending a bad commit | History rewrites (rebase, force-push) you can't read yourself |
+| Summarizing and searching history | Resolving conflicts on critical code without reading the result |
+
+The cost here is not tokens, it is trust. Claude committing is cheap; Claude committing *unreviewed* is where the risk lives. The review is the price, and it is small.
+
+## Pitfalls
+
+- **The giant commit.** You let a whole session's worth of unrelated changes land in one commit. Symptom: a diff too big to review and a revert that is all-or-nothing. Fix: commit per concern, as you go, not once at the end.
+- **The unread message.** Claude's message is usually good, so you stop reading it. Symptom: a history that says the wrong thing, discovered months later during a bisect. Fix: the thirty-second read is not optional; it is the discipline.
+- **Reaching for /rewind after committing.** Symptom: you rewind, the commit is still there, and now your files and your history disagree. Fix: committed means git. Amend if local, revert if pushed.
+- **Rewriting pushed history.** Asking Claude to "clean up" or "squash" commits already on a shared branch. Symptom: teammates' next pull conflicts violently. Fix: never rewrite shared history; revert forward instead.
+- **No branch, straight to main.** Committing directly to your main branch out of habit. Symptom: no clean place to open a PR from, and main now carries half-done work. Fix: branch first, or ask Claude to move the changes onto one after the fact, as in the walkthrough.
+
+## Try It
+
+**Environment:** the public repo you cloned in <LessonLink id="B4.2" />, or any repo you can safely push a throwaway branch to. Commit nothing to a branch you care about.
+
+1. Make a small real change (add a comment, tweak a string), then ask: *"what have I changed?"* Confirm Claude's summary matches the diff.
+2. *"Move this onto a branch called `test/git-lesson` and commit it, one concern, show me the message first."* Read the message. Change one word of it to prove you can: *"reword that commit to say X."*
+3. Deliberately make a second, unrelated edit and commit it separately. You now have two clean commits.
+4. Recovery drill: *"the last commit message has a typo, fix it."* Watch it amend rather than rewind. Then ask what would be different if that commit were already pushed.
+
+**Success criteria:** you produced two single-concern commits with messages you reviewed and edited, on a branch, and you can state the rule for fixing a commit before vs after it is pushed (amend vs revert), and why `/rewind` is the wrong tool for either.
+
+## FAQ
+
+**Can Claude actually commit, branch, and open PRs?** Yes, all of it, through the same git and `gh` commands you'd run. Install the `gh` CLI so PR creation and history reads work smoothly.
+
+**Should I let it?** Yes, as long as you stay the reviewer of the three things it shouldn't decide alone: what goes in a commit, what the message says, and whether it pushes. Those you confirm; the mechanics you delegate.
+
+**How do I keep commits reviewable?** One concern per commit, commit as you go rather than in one giant heap at the end, and actually read the message Claude drafts before finalizing. Small, single-purpose diffs are both easier to review and cleaner to revert.
+
+**Are Claude's commit messages any good?** Usually better than the rushed one-liner you'd type, because they're written from the actual diff. That's a reason to review them, not to skip reviewing them.
+
+**What if it commits something wrong?** Fix it with git, not `/rewind`. Amend or soft-reset a local commit; `git revert` one that's already pushed. `/rewind` can't touch committed history, per <LessonLink id="B3.4" />.
+
+**Will it push without asking?** No. A push has an effect outside your machine, so it's a confirmation prompt, the same protection from <LessonLink id="B3.3" />. Read what it's about to push before you approve.
+
+## Where next
+
+The Commit stage of the workflow is now yours in full: Claude does the typing, you keep the three decisions that keep history honest, and a bad commit is a git problem with a git fix.
+
+One piece of the workflow is left, and it is the one that separates smooth sessions from frustrating ones: what to do when things are going wrong. <LessonLink id="B4.4" /> is the failure branch in full, the smells that tell you a session is doomed and the three-strikes rule for when to stop steering and start over.

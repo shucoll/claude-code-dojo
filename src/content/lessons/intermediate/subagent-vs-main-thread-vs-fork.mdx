@@ -1,0 +1,103 @@
+---
+id: "I6.4"
+slug: "subagent-vs-main-thread-vs-fork"
+title: "Subagent vs main thread vs fork (and when NOT to delegate)"
+type: "resolver"
+order: 4
+estimatedMinutes: 10
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-20"
+prerequisites: ["I6.3"]
+references: ["B2.5", "I2.1"]
+docsSources: ["https://code.claude.com/docs/en/sub-agents"]
+---
+
+# Subagent vs main thread vs fork (and when NOT to delegate)
+
+## The confusion
+
+Three lessons of subagents leave a predictable aftertaste: delegation starts to feel like the advanced way to work. You built a reviewer, you watched a search run in someone else's window, and now every task looks like something to hand off.
+
+Then you delegate a refactor, and what comes back rebuilds the approach you rejected an hour ago. The subagent was not wrong. It was uninformed, and it had no way to know it.
+
+The confusion is treating delegation as a skill level rather than a tradeoff. Every option here spends one resource to save another, and the question is only which resource you are short of right now. What separates them is the context each one starts with.
+
+## Side-by-side
+
+| | Main thread | Subagent | Fork |
+|---|---|---|---|
+| **Starts with** | everything you have discussed | nothing but its prompt and `CLAUDE.md` | a copy of the conversation at this moment |
+| **Knows your decisions** | yes | no | yes, up to the moment it spawned |
+| **Intermediate output lands** | in your window | in its own, discarded | in its own, discarded |
+| **Tools and model** | yours | its definition's | yours |
+| **You can iterate with it** | yes, continuously | only by resuming | yes, in its transcript |
+| **Startup cost** | none | cold start; it re-gathers context you already had | shares your prompt cache |
+| **Fails by** | filling your window | acting on what it was not told | diverging from a conversation that moved on |
+
+The rows that decide are the first two. You are choosing between shared history, fresh context, and copied context; the remaining differences follow from that.
+
+Cost runs the other way from what people assume. The main thread is free to start and expensive to keep, since every tool result stays. A subagent is expensive to start and free to keep, since its window leaves when it does. A fork splits the difference: cheap to start because the cache is shared, and it inherits a window that is already partly full.
+
+## The decision ladder
+
+Work down in order; the first match is your answer. This is one branch of the master tree in <LessonLink id="I7.3" />, narrowed to where a task should run.
+
+1. **Does the task depend on decisions this conversation has accumulated?** Which approach you rejected, what the constraint turned out to be, why the obvious fix does not work here. Keep it in the main thread, or fork if you also want the output kept out. A subagent does not know any of it and will not ask.
+
+2. **Will it generate high-volume output you will never reference again?** Searches, log sweeps, test runs, doc fetches, dependency audits. Delegate to a subagent. This is the case delegation was built for, and <LessonLink id="I2.1" />'s ledger is what it protects.
+
+3. **Do you want to try something from this exact point without losing your place?** Fork. Same conversation, separate window, and your main thread is untouched whether the experiment works or not.
+
+4. **Does the job need a capability boundary?** A delegate that reads but cannot write, or that reaches a server your main session should not have. Subagent, for the restriction rather than for the context.
+
+5. **Is it small?** A file read, a one-line edit, a quick question. Main thread. Delegation costs a cold start and a re-gathering of context you already have, and for small work that overhead exceeds anything it saves.
+
+6. **Is it a question about something already in your conversation?** Neither. `/btw` answers from your full context without tool access, and discards the answer rather than adding it to history.
+
+If steps 1 through 5 leave you balanced, stay in the main thread. It is the option with no setup and no boundary to get wrong, and moving work out later is easier than recovering from a delegate that guessed.
+
+## Scenario walkthroughs
+
+**"Find every caller of this deprecated function."**
+Subagent. Self-contained, verbose, and the forty file reads are worth nothing to you afterwards. Step 2.
+
+**"Refactor this module the way we agreed."**
+Main thread, and this is the painful classic. "The way we agreed" is not in the request, and a subagent starts with no memory of the discussion. What comes back will be a competent refactor of the wrong design, and reviewing it costs more than doing the work would have. Step 1. If the output volume genuinely hurts, fork instead so the conversation travels with it.
+
+**"Run the test suite and tell me what failed."**
+Subagent. Full test output is thousands of lines you need once, and the useful part is a list of failures. Ask for the failures and their error messages rather than a report.
+
+**"What did we decide about the caching layer?"**
+Neither. `/btw` sees your conversation, needs no tools, and its answer does not clutter the history you are asking about. Step 6.
+
+**"Try the streaming approach and see if it is simpler."**
+Fork. You want this conversation's full setup, you want to keep going while it runs, and you want the attempt to leave no trace in your main thread if it fails. Step 3.
+
+**"Review my changes before I commit."**
+Subagent, using the reviewer from <LessonLink id="I6.2" />. Reviewing means reading the diff and the surrounding files, which is volume, and the read-only tool list is a boundary worth having. Steps 2 and 4 agree.
+
+**"Fix this typo in the error message."**
+Main thread. Delegating a one-line edit means a cold start, a file search, and a report, to save nothing. Step 5.
+
+**"Investigate why the deploy is slow, then fix it."**
+Both, split at the seam. Delegate the investigation, since it means reading pipeline logs and timing data you will not want. Do the fix in the main thread, informed by the report and by everything else you know about the system.
+
+## Edge cases
+
+**The task needs a slice of your context, not all of it.** Common, and the reason people over-delegate or under-delegate. The move is to summarize, then delegate: state the constraints in the delegation prompt rather than hoping the agent infers them.
+
+```prompt
+Use a subagent to migrate the remaining callers to the new API. Constraints we settled on earlier: keep the two-argument form working for the billing module, do not touch the vendor directory, and prefer explicit imports.
+```
+
+Three sentences of carried context is often the difference between a useful delegate and a confident wrong answer. When the summary starts approaching the length of the conversation, that is the signal to fork instead.
+
+**A fork and a subagent are both defensible.** They differ in what they inherit, so let the inheritance decide. A fork gets your tools, your model, and your history, which is right when the task needs background and wrong when you wanted a restricted delegate. If you would have to strip capabilities off a fork to feel comfortable, you wanted a subagent.
+
+**Delegating purely for the boundary.** A read-only investigator against production data is worth delegating even when its output is short and its context needs are low. Steps 2 and 5 both say main thread; step 4 overrides them, because the tool restriction is the product.
+
+**The main thread is already full.** Every option gets worse as the window fills, and delegation does not retroactively free what is already there. A fork inherits the crowding. The repair is `/compact` with a focus, or `/clear` and a fresh start with the decisions restated, before choosing where the next task runs.
+
+**You want to keep working while it runs.** Both delegated options are background-capable, so this is a reason to move work out of the main thread but not a reason to prefer one over the other. Decide on context first, then let it run in the background either way.
+
+**Delegation as a habit rather than a decision.** The common anti-pattern: subagents for everything, on the theory that isolation is good practice. It is a context tool, not a virtue. Sessions built this way spend their time writing delegation prompts, re-explaining the situation, and reconciling reports from agents that each understood a different part of the problem. If you cannot say which resource a delegation is saving, it is probably costing you one.

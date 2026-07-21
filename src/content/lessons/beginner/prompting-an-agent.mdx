@@ -1,0 +1,177 @@
+---
+id: "B4.1"
+slug: "prompting-an-agent"
+title: "Prompting an agent, not a chatbot"
+type: "core"
+order: 1
+estimatedMinutes: 11
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-10"
+prerequisites: ["B2.2", "B3.1"]
+teaches: ["agentic-prompting", "verifiable-prompts", "prompt-calibration"]
+references: ["B2.2", "B3.1"]
+docsSources: ["https://code.claude.com/docs/en/best-practices", "https://code.claude.com/docs/en/prompt-library", "https://code.claude.com/docs/en/common-workflows"]
+---
+
+# Prompting an agent, not a chatbot
+
+## The problem
+
+In a chat window, a vague prompt costs you one reply. You ask "how do I validate an email in JavaScript," get an answer you half-wanted, and refine. The loop is cheap because *you* are the one doing the work; Claude just talks.
+
+An agent does the work. Ask it to "add email validation" and it reads files, picks a place, writes a regex, wires it into three call sites, and reports back. Twelve minutes later you discover it validated the wrong field, in a format your API rejects, in a file you were about to delete. The vague prompt did not cost you a reply. It cost you twelve minutes of confident motion in the wrong direction, plus the time to unpick it.
+
+Same words, very different price. Prompting an agent well is a distinct skill, and it is mostly about closing the gap between what you meant and what you said *before* Claude spends twenty minutes acting on the difference.
+
+## The concept
+
+The mental shift is from **asking** to **briefing.**
+
+You are no longer asking a knowledgeable friend a question. You are briefing a fast, capable contractor who will start swinging a hammer the moment you stop talking, and who cannot see your face to tell whether it guessed right. A good brief does three things a good question never has to: it names the **goal**, it states how you will **know it is done**, and it points at the **exact things** to work with instead of describing them.
+
+Everything in this lesson is one of those three, made concrete. None of it is about writing longer prompts. Some of the best prompts in this lesson are shorter than the vague ones they replace. It is about writing *load-bearing* prompts, where every sentence changes what Claude does.
+
+## Why vague fails worse with an agent
+
+One idea explains most of the difference, and you already met it in <LessonLink id="B2.2" />: **context is the scarce resource, and a wrong turn spends it.**
+
+When Claude misunderstands a chat question, the bad answer sits there and you ignore it. When Claude misunderstands an agent task, it reads ten files, runs a build, writes code, and every one of those actions pours tokens into the context window, whether or not they were the right actions. A misunderstanding does not just waste time. It fills the window with the residue of the wrong approach, and as <LessonLink id="B2.2" /> showed, a fuller window is a *worse* window. The vague prompt makes the next prompt harder too.
+
+So the goal of a good prompt is not politeness or completeness. It is to spend Claude's first move on the right problem, because the first move is the cheapest one you will ever get.
+
+## The three moves
+
+Three techniques carry almost all of the value. Each is shown as the vague version you would reach for by reflex, then the load-bearing version that costs the same effort and saves the session.
+
+### 1. State the goal *and* the finish line
+
+A chat prompt can stop at the goal because you will judge the answer yourself. An agent prompt needs to say what "done" looks like, or Claude will decide for you, and it decides generously.
+
+Reflex:
+
+```prompt
+add tests for foo.py
+```
+
+Load-bearing:
+
+```prompt
+write a test for foo.py covering the edge case where the user is logged out. avoid mocks.
+```
+
+The second one is not longer by much. It just spends its words on the two things Claude could not guess: *which* case matters to you, and a constraint you have an opinion about. Everything else Claude can infer from the code.
+
+### 2. Give it something to verify against
+
+This is the single highest-leverage habit in the whole course. Claude stops when the work *looks* done. If the only thing that can tell "looks done" from "is done" is you, then you are the test suite, and you have to notice every mistake by hand. Hand Claude a check it can run, and the loop closes on its own: it writes, runs the check, reads the result, and fixes what failed, all before it comes back to you.
+
+A check is anything that returns a pass or fail Claude can read: a test, a build, a linter, a script that diffs output against a fixture, a screenshot compared to a design.
+
+Reflex:
+
+```prompt
+implement a function that validates email addresses
+```
+
+Load-bearing:
+
+```prompt
+write a validateEmail function. example cases: user@example.com is true,
+"invalid" is false, user@.com is false. run the tests after implementing and fix any failures.
+```
+
+The difference is not the examples. It is the last clause. "Run the tests and fix any failures" turns a task you have to inspect into a task that inspects itself. The same move rescues the two most common vague prompts there are:
+
+| Vague | Verifiable |
+|---|---|
+| *"the build is failing"* | *"the build fails with this error: [paste it]. fix it, verify the build passes, and address the root cause rather than suppressing the error"* |
+| *"make the dashboard look better"* | *"[paste screenshot] match this design. take a screenshot of the result, compare it to the target, list the differences, and fix them"* |
+
+If you take one thing from this lesson: **never give an agent a task you have no way to check.** The docs call the alternative the trust-then-verify gap, and it is where plausible-looking wrong code ships from.
+
+### 3. Point, don't describe
+
+You already have the tool for this from <LessonLink id="B2.1" />: the `@` mention. Instead of describing where code lives, or worse, pasting a wall of it into the prompt, point Claude at the file and let it read exactly what it needs.
+
+Reflex:
+
+```prompt
+in the file that handles widgets, the one on the home page, add a calendar widget like the other ones
+```
+
+Load-bearing:
+
+```prompt
+look at @src/widgets/HotDogWidget.php to learn the widget pattern, then build a
+calendar widget that lets the user pick a month and page through years. no new libraries.
+```
+
+Pasting code has a hidden cost you now understand: every pasted line is context you spent manually, and it is stale the moment the file changes. `@` reads the *current* file, on demand, and points to it by name so Claude's plan can talk about it precisely. Pointing is cheaper, fresher, and clearer than describing, all at once.
+
+## When the task is genuinely fuzzy: let Claude interview you
+
+Sometimes the truth is that you have not thought it through. The feature is real but underspecified, and forcing yourself to write a precise prompt would just be guessing precisely. For that case there is a move better than a vague prompt *and* better than a fake-precise one: hand the specifying work to Claude.
+
+```prompt
+I want to build a "saved searches" feature. Interview me in detail using the AskUserQuestion tool.
+Ask about implementation, UI, edge cases, and tradeoffs. Skip the obvious questions,
+dig into the hard parts I might not have considered. When we're done, write the spec to SPEC.md.
+```
+
+Claude asks about things you had not considered, the spec lands in a file you can read and edit, and, per <LessonLink id="B3.1" />, you can point future sessions at it. The strongest version: once `SPEC.md` is solid, start a *fresh* session to implement it, so the whole context window is spent on building rather than on the interview. This is the opposite failure mode from a vague prompt, handled deliberately instead of accidentally.
+
+## How long should a prompt be?
+
+The instinct after all this is to write essays. Resist it. The useful rule is about *kind* of detail, not amount:
+
+> Detail about **what** and **why** pays off. Detail about **how** usually over-constrains.
+
+Telling Claude the goal, the constraints you care about, and the check to run gives it the information only you have. Telling it which loop construct to use, how to name the helper, and what order to write the functions in strips out the part it is genuinely good at, and often produces worse code than leaving it free. The email prompt above is short not because short is a virtue, but because every remaining word was load-bearing and the rest was noise.
+
+A blunt test for any sentence in your prompt: *would deleting it change what Claude does?* If not, cut it. This is the same discipline <LessonLink id="B3.1" /> applied to `CLAUDE.md`, for the same reason: text that does not steer behavior still costs context, and a prompt padded with obvious instructions buries the two that mattered.
+
+## Pitfalls
+
+The two failure modes are opposite poles, and most people live at one of them.
+
+- **Under-specification.** The vague prompt. Symptom: Claude produces something plausible that solves a slightly different problem, and you only notice on review. Fix: name the finish line and a check, using the three moves above.
+- **Over-specification.** The essay prompt that dictates *how*. Symptom: Claude produces stilted, boxed-in code, or ignores half your instructions because the important ones drowned. Fix: cut every sentence about implementation mechanics; keep goal, constraints, and verification.
+- **The un-checkable task.** You asked for something with no pass/fail signal, so "done" means "Claude decided it was done." Fix: if you cannot state a check, that is a sign you have not defined the task yet. Define it, or ask Claude to interview you.
+- **Pasting instead of pointing.** You dumped a file into the prompt. Symptom: wasted context and, soon, stale context when the file changes. Fix: `@mention` it.
+- **Fake precision.** You wrote a detailed prompt for a task you had not actually thought through, so the detail is confident guessing. Symptom: the plan is specific and wrong. Fix: switch to the interview move and let the questions surface what you did not know.
+
+## Try It
+
+**Environment:** the public repo you cloned in <LessonLink id="B2.1" />, or any small project you know. You will not run Claude on the bad prompt; the exercise is the rewrite.
+
+Start with a deliberately bad prompt, the kind you would actually type in a hurry:
+
+```prompt
+clean up the error handling in this project
+```
+
+Rewrite it into a load-bearing prompt by running it through the three moves, out loud:
+
+1. **Goal and finish line.** *Which* error handling, in which file or module, and what does "cleaned up" mean here? Consistent logging? No swallowed exceptions? Pick one.
+2. **A check.** How will Claude (and you) know it worked? A test that asserts an error surfaces? The build still passing? Name it, and tell Claude to run it.
+3. **A pointer.** `@mention` the file or the example you want it to follow, instead of "this project."
+
+**Success criteria:** your rewritten prompt names a goal, states at least one verifiable check Claude can run itself, and points at a specific file with `@`. As a tie-breaker, read every sentence and delete any that does not change what Claude would do. If you cannot state a check, notice that: the task was underspecified, and the right move was to have Claude interview you, not to prompt it at all.
+
+## FAQ
+
+**Why does the same vague prompt work fine in chat but badly with an agent?** Because the agent acts on it. A vague chat prompt wastes one reply you can ignore. A vague agent prompt spends real tool calls, real time, and real context window building the wrong thing, and per <LessonLink id="B2.2" /> that wasted context degrades everything after it.
+
+**What makes a prompt "verifiable"?** It includes a check that returns pass or fail without you: a test to run, a build to pass, an expected output to diff, a screenshot to compare. Then Claude closes its own loop instead of waiting for you to catch mistakes.
+
+**Should I write long prompts?** Not as a goal. Add detail about *what* you want and *why*; avoid detail about *how* to implement it, which over-constrains. If deleting a sentence would not change Claude's behavior, delete it.
+
+**How much context is too much?** When you are pasting code you could `@mention`, or spelling out implementation steps Claude could infer, you are past the line. Extra context is not free; it fills the window and can bury the instructions that matter, the same way an over-long `CLAUDE.md` does in <LessonLink id="B3.1" />.
+
+**What if I genuinely don't know the details yet?** Do not fake them. Ask Claude to interview you with the `AskUserQuestion` tool and write a spec, then implement from the spec in a fresh session. A precise prompt built on guesses is worse than admitting the task is fuzzy.
+
+## Where next
+
+You now write prompts an agent can act on without spending your session guessing: goal, finish line, a check it can run, and a pointer instead of a paste.
+
+That is the input half of every task. <LessonLink id="B4.2" /> is where these prompts live in practice: the explore, plan, code, verify, commit loop that assembles everything in this level into one repeatable workflow, with a verifiable prompt driving each stage.

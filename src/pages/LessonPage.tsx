@@ -3,6 +3,7 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { Suspense, lazy, useEffect, useMemo } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useBackTarget } from '../lib/useBackTarget'
+import { LESSON_LINK_SELECTOR } from '../components/mdx/LessonLink'
 import { mdxComponents } from '../components/mdx/mdxComponents'
 import { Button } from '../components/ui/Button'
 import { LessonDocsLinks } from '../components/mdx/LessonDocsLinks'
@@ -26,6 +27,24 @@ function ArrowLeftIcon() {
       <path d="M13 8H3M7 4L3 8l4 4" />
     </svg>
   )
+}
+
+/**
+ * Resolve a location hash to the element it should scroll to. Besides ordinary
+ * id/CSS anchors (headings, `#chart-…`), it understands `#lref-N`, the ordinal a
+ * LessonLink records on click, mapping it to the Nth lesson link in document
+ * order so Back returns the reader to the exact link they followed.
+ */
+function resolveHashTarget(hash: string): Element | null {
+  const lref = hash.match(/^#lref-(\d+)$/)
+  if (lref) {
+    return document.querySelectorAll(LESSON_LINK_SELECTOR)[Number(lref[1])] ?? null
+  }
+  try {
+    return document.querySelector(hash)
+  } catch {
+    return null // hash is not a valid CSS selector; nothing to scroll to
+  }
 }
 
 export function LessonPage() {
@@ -58,12 +77,7 @@ export function LessonPage() {
     const deadline = Date.now() + 2000
     const tryScroll = () => {
       if (cancelled) return
-      let el: Element | null = null
-      try {
-        el = document.querySelector(hash)
-      } catch {
-        el = null // hash is not a valid CSS selector; nothing to scroll to
-      }
+      const el = resolveHashTarget(hash)
       if (el) {
         el.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'center' })
         return
@@ -121,10 +135,6 @@ export function LessonPage() {
 
       {location.lesson.docsSources?.length ? (
         <LessonDocsLinks urls={location.lesson.docsSources} />
-      ) : null}
-
-      {location.lesson.references?.length ? (
-        <LessonRefLinks label="Related" ids={location.lesson.references} variant="list" />
       ) : null}
 
       <footer className="mt-12 flex justify-end border-t-2 border-border pt-6">

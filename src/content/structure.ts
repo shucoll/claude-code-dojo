@@ -19,13 +19,13 @@ export const structure: LevelDef[] = [
     id: 'beginner',
     title: 'Beginner',
     order: 1,
-    modules: [{ code: 'B1', slug: 'meet-claude-code', title: 'Meet Claude Code', order: 1 }],
+    modules: [{ code: 'B1', slug: 'meet-claude-code', title: 'Meet Claude Code', order: 1 }, { code: 'B2', slug: 'sessions-and-context', title: 'Sessions and Context', order: 2 }, { code: 'B3', slug: 'teaching-claude-your-project', title: 'Teaching Claude Your Project', order: 3 }, { code: 'B4', slug: 'the-beginner-workflow', title: 'The Beginner Workflow', order: 4 }, { code: 'B5', slug: 'guided-project-shelf', title: 'Guided Project: Shelf', order: 5 }],
   },
   {
     id: 'intermediate',
     title: 'Intermediate',
     order: 2,
-    modules: [],
+    modules: [{ code: 'I0', slug: 'level-overview', title: 'Level Overview', order: 0 }, { code: 'I1', slug: 'tools-permissions-settings', title: 'Tools, Permissions, Settings', order: 1 }, { code: 'I2', slug: 'context-engineering', title: 'Context Engineering', order: 2 }, { code: 'I3', slug: 'skills', title: 'Skills', order: 3 }, { code: 'I4', slug: 'hooks', title: 'Hooks', order: 4 }, { code: 'I5', slug: 'mcp-servers', title: 'MCP Servers', order: 5 }, { code: 'I6', slug: 'subagents', title: 'Subagents', order: 6 }, { code: 'I7', slug: 'plugins-and-integration', title: 'Plugins and Integration', order: 7 }, { code: 'I8', slug: 'guided-project-pulseboard', title: 'Guided Project: PulseBoard', order: 8 }],
   },
   {
     id: 'advanced',

@@ -1,0 +1,222 @@
+---
+id: "B3.1"
+slug: "claude-md-fundamentals"
+title: "CLAUDE.md fundamentals"
+type: "core"
+order: 1
+estimatedMinutes: 14
+volatility: "stable"
+verifiedAgainstDocsAt: "2026-07-09"
+prerequisites: ["B2.1"]
+teaches: ["claude-md", "init", "standing-instructions"]
+references: ["B2.2"]
+docsSources: ["https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/best-practices"]
+---
+
+# CLAUDE.md fundamentals
+
+## The problem
+
+You told Claude to use `pnpm`, not `npm`. It did. Next session, it reached for `npm` again.
+
+This is not forgetfulness in any interesting sense. You learned in <LessonLink id="B2.2" /> that every session starts with an empty window. Whatever you typed yesterday is not there today, so you type it again. And when compaction fires mid-session, you type it a third time.
+
+Every instruction you find yourself repeating is a gap in your setup, not a flaw in Claude. `CLAUDE.md` is where you close it.
+
+## The concept
+
+**`CLAUDE.md` is a markdown file that Claude reads at the start of every session.** That is the idea. Put a fact in it and Claude knows that fact every time, without you saying anything.
+
+It is the place for what you would otherwise re-explain: how to build the project, how to run the tests, the conventions this codebase follows, the one non-obvious thing that trips up every newcomer.
+
+Two properties decide almost everything about how you should write it.
+
+**It is context, not configuration.** `CLAUDE.md` reaches Claude as a message, not as an enforced rule. Claude reads it and tries to follow it. There is no guarantee of compliance, especially for vague or contradictory instructions. If something *must* happen every time without exception, a line in a markdown file is the wrong tool.
+
+**It loads into every session, so every line pays rent.** It is startup context, the blue slice on the left of the bar in <LessonLink id="B2.2" />. A long `CLAUDE.md` does not merely cost tokens. It actively makes Claude worse at following the rules that matter, because the important ones get lost among the rest.
+
+Those two facts pull the same way: **short, specific, verifiable.**
+
+## How it works
+
+### Where it lives
+
+`CLAUDE.md` can sit in several places, each with a different scope. They load from the broadest scope to the most specific, and they are **concatenated, not overridden**, so a project instruction lands in context after a user instruction rather than replacing it.
+
+| Location | Scope | Use it for | Shared with |
+|---|---|---|---|
+| `~/.claude/CLAUDE.md` | You, in every project | Personal preferences and tooling habits | Nobody |
+| `./CLAUDE.md` or `./.claude/CLAUDE.md` | This project, everyone | Build commands, conventions, architecture | Your team, via git |
+| `./CLAUDE.local.md` | You, in this project | Sandbox URLs, your test data | Nobody (gitignore it) |
+
+There is also a managed policy location, used by organizations to push company-wide rules to every machine. You will not create one; know it exists so you are not baffled when a rule appears from nowhere.
+
+The rule of thumb is a question: **would a new teammate need this?** If yes, it belongs in the committed project file. If it is about *you*, it belongs in your user file or the local one.
+
+### When it loads
+
+Claude walks up the directory tree from wherever you launched, collecting `CLAUDE.md` and `CLAUDE.local.md` at every level, then concatenates them from the filesystem root downward. Instructions closest to where you started are read last. In a monorepo, both `root/CLAUDE.md` and `root/team/CLAUDE.md` apply.
+
+Files in *sub*directories behave differently: they load on demand, only once Claude reads a file in that directory.
+
+One detail explains a loose end from <LessonLink id="B2.2" />: **the project-root `CLAUDE.md` survives compaction.** Afterwards Claude re-reads it from disk and re-injects it. An instruction you merely typed into the conversation gets no such treatment. That is the mechanical reason "put durable rules in `CLAUDE.md`" is real advice rather than tidiness.
+
+### What `/init` generates
+
+You do not write the first draft by hand.
+
+```prompt
+/init
+```
+
+Claude reads your codebase and writes a starting `CLAUDE.md` from what it finds: the build system, the test runner, the scripts in your package manifest, the conventions it can infer from the code. If a `CLAUDE.md` already exists, `/init` proposes improvements rather than overwriting it. If the repo has an `AGENTS.md`, or config from other coding tools, `/init` reads those too and folds in the relevant parts.
+
+Treat its output as **a first draft by someone who has read your code but never worked on it.** It is good at the discoverable facts and blind to everything else. Everything else is your job.
+
+## Walkthrough: dissect, then edit
+
+Run `/init` and you get something along these lines:
+
+```text
+# my-project
+
+## Commands
+- `npm run build` — production build
+- `npm test` — run the test suite
+- `npm run lint` — lint with ESLint
+
+## Architecture
+- `src/api/` — Express route handlers
+- `src/db/` — Prisma client and migrations
+- `src/utils/` — shared helpers
+
+## Code style
+- TypeScript throughout
+- Prettier for formatting
+```
+
+Now read it critically, line by line, asking the one question that matters:
+
+> **Would removing this line cause Claude to make a mistake?**
+
+**Commands: keep.** Claude cannot guess that your test script is `npm test` rather than `npm run test:unit`. This is the highest-value section in the file, and the one `/init` reliably gets right.
+
+**Architecture: trim hard.** `src/api/` holds route handlers, and Claude discovers that the instant it opens the folder. A file-by-file map of your repo is the classic way to waste eighty lines. Keep only what is *surprising*: "despite the name, `src/utils/` is legacy and nothing new should go there."
+
+**"TypeScript throughout": cut.** Claude can see the `.ts` extensions.
+
+**"Prettier for formatting": probably cut.** If Prettier runs on commit, Claude needs no instruction. If it does not, then this is a real rule and it should say what to actually do.
+
+What is missing is everything a newcomer could only learn by being told:
+
+```text
+## Commands
+- `npm run build` — production build
+- `npm test` — run the test suite. Prefer a single test file over the full suite.
+- `npm run lint` — lint with ESLint
+
+## Conventions
+- Use `pnpm`, never `npm`, despite the scripts above.
+- API handlers live in `src/api/handlers/`. One handler per file.
+- `src/utils/` is legacy. Put new shared code in `src/lib/`.
+
+## Always / never
+- IMPORTANT: run `npm run lint` before calling a change done.
+- Never edit files in `src/db/migrations/`. They are applied and immutable.
+- Never commit directly to `main`.
+```
+
+Every line is now something Claude could not have worked out by reading the code, and every line is **concrete enough to check.** Compare:
+
+| Vague, mostly ignored | Specific, followed |
+|---|---|
+| "Format code properly" | "Use 2-space indentation" |
+| "Test your changes" | "Run `npm test` before committing" |
+| "Keep files organized" | "API handlers live in `src/api/handlers/`" |
+| "Write clean code" | *(delete it)* |
+
+That is the style models actually follow: **short, imperative, specific, with an example wherever the rule is subtle.** Emphasis (`IMPORTANT`, `YOU MUST`) does lift adherence on the rules you care most about, but the technique stops working the moment everything is important.
+
+## Use-case scenarios
+
+**Claude used the wrong package manager, twice.** Add one line: `Use pnpm, never npm.` The trigger for writing a rule is the *second* time you correct the same thing.
+
+**A code review caught something Claude should have known.** That is a `CLAUDE.md` line waiting to be written: the reviewer knew a project fact Claude did not.
+
+**You keep pasting the same three sentences of setup at the start of every session.** Move them into the file. If you type it twice, it is a rule.
+
+**Your team has a branch-naming convention.** Committed project `CLAUDE.md`, so that everyone's Claude follows it.
+
+**You personally like Claude to outline its plan before large edits.** That is about you, not the project. `~/.claude/CLAUDE.md`.
+
+**You need a scratch database URL that would be meaningless to a teammate.** `CLAUDE.local.md`, gitignored.
+
+## When to use it, and when not to
+
+Use `CLAUDE.md` for facts that apply to **every session** in **this project**: build and test commands, conventions that differ from the defaults, repository etiquette, environment quirks, non-obvious gotchas, and architectural decisions invisible from the code.
+
+Reach for something else when:
+
+- **The instruction must happen every time, with zero exceptions.** `CLAUDE.md` is advisory; a hook is deterministic. "Run the formatter after every edit" is a hook.
+- **It only matters in one corner of the codebase.** A path-scoped rule in `.claude/rules/` loads only when Claude touches matching files, so it costs nothing the rest of the time.
+- **It is a multi-step procedure you invoke occasionally.** That is a skill, and skills load on demand rather than every session.
+- **It changes frequently.** A stale file is worse than no file, because Claude believes it.
+- **Claude can discover it by reading the code.** Then it is not information, it is cost.
+
+**The cost, stated plainly:** `CLAUDE.md` loads in full at the start of every session, however long it is. Target **under 200 lines.** Past that you are paying context on every session and, worse, diluting the rules you actually care about. The second half of that sentence is the one that bites.
+
+## Pitfalls
+
+- **The bloated file.** The most common failure by far. If Claude keeps ignoring a rule you definitely wrote down, the file is probably too long and the rule is drowning. Apply the test to every line: would removing this cause a mistake? If not, delete it.
+- **Vague instructions.** "Write good tests" changes nothing. Claude cannot verify it, so it cannot comply with it. Every rule should be concrete enough that *you* could check it.
+- **Documenting what the code already says.** A file-by-file description of the repo is pure cost. Claude reads the repo.
+- **Contradicting yourself.** When two rules conflict, across your user file and the project file, or across a monorepo's nested files, Claude may pick one arbitrarily. Review the whole set periodically, not each file alone.
+- **Treating it as enforcement.** It shapes behavior; it does not guarantee it. If a violation would be unacceptable rather than annoying, you need a hook.
+- **Writing it once and never touching it again.** Treat it like code: review it when things go wrong, prune it regularly, and test a change by watching whether Claude's behavior actually shifts. Committed to git, it compounds in value across the team.
+
+One small trick: block-level HTML comments (`<!-- note to maintainers -->`) are stripped before the file reaches Claude. Notes for your teammates cost zero tokens.
+
+## Try It
+
+**Environment:** the public repo you cloned in <LessonLink id="B2.1" />. If you use your own project instead, commit your work first and do this on a branch, because `/init` writes a file.
+
+1. Start Claude in the repo and run `/init`. Read every line it generated.
+2. Delete at least two lines that fail the test: *would removing this cause Claude to make a mistake?*
+3. Add two conventions of your own that Claude could not have inferred from the code. Make them specific and checkable. For example:
+
+   ```text
+   ## Conventions
+   - Always add a one-line docstring to exported functions.
+   - IMPORTANT: never edit files under `dist/`. They are generated.
+   ```
+
+4. Run `/memory` and confirm your file is listed as loaded.
+5. **Start a fresh session** (`/clear` is enough) and ask Claude to make a small change that your conventions apply to. Say nothing about the conventions.
+
+**Success criteria:** Claude follows both conventions unprompted, and you can name which generated lines you deleted and why. If it ignores a rule, make that rule more specific and try again. That iteration *is* the skill.
+
+## FAQ
+
+**What is `CLAUDE.md`, and when is it read?** A markdown file of standing instructions, loaded into context at the start of every session, and re-injected from disk after compaction (for the project-root file). It is a message to Claude, not enforced configuration.
+
+**What belongs in it?** Bash commands Claude cannot guess, code style rules that differ from the defaults, testing instructions, repository etiquette, environment quirks, project-specific architectural decisions, and non-obvious gotchas.
+
+**What does not belong?** Anything Claude can learn by reading the code, standard language conventions it already knows, detailed API documentation (link to it instead), information that changes often, long explanations, file-by-file repo descriptions, and self-evident advice like "write clean code."
+
+**What does `/init` actually generate?** A first draft from analyzing your codebase: build system, test framework, scripts, and inferable conventions. It reads an existing `AGENTS.md` or other tools' config files if present, and it suggests improvements rather than overwriting an existing `CLAUDE.md`.
+
+**Project or user-level?** Ask whether a new teammate would need it. A team fact goes in the committed `./CLAUDE.md`. A personal preference across all your projects goes in `~/.claude/CLAUDE.md`. Personal *and* project-specific goes in `./CLAUDE.local.md`, gitignored.
+
+**How big is too big?** Target under 200 lines. `CLAUDE.md` loads in full however long it is, so length costs you on every session and dilutes the rules you care about. Growth is a signal to move things into rules or skills.
+
+**Why is Claude ignoring my instruction?** Three usual causes, in order of likelihood: the file is too long and the rule is lost; the rule is too vague to act on; or the file is not being loaded at all, which `/memory` tells you in seconds.
+
+**Can I split it up?** Yes, with `@path` imports. Be aware that imported files still load at launch, so it helps organization, not context cost. To genuinely reduce cost you want path-scoped rules.
+
+## Where next
+
+Your project now teaches Claude about itself. Two questions follow immediately.
+
+The first you may already have noticed: Claude sometimes remembers things you never wrote down. That is a second, separate memory system, and conflating it with `CLAUDE.md` causes real trouble. <LessonLink id="B3.2" /> pulls the two apart and says which one to manage deliberately.
+
+The second is the ceiling you just felt. If `CLAUDE.md` must stay short and is only advisory, what happens to instructions that are long, occasional, or non-negotiable? Those get scalable homes later: rules directories, skills, and hooks, all in Intermediate. For now, <LessonLink id="B3.3" /> continues the theme of controlling what Claude does, from the other direction: permission modes and plan mode.

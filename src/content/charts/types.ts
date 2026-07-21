@@ -5,6 +5,13 @@ export interface LessonRef {
   level: string
   module: string
   lesson: string
+  /**
+   * Optional heading id to scroll to inside the lesson, so a chart entry can land
+   * on the section that introduces it rather than the top of the page. Must match a
+   * heading's `rehype-slug` id; `index.test.ts` checks every anchor against the
+   * lesson's real headings.
+   */
+  anchor?: string
 }
 
 export type ChartTarget =
@@ -24,6 +31,37 @@ export interface ChartCard {
   tone?: ChartTone
   /** Omitted => a plain, non-interactive card. */
   target?: ChartTarget
+}
+
+/**
+ * One slice of a `bar` row. Structurally a `ChartCard` (so it activates through
+ * the same lesson/popup targets) plus the share of the bar it occupies.
+ */
+export interface ChartBarSegment extends ChartCard {
+  /** Relative share of the bar. Widths are normalized against the row's total. */
+  percent: number
+}
+
+/**
+ * One line of a `ledger` row: a feature and what it costs. Structurally a
+ * `ChartCard` (so it activates through the same lesson/popup targets) plus an
+ * absolute token cost. Unlike `ChartBarSegment.percent`, `tokens` survives a
+ * feature being toggled off, which is what makes the Phase 2 simulator a
+ * rendering change rather than a data rewrite.
+ *
+ * A ledger row measures its entries against `windowTokens` when set (shares of a
+ * capacity, with the remainder rendered as free space) and against their own sum
+ * when omitted (a breakdown of a total). Omit it whenever the entries are small
+ * relative to the capacity: startup overhead is ~4% of a 200k window, so the
+ * window-relative view rounds most entries to 0% and shows nothing.
+ */
+export interface LedgerEntry extends ChartCard {
+  /** Absolute cost. The source of truth; shares are derived. */
+  tokens: number
+  /** Fixed overhead (CLAUDE.md) vs optional (an MCP server). Defaults to false. */
+  toggleable?: boolean
+  /** Initial state for a toggleable entry. Defaults to true. */
+  defaultOn?: boolean
 }
 
 export type FlowNodeRole = 'default' | 'question' | 'leaf'
@@ -54,10 +92,15 @@ export interface FlowEdge {
 
 export type FlowDirection = 'TB' | 'LR'
 
+export type GridColumns = 2 | 3 | 4
+
 export type ChartRow =
   | { kind: 'cards'; cards: ChartCard[] }
   | { kind: 'connector'; label: string }
   | { kind: 'flow'; nodes: FlowNode[]; edges: FlowEdge[]; direction?: FlowDirection; guided?: boolean }
+  | { kind: 'bar'; segments: ChartBarSegment[]; label?: string; caption?: string }
+  | { kind: 'grid'; items: ChartCard[]; label?: string; columns?: GridColumns; caption?: string }
+  | { kind: 'ledger'; entries: LedgerEntry[]; windowTokens?: number; label?: string; caption?: string }
 
 export interface ChartDef {
   id: string
