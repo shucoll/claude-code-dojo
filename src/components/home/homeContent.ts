@@ -56,5 +56,5 @@ export const CLOSING = {
 
 export const FOOTER = {
   tagline: 'An interactive course for getting the most out of Claude Code.',
-  note: 'Built with Claude Code.',
+  note: 'Built with Claude Code and',
 } as const
