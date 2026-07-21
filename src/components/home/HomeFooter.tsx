@@ -4,7 +4,7 @@ function HeartIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="inline-block h-3.5 w-3.5 fill-primary"
+      className="inline-block h-3.5 w-3.5 fill-destructive"
       role="img"
       aria-label="love"
     >
