@@ -4,9 +4,10 @@ slug: "connect-github-via-mcp"
 title: "Connect GitHub via MCP"
 type: "milestone"
 order: 2
-estimatedMinutes: 20
+estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-07-20"
+teaches: ["mcp-project-scope", "mcp-vs-cli-in-practice"]
 prerequisites: ["I8.1"]
 references: ["I5.1", "I5.2", "I5.4"]
 docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/mcp-quickstart"]
@@ -14,18 +15,165 @@ docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/do
 
 # Connect GitHub via MCP
 
+The repository from <LessonLink id="I8.1" /> is on GitHub, and the environment knows how it wants to be built. Now give Claude a way to see the project it is building against.
+
+There will be two paths to GitHub in this project, and keeping them straight now saves confusion later. The **running dashboard** fetches its own data at runtime, through its own token, using `@octokit/rest` or `requests`. That is the product. **Claude** reaches GitHub a different way, through an MCP server, and uses it to build and operate the project: inspecting the live repo while it works, and, next milestone, powering the release-notes and standup skills. This milestone sets up the second path.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Add the GitHub MCP server at project scope with a committed `.mcp.json` that carries no secret, authenticate it, and verify Claude can query the live repository through it. Then use that connection to scaffold the dashboard's skeleton, so the milestone ends with a server that boots and shows one real view built from live GitHub data.
+
+**Environment:** the `pulseboard` repository from <LessonLink id="I8.1">I8.1</LessonLink>. You will need a GitHub personal access token that can read the repositories you want on the dashboard; a fine-grained token with read-only contents, issues, and pull-requests access is enough.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Make the honest call: MCP or the `gh` CLI?
+
+<LessonLink id="I5.4" /> settled the general version of this and its default answer was the CLI: `gh` is installed, authenticated, and free of any startup cost. Skipping the argument here would waste the resolver. So walk its ladder for *this* project rather than assuming the server.
+
+- **Step 1, is there a good CLI already installed and authenticated?** Yes. For one developer reading PRs, that ends it, and you would reach for `gh`.
+- **Step 3, does the result feed something structured?** This is where PulseBoard leaves the default behind. The connection feeds the skills you build next milestone: `release-notes` reconciles merged pull requests into a formatted document, and `standup-summary` digests recent activity. Both want typed fields rather than text parsed out of `gh` output that changes shape on an edge case.
+
+The honest alternative is worth naming. You could stay on `gh --json` and write a skill that documents the exact commands and flags each procedure uses:
+
+```text
+# release-notes skill (the CLI alternative)
+- Run: gh pr list --state merged --json number,title,mergedAt,author
+- Filter to the release window, group by label, format per the template.
+```
+
+That works. It is lighter to set up and costs nothing at startup. What it gives up is the two rows <LessonLink id="I5.4">I5.4</LessonLink> flagged: the CLI hands back text a skill has to parse, and its permission rule matches command text (`Bash(gh *)`), which is coarser than a rule naming a tool identity. For a project that is about to run more of itself through hooks and subagents, being able to write `mcp__github__*` permission rules with real edges is worth the server. That tips it to MCP here, with clear eyes about what the CLI would have done.
+
+### 2. Add the GitHub MCP server at project scope
+
+The server is remote and HTTP, and it belongs in a committed `.mcp.json` so a teammate who clones the repo inherits it. Create `.mcp.json` at the repository root:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+The `${GITHUB_TOKEN}` is the part that makes this safe to commit. Claude Code expands environment variables inside `.mcp.json` at load time, so the file says *every developer authenticates with their own token* while the token itself never enters the repository, the pattern from <LessonLink id="I5.2" />. Write the literal `${GITHUB_TOKEN}`, not your actual token.
+
+One accuracy point that saves a confusing failure: that expansion reads the **shell environment Claude Code runs in**, not the app's `.env` file. The `.env` you create in step 4 is loaded by the dashboard at runtime; it does not reach `.mcp.json`. So export the token in your shell:
+
+```bash
+export GITHUB_TOKEN=ghp_your_token_here
+```
+
+Put that line in your shell profile if you want it to survive new terminals.
+
+### 3. Authenticate and verify
+
+`.mcp.json` is read at session start, so restart Claude Code, then confirm the server is live from your shell:
+
+```bash
+claude mcp list
+```
+
+You want `✔ Connected` next to `github`. A `! Needs authentication` or a failed connection almost always means `GITHUB_TOKEN` is unset or wrong in this shell; `claude mcp list` names a missing-variable warning when the expansion found nothing.
+
+The first time Claude Code sees the project-scoped server it asks you to approve it, because a cloned repository should not launch connections on your behalf unasked. Approve it once.
+
+Then verify from inside a session that the connection reaches your actual repository, rather than trusting the green check:
+
+```prompt
+Use the github server to list the open pull requests on my pulseboard repo, with their numbers and titles.
+```
+
+The tool call in the output is labelled `github` and its name carries the `mcp__github__` prefix. That is the identity you will name in a permission rule later.
+
+### 4. Scaffold the dashboard against the connection
+
+Claude can now see the repo, so put it to work on the skeleton. This mirrors the scaffold discipline you already know: a prompt with a clear finish line, checked against `CLAUDE.md`. The finish line is a summary view built from live GitHub data, which proves the app's own runtime path works end to end.
+
+<WhenLang is="javascript">
+
+```prompt
+Read CLAUDE.md. Scaffold the project it describes: an Express server in server.js, a data.js that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the environment and fetches open-issue and open-PR counts through @octokit/rest, caching them in a SQLite table via better-sqlite3. 
+Add a GET /api/summary route that returns those counts, a GET /health route, a public/index.html that shows the two numbers, package.json with the start and test scripts, and one test in tests/ asserting /api/summary returns the two fields. Put GITHUB_TOKEN and GITHUB_REPO in .env. Then run the test.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Read CLAUDE.md. Scaffold the project it describes: a Flask app in app.py, a
+data.py that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the
+environment and fetches open-issue and open-PR counts through the GitHub REST
+API using requests, caching them in a SQLite table. Add a GET /api/summary
+route that returns those counts, a GET /health route, a public/index.html that
+shows the two numbers, a requirements.txt, and one test in tests/ asserting
+/api/summary returns the two fields. Put GITHUB_TOKEN and GITHUB_REPO in .env.
+Then run the test.
+```
+
+</WhenLang>
+
+Point `GITHUB_REPO` at a repository with real activity so the dashboard has something to show; your own busiest project, or any public repo you follow, works. The `.env` Claude writes holds the token and is already covered by <LessonLink id="I8.1">I8.1</LessonLink>'s deny rule and `.gitignore`, so it stays on your machine.
+
+Watch the data-access rule from <LessonLink id="I8.1">I8.1</LessonLink> do its job here. When Claude opens the data layer, the scoped rule loads and the fetch lands in `data.js` or `data.py`, not in a route. Then boot it and confirm real numbers:
+
+<WhenLang is="javascript">
+
+```bash
+npm start
+# in a second terminal:
+curl localhost:3000/api/summary
+# {"openIssues": 12, "openPRs": 3}
+npm test
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+flask --app app run
+# in a second terminal:
+curl localhost:5000/api/summary
+# {"openIssues": 12, "openPRs": 3}
+pytest
+```
+
+</WhenLang>
+
+### 5. Commit and push
+
+Commit the connection and the scaffold, and push to the repository the server points at.
+
+```prompt
+Commit .mcp.json and the scaffold with a message describing the GitHub
+connection and the summary view, then push.
+```
+
+Because `git push` is on the `ask` list from <LessonLink id="I8.1">I8.1</LessonLink>, this one stops for your confirmation even though the commit did not. That is the policy working as designed.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- A committed `.mcp.json` adding the GitHub server at project scope, with the token referenced as `${GITHUB_TOKEN}` and never written into the file.
+- A verified connection: `claude mcp list` shows `✔ Connected`, and Claude answered a live query about your repository through it.
+- A dashboard skeleton that boots, fetches open-issue and open-PR counts through its own token, caches them in SQLite, and serves them at `/api/summary` and on a placeholder page.
+- One passing test, and a commit pushed to GitHub.
+
+**Done looks like:** the server connects under `/mcp`, `curl /api/summary` returns live counts from your chosen repository, the test suite is green, and `.env` is nowhere in the repo.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+The transferable decision here is that the right tool depends on the job in front of you, not on the tool's reputation. The resolver's default was the CLI, and it was right about the default. PulseBoard overrode it for reasons you could name from the same ladder: the data feeds skills that want structure, and the project is heading toward automation that wants permission rules with clean edges. Reaching for MCP because it felt like the modern choice would have been the wrong move; reaching for it because step 3 of the ladder pointed there is the right one, and the difference is that you can defend it.
+
+The committed `.mcp.json` also carried <LessonLink id="I8.1">I8.1</LessonLink>'s thesis forward. The connection is configuration in the repository: teammates get the server by cloning, and each person's token stays in their own environment. The environment keeps growing as a deliverable.
+
+Next milestone, <LessonLink id="I8.3" />: you turn the procedures you would otherwise re-explain every week, release notes and a standup digest, into skills built on the connection you just verified.
