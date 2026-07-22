@@ -171,7 +171,7 @@ export const curriculum: Level[] = [
             order: 1,
             estimatedMinutes: 14,
             volatility: 'stable',
-            verifiedAgainstDocsAt: '2026-07-09',
+            verifiedAgainstDocsAt: '2026-07-21',
             prerequisites: ['B2.1'],
             teaches: ['claude-md', 'init', 'standing-instructions'],
             references: ['B2.2'],

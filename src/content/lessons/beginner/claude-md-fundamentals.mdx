@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 14
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-09"
+verifiedAgainstDocsAt: "2026-07-21"
 prerequisites: ["B2.1"]
 teaches: ["claude-md", "init", "standing-instructions"]
 references: ["B2.2"]
@@ -190,7 +190,7 @@ One small trick: block-level HTML comments (`<!-- note to maintainers -->`) are 
    - IMPORTANT: never edit files under `dist/`. They are generated.
    ```
 
-4. Run `/memory` and confirm your file is listed as loaded.
+4. Run `/context` and confirm your file appears under **Memory files**.
 5. **Start a fresh session** (`/clear` is enough) and ask Claude to make a small change that your conventions apply to. Say nothing about the conventions.
 
 **Success criteria:** Claude follows both conventions unprompted, and you can name which generated lines you deleted and why. If it ignores a rule, make that rule more specific and try again. That iteration *is* the skill.
@@ -209,7 +209,7 @@ One small trick: block-level HTML comments (`<!-- note to maintainers -->`) are 
 
 **How big is too big?** Target under 200 lines. `CLAUDE.md` loads in full however long it is, so length costs you on every session and dilutes the rules you care about. Growth is a signal to move things into rules or skills.
 
-**Why is Claude ignoring my instruction?** Three usual causes, in order of likelihood: the file is too long and the rule is lost; the rule is too vague to act on; or the file is not being loaded at all, which `/memory` tells you in seconds.
+**Why is Claude ignoring my instruction?** Three usual causes, in order of likelihood: the file is too long and the rule is lost; the rule is too vague to act on; or the file is not being loaded at all, which `/context` tells you in seconds.
 
 **Can I split it up?** Yes, with `@path` imports. Be aware that imported files still load at launch, so it helps organization, not context cost. To genuinely reduce cost you want path-scoped rules.
 
