@@ -7,7 +7,7 @@ Intermediate/Advanced pathways. Pure frontend, no backend.
 - Vite + React + TypeScript (strict)
 - Tailwind CSS v4 (CSS-first config; `@import "tailwindcss"` + `@custom-variant`;
   **no tailwind.config.js**)
-- Framer Motion (animations), MDX (lesson content) — added in later phases
+- Framer Motion (animations), MDX (lesson content)
 - State: React Context + localStorage (`ccd:` namespace)
 - Tests: Vitest + React Testing Library (jsdom)
 
@@ -25,17 +25,18 @@ Intermediate/Advanced pathways. Pure frontend, no backend.
 - Brand = coral; green is reserved for success/completed. "Chunky" style (ink
   border + hard offset shadow) on `Button`/`Card`/`Badge` in `src/components/ui/`.
 
-## Load-bearing invariants (later phases)
+## Load-bearing invariants
 - `src/content/curriculum.ts` is the single source of truth for sidebar,
   routing, and progress.
 - All language-specific content lives in `src/content/snippets/*` (one file per
   language) and resolves with fallback to the default pack (JavaScript).
 
 ## Adding a chart
-Charts (`src/content/charts/`) are either linear card-flow stacks or branching
-flowcharts (`flow` rows, for decision trees/loops), embedded in lessons via
-`<ChartEmbed id="…" />`. To add one: define a `ChartDef`, register it in
-`index.ts`, and embed it. Full guide: `src/content/charts/README.md`.
+Charts (`src/content/charts/`) are stacks of typed rows — `cards`, `connector`,
+`flow` (branching flowcharts for decision trees/loops), `bar`, `grid`, and
+`ledger` — embedded in lessons via `<ChartEmbed id="…" />`. Nodes can target a
+lesson or a popup. To add one: define a `ChartDef`, register it in `index.ts`,
+and embed it. Full guide: `src/content/charts/README.md`.
 
 ## Adding lessons & languages
 Authoring is **frontmatter-first** and script-backed (`scripts/authoring/`, run via `tsx`),
@@ -59,6 +60,16 @@ wrapped by skills:
   coverage. Tiered: any
   frontmatter or coverage error fails; non-default pack gaps and leftover `@@TODO@@` stubs warn.
 
+## Lesson quality & freshness
+- **Style guide:** `docs/lesson-style-guide.md` holds the enforced prose/content rules
+  (em-dashes, self-referential emphasis, flourish clauses, fence discipline, etc.). The
+  `new-lesson` skill auto-runs the style check on each finished lesson; the `lesson-style`
+  subagent (`.claude/agents/lesson-style.md`) audits one lesson on demand.
+- **Freshness:** the `lesson-freshness` subagent (`.claude/agents/lesson-freshness.md`)
+  verifies a lesson against current Claude Code docs and repairs staleness. The
+  `refresh-lessons` skill batches this across a volatility category
+  (`/refresh-lessons stable|evolving|volatile`).
+
 ## Commands
 - `npm run dev` — dev server
 - `npm run build` — type-check + bundle
@@ -67,6 +78,8 @@ wrapped by skills:
 - `npm run check-snippets` — content check (frontmatter validation + snippet/prompt
   coverage); also runs in CI
 
-## Spec & plans
-- Design: `docs/superpowers/specs/2026-06-27-claude-code-craft-design.md`
-- Plans: `docs/superpowers/plans/`
+## Design history
+Original specs and build plans live under `docs/superpowers/{specs,plans}/`. They
+record the intent behind each phase but have drifted from the current
+implementation — treat the living sources (`design-system/MASTER.md`, the module
+READMEs, and this file) as authoritative, not those docs.
