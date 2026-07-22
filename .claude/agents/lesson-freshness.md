@@ -113,14 +113,19 @@ Status: STALE | CURRENT
 Verified against:
   - <url> (ok | moved → <new url> | 404 → <replacement or "removed">)
 Changes:
-  - [frontmatter] <field>: <what changed>
-  - [prose §<section heading>] <what changed and why, citing the doc>
-  - [code <pack>:<key> | inline §<section>] <what changed>
+  - [prose §<section heading>] "<old text>" → "<new text>" (<why, citing the doc>)
+  - [code <pack>:<key> | inline §<section>] "<old>" → "<new>" (<why>)
+  - [frontmatter] <field>: <old value> → <new value>
   (or "none" when Status is CURRENT and only the date was refreshed)
 Docs drift found but NOT auto-fixed (needs human):
   - <description with doc link, or "none">
 check-snippets: PASS | FAIL (<detail>)
 ```
+
+Every prose and code change entry MUST quote the **actual old and new text**
+(`"<old>" → "<new>"`), trimmed to the changed clause — enough that a reviewer
+understands the edit from the report alone, not just a description of it. Keep
+quotes short; elide the unchanged middle of a long sentence with `…`.
 
 When the lesson is current, keep it short:
 
