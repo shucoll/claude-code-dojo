@@ -42,7 +42,7 @@ export function LevelScreen() {
           <div
             key={lvl.id}
             className={cn(
-              'rounded-card border-2 border-ink bg-card shadow-hard',
+              'overflow-hidden rounded-card border-2 border-ink bg-card shadow-hard',
               lvl.comingSoon && 'opacity-60',
             )}
           >
