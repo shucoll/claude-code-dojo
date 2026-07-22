@@ -38,12 +38,18 @@ export function LogoMark({ className }: { className?: string }) {
   )
 }
 
-/** Full brand lockup: chip mark + "Claude Code Dojo" wordmark. */
+/**
+ * Full brand lockup: chip mark + "Claude Code Dojo" wordmark. The wordmark stays
+ * on one line and collapses to the chip mark alone on narrow screens, so the
+ * header controls keep their room instead of forcing the name to wrap.
+ */
 export function Logo({ className }: { className?: string }) {
   return (
     <div className={cn('flex items-center gap-2.5', className)}>
       <LogoMark />
-      <span className="font-mono text-lg font-bold">Claude Code Dojo</span>
+      <span className="hidden whitespace-nowrap font-mono text-lg font-bold md:inline">
+        Claude Code Dojo
+      </span>
     </div>
   )
 }
