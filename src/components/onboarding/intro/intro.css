@@ -51,3 +51,17 @@
   from { transform: translateX(-50%) translateY(100vh) rotateX(20deg); }
   to { transform: translateX(-50%) translateY(calc(-100% - 8vh)) rotateX(20deg); }
 }
+
+/* On narrow screens the perspective magnification pushes the (already-wrapped)
+   lines past the viewport edges, clipping them. Soften the perspective and
+   narrow the block so the projected width stays on-screen — the title is the
+   bottom-most, most-magnified line, so it benefits most. Mirrors the Tailwind
+   `sm` breakpoint used for the crawl's font sizes. */
+@media (max-width: 639px) {
+  .intro-crawl-viewport {
+    perspective: 620px;
+  }
+  .intro-crawl {
+    width: min(66vw, 22rem);
+  }
+}

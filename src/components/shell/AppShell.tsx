@@ -106,6 +106,11 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="absolute inset-y-0 left-0 z-[var(--z-modal)] overflow-y-auto overflow-x-hidden border-r-2 border-border bg-card shadow-hard-lg lg:relative lg:inset-auto lg:z-[var(--z-sidebar)] lg:bg-card/40 lg:shadow-none"
             >
               <div className="w-72">
+                {/* Picks up the overall-progress bar once it drops out of the
+                    header below `sm` (where the header copy is `hidden sm:flex`). */}
+                <div className="flex justify-end border-b-2 border-border p-3 sm:hidden">
+                  <ProgressBar />
+                </div>
                 <Sidebar />
               </div>
             </motion.aside>
