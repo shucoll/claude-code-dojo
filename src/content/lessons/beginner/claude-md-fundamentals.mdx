@@ -69,7 +69,7 @@ You do not write the first draft by hand.
 /init
 ```
 
-Claude reads your codebase and writes a starting `CLAUDE.md` from what it finds: the build system, the test runner, the scripts in your package manifest, the conventions it can infer from the code. If a `CLAUDE.md` already exists, `/init` proposes improvements rather than overwriting it. If the repo has an `AGENTS.md`, or config from other coding tools, `/init` reads those too and folds in the relevant parts.
+Claude reads your codebase and writes a starting `CLAUDE.md` from what it finds: the build system, the test runner, the scripts in your package manifest, the conventions it can infer from the code. If a `CLAUDE.md` already exists, `/init` proposes improvements rather than overwriting it. If the repo carries rules from other coding tools, `/init` reads Cursor rules (`.cursor/rules/`, `.cursorrules`) and Copilot rules (`.github/copilot-instructions.md`) and folds in the relevant parts. It does not pick up an existing `AGENTS.md` on its own; to reuse one, import it from your `CLAUDE.md` with `@AGENTS.md`.
 
 Treat its output as **a first draft by someone who has read your code but never worked on it.** It is good at the discoverable facts and blind to everything else. Everything else is your job.
 
@@ -203,7 +203,7 @@ One small trick: block-level HTML comments (`<!-- note to maintainers -->`) are 
 
 **What does not belong?** Anything Claude can learn by reading the code, standard language conventions it already knows, detailed API documentation (link to it instead), information that changes often, long explanations, file-by-file repo descriptions, and self-evident advice like "write clean code."
 
-**What does `/init` actually generate?** A first draft from analyzing your codebase: build system, test framework, scripts, and inferable conventions. It reads an existing `AGENTS.md` or other tools' config files if present, and it suggests improvements rather than overwriting an existing `CLAUDE.md`.
+**What does `/init` actually generate?** A first draft from analyzing your codebase: build system, test framework, scripts, and inferable conventions. It also folds in Cursor and Copilot rule files if present, and it suggests improvements rather than overwriting an existing `CLAUDE.md`. It does not read an existing `AGENTS.md` by default; import that into `CLAUDE.md` with `@AGENTS.md` to reuse it.
 
 **Project or user-level?** Ask whether a new teammate would need it. A team fact goes in the committed `./CLAUDE.md`. A personal preference across all your projects goes in `~/.claude/CLAUDE.md`. Personal *and* project-specific goes in `./CLAUDE.local.md`, gitignored.
 
