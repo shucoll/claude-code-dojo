@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 372 64" width="372" height="64" fill="none" role="img" aria-label="Claude Code Dojo">
+  <!-- chip mark: coral tile, ink border + hard offset shadow, prompt >_ -->
+  <rect x="13" y="11" width="44" height="44" rx="12" fill="#0F172A"/>
+  <rect x="8" y="6" width="44" height="44" rx="12" fill="#D97757" stroke="#0F172A" stroke-width="3"/>
+  <polyline points="20,18 29,28 20,38" stroke="#FFF7F2" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="31" y="34" width="11" height="5" rx="2.5" fill="#FFF7F2"/>
+  <!-- wordmark -->
+  <text x="72" y="40" font-family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace" font-size="27" font-weight="700" letter-spacing="-0.5" fill="#0F172A">Claude Code Dojo</text>
+</svg>
