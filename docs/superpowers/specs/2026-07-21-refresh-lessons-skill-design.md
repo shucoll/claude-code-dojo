@@ -22,7 +22,7 @@ An unrecognized argument stops with the three valid values.
 |---|---|
 | Batch size | 10 lessons per window, in true curriculum order. |
 | Between batches | Pause and ask the user before the next batch. |
-| Report | Markdown table in the **session scratchpad**, ephemeral, not committed. |
+| Report | Markdown table in the repo's gitignored **`refresh-log/`** folder, not committed. |
 | Skip policy | Skip lessons whose `verifiedAgainstDocsAt` is today (`SKIPPED (fresh)` row). |
 | Regeneration | **Orchestrator** runs `gen:curriculum` + `check-snippets` once per batch; agents do not, to avoid racing on the shared `curriculum.ts`. |
 | Changes column | Literal `"old" → "new"` quotes per prose/code edit, readable from the table alone. |
@@ -49,7 +49,7 @@ Three pieces:
 1. Parse category (default `volatile`; validate).
 2. `listLessons.ts --volatility <cat>` → ordered list. Empty → report and stop.
    Announce total + batch count.
-3. Create `<scratchpad>/refresh-lessons-<cat>-<date>.md` with the table header.
+3. Create `refresh-log/refresh-lessons-<cat>-<date>.md` (gitignored) with the table header.
 4. For each window of 10 lessons:
    - **Skip-fresh**: `verifiedAgainstDocsAt == today` → record `SKIPPED (fresh)`
      row, no dispatch.
@@ -86,4 +86,4 @@ Status ∈ `STALE` / `CURRENT` / `SKIPPED (fresh)` / `ERROR`. Multi-item cells u
 - Never hand-edit `curriculum.ts`; always regenerate.
 - `check-snippets` must pass before advancing batches.
 - No commits, no `git init` from the skill or its agents.
-- Report is ephemeral (scratchpad), never added to the repo.
+- Report lives in gitignored `refresh-log/`, never added to the repo.

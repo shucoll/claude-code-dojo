@@ -1,6 +1,6 @@
 ---
 name: refresh-lessons
-description: Use to check a whole volatility category of Claude Code Dojo lessons for staleness in batches. Invoked as `/refresh-lessons <category>` where category is stable | evolving | volatile (default volatile). Dispatches the lesson-freshness subagent at the first 10 lessons in that category, collects each report into a scratchpad markdown table as agents finish, regenerates + validates once per batch, then asks before running the next batch until the category is done.
+description: Use to check a whole volatility category of Claude Code Dojo lessons for staleness in batches. Invoked as `/refresh-lessons <category>` where category is stable | evolving | volatile (default volatile). Dispatches the lesson-freshness subagent at the first 10 lessons in that category, collects each report into a gitignored refresh-log/ markdown table as agents finish, regenerates + validates once per batch, then asks before running the next batch until the category is done.
 ---
 
 # Refresh a category of lessons
@@ -38,9 +38,11 @@ that volatility and stop. Otherwise announce the total and the batch count
 
 ## Step 3 — create the report file
 
-Create the report in **your session scratchpad directory** (the one named in your
-system prompt), named `refresh-lessons-<category>-<YYYY-MM-DD>.md`. Get today's
-date with `date +%F`. It is an ephemeral working artifact — do not commit it.
+Create the report in the repo's **`refresh-log/`** directory, named
+`refresh-lessons-<category>-<YYYY-MM-DD>.md`. Get today's date with `date +%F`.
+That folder is gitignored (`refresh-log/.gitignore` is `*`), so the report is a
+local working artifact that never gets committed. If `refresh-log/` does not
+exist, create it with a `.gitignore` containing a single `*` first.
 
 Write a title and the table header:
 
