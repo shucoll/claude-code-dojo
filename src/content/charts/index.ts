@@ -1,3 +1,4 @@
+import { advancedStackMap } from './advanced-stack-map'
 import { agenticLoopDiagram } from './agentic-loop-diagram'
 import { beginnerWorkflowMap } from './beginner-workflow-map'
 import { claudeCodeSystemMap } from './claude-code-system-map'
@@ -24,6 +25,7 @@ const charts: Record<string, ChartDef> = {
   [commandBeltReference.id]: commandBeltReference,
   [toolBeltMap.id]: toolBeltMap,
   [intermediateStackMap.id]: intermediateStackMap,
+  [advancedStackMap.id]: advancedStackMap,
   [permissionRuleShapes.id]: permissionRuleShapes,
   [dotClaudeDirectoryMap.id]: dotClaudeDirectoryMap,
   [hookLifecycleClickable.id]: hookLifecycleClickable,

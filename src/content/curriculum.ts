@@ -1045,6 +1045,7 @@ export const curriculum: Level[] = [
             teaches: ['level-orientation', 'advanced-map'],
             references: ['I7.3', 'I8.7'],
             docsSources: ['https://code.claude.com/docs/en/features-overview', 'https://code.claude.com/docs/en/agents'],
+            interactive: [{ kind: 'diagram', spec: 'advanced-stack-map' }],
             content: () => import('./lessons/advanced/from-configured-to-production-grade.mdx'),
           },
         ],
