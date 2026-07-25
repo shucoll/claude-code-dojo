@@ -31,6 +31,6 @@ export const structure: LevelDef[] = [
     id: 'advanced',
     title: 'Advanced',
     order: 3,
-    modules: [],
+    modules: [{ code: 'A0', slug: 'level-overview', title: 'Level Overview', order: 0 }, { code: 'A1', slug: 'orchestration-and-parallel-work', title: 'Orchestration and Parallel Work', order: 1 }, { code: 'A2', slug: 'automation-and-ci-cd', title: 'Automation and CI/CD', order: 2 }, { code: 'A3', slug: 'production-safety-and-governance', title: 'Production Safety and Governance', order: 3 }, { code: 'A4', slug: 'performance-cost-and-scale', title: 'Performance, Cost, and Scale', order: 4 }, { code: 'A5', slug: 'building-and-distributing-extensions', title: 'Building and Distributing Extensions', order: 5 }, { code: 'A6', slug: 'the-agent-sdk', title: 'The Agent SDK', order: 6 }, { code: 'A7', slug: 'guided-project-ship-it-like-a-team', title: 'Guided Project: Ship It Like a Team', order: 7 }],
   },
 ]
