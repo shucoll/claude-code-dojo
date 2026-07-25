@@ -25,9 +25,9 @@ You finished Intermediate by packaging PulseBoard's environment as the `pulseboa
 
 Every technique so far shared four assumptions: one developer, one session, running interactively, with you watching. Production breaks all four.
 
-- **The epic that does not fit in one session.** Three independent pieces of work want three sessions, and three sessions in one checkout overwrite each other's files. You have no way to run them at once, no screen to watch them from, and no way to tell afterwards whether the parallelism paid for itself.
-- **The review you run by hand on every pull request.** You want it to run on the pull request instead, on a machine you are not sitting at, triggered by the repository rather than by you. Then you have to answer what your team lead asks next: what does that cost per month?
-- **The setup that has to survive twenty developers.** `ENVIRONMENT.md` explains your choices to someone who reads it. Some rules have to hold for the person who does not, and a written convention cannot do that.
+- An epic breaks into three independent pieces of work. Each wants its own session, and three sessions sharing one checkout will overwrite each other's files. Even once you solve that, you still need somewhere to watch all three from, and a way to tell afterwards whether running them in parallel was worth what it cost.
+- You run the same review by hand on every pull request, and you would rather the repository ran it for you, on a machine you are not sitting at. Then your team lead asks what that costs per month, and you need an answer.
+- Your setup has to survive twenty developers. `ENVIRONMENT.md` explains your choices to anyone who reads it, but some rules have to hold for the person who does not, and a written convention cannot do that.
 
 Intermediate was about *shaping* Claude Code. Advanced is about *operating* it.
 
@@ -37,7 +37,7 @@ The level splits into six territories, one per module, and each removes one of t
 
 <ChartEmbed id="advanced-stack-map" />
 
-The vertical order is dependency, not difficulty. The last three sit side by side because nothing forces them into a sequence.
+The vertical order tracks dependency rather than difficulty. The last three sit side by side because nothing forces them into a sequence.
 
 ## How it fits together
 
@@ -45,7 +45,7 @@ The vertical order is dependency, not difficulty. The last three sit side by sid
 
 <LessonLink id="A3.1">Safety and governance (A3)</LessonLink> is a boundary condition on that automation. An agent reads untrusted input, and an unattended agent acts on it with nobody present to refuse, so the sandbox tier and the permission rules are what make a scheduled job defensible.
 
-The remaining three answer questions the first three raise. <LessonLink id="A4.1">Cost and scale (A4)</LessonLink> is the meter: parallel work multiplies token spend, and until you measure it, every claim about which arrangement was cheaper is a guess. <LessonLink id="A5.1">Extensions (A5)</LessonLink> is distribution: your plugin acquires versions, a marketplace, and an upgrade path. <LessonLink id="A6.1">The Agent SDK (A6)</LessonLink> is the exit: the same engine, minus the terminal, embedded in software you own.
+The remaining three answer questions the first three raise. Parallel work multiplies token spend, so <LessonLink id="A4.1">cost and scale (A4)</LessonLink> is where you learn to measure it; until you do, every claim about which arrangement was cheaper is a guess. <LessonLink id="A5.1">Extensions (A5)</LessonLink> turns your plugin into something other people can install and upgrade, with versions and a marketplace behind it. And <LessonLink id="A6.1">the Agent SDK (A6)</LessonLink> takes the same engine out of the terminal entirely, so you can embed it in software you own.
 
 ## Suggested route
 
