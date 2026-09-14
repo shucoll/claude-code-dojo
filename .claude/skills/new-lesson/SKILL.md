@@ -148,14 +148,25 @@ footer.
 
 3. Fill content:
    - **Follow the lesson style guide: `docs/lesson-style-guide.md`.** It is the
-     canonical, up-to-date home for the prose rules (em-dashes minimal/none, no
-     self-referential emphasis, say each point once, no "honestly", no flourish
-     clauses, no section meta-narration) and the content-mechanics rules (fence
-     discipline, no bare dotted ids outside `<LessonLink>`, every inline external
-     URL in `docsSources`). These are standing user preferences, flagged
-     repeatedly across reviews. Run the grep commands in the guide before calling
-     a lesson done, and read the prose for the judgment rules; the `lesson-style`
-     subagent checks a lesson against this guide and reports what it flags.
+     canonical, up-to-date home for the prose rules and the content mechanics.
+     Read it before writing, not after. The prose rules cover emphasis and
+     significance (zero em-dashes, no self-referential emphasis, no inflated
+     significance, no aphorism formulas, no promotional language), sentence shapes
+     (no flourish clauses, negative parallelisms, staccato runs, `-ing` pile-ons,
+     copula avoidance, subjectless fragments, false ranges, forced rule of three),
+     word choice (the AI-vocabulary and filler lists, no over-hedging, stable
+     terminology, no rhetorical openers such as "honestly"), structure and framing
+     (no meta-narration or signposting, no fragmented headers, say each point
+     once, no generic closing paragraph, no chatbot artifacts, no diff-anchored
+     framing, never speculate past the docs), and formatting (sparing bold,
+     sentence-case author headings, no prose emoji, straight quotes). The
+     mechanics are fence discipline, no bare dotted ids outside `<LessonLink>`,
+     and every inline external URL in `docsSources`. Simulated file and terminal
+     content inside fences is exempt from all of the prose rules; so is
+     frontmatter and the template's canonical `##` headings. Run the grep commands
+     in the guide before calling a lesson done, and read the prose for the
+     judgment rules; the `lesson-style` subagent checks a lesson against this
+     guide and reports what it flags.
    - The scaffolder writes the anatomy for the chosen `--type` as headings with
      `@@TODO@@` guidance comments describing what belongs in each section
      (e.g. `core` gets "The problem" → "The concept" → "How it works" →
