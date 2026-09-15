@@ -1,6 +1,6 @@
 ---
 name: refresh-lessons
-description: Use to check a whole volatility category of Claude Code Dojo lessons for staleness in batches. Invoked as `/refresh-lessons <category>` where category is stable | evolving | volatile (default volatile). Dispatches the lesson-freshness subagent at the first 10 lessons in that category, style-checks every lesson whose prose it rewrote, collects each report into a gitignored refresh-log/ markdown table as agents finish, regenerates + validates once per batch, then asks before running the next batch until the category is done.
+description: Use to check a whole volatility category of Claude Code Dojo lessons for staleness in batches. Invoked as `/refresh-lessons <category>` where category is stable | evolving | volatile (default volatile). Dispatches the lesson-freshness subagent at the first 10 lessons in that category, collects each report into a gitignored refresh-log/ markdown table as agents finish, regenerates + validates once per batch, then asks before running the next batch until the category is done.
 ---
 
 # Refresh a category of lessons
@@ -8,16 +8,14 @@ description: Use to check a whole volatility category of Claude Code Dojo lesson
 You are the **orchestrator**. You dispatch the `lesson-freshness` subagent (one
 per lesson), collect its structured report, and drive batches of 10 across an
 entire volatility category. The subagent does the docs verification and editing;
-you do the enumeration, batching, regeneration, validation, style-gating, and
-reporting.
+you do the enumeration, batching, regeneration, validation, and reporting.
 
 ## Prerequisite
 
-This skill dispatches `subagent_type: lesson-freshness` and
-`subagent_type: lesson-style`. If either agent is not in the available-agents
-list, it was added after this session started — tell the user to restart Claude
-Code so `.claude/agents/` registers, then stop. Do not substitute a
-general-purpose agent silently.
+This skill dispatches `subagent_type: lesson-freshness`. If that agent is not in
+the available-agents list, it was added after this session started — tell the user
+to restart Claude Code so `.claude/agents/` registers, then stop. Do not
+substitute a general-purpose agent silently.
 
 ## Step 1 — parse the category
 
@@ -61,8 +59,8 @@ Write a title and the table header:
 
 <total> lessons, <batch count> batches.
 
-| Lesson | Status | Changes made | Needs human | Docs verified | Verified | Check | Style |
-|---|---|---|---|---|---|---|---|
+| Lesson | Status | Changes made | Needs human | Docs verified | Verified | Check |
+|---|---|---|---|---|---|---|
 ```
 
 ## Step 4 — batch loop (windows of 10 lessons)
@@ -113,64 +111,29 @@ responsible, and ask the user how to proceed (fix by hand, dispatch a corrective
 `lesson-freshness` run at the named lesson, or revert that lesson). Only continue
 once the check passes.
 
-### 4d. Style-check the prose this batch rewrote
-
-`lesson-freshness` writes replacement prose, but it carries only a four-line
-paraphrase of the style rules (`.claude/agents/lesson-freshness.md`), not
-`docs/lesson-style-guide.md`. A stale lesson can therefore come back accurate and
-off-voice. This step is the gate that catches that, mirroring step 5 of the
-`new-lesson` skill.
-
-**Which lessons.** Every lesson in the window whose agent reported prose or code
-edits beyond the `verifiedAgainstDocsAt` bump — in practice, every `STALE` row.
-Lessons that only had their date bumped (`CURRENT`) need no style check; record
-Style as `n/a (date only)`.
-
-**Dispatch** all of them in a single message (multiple `lesson-style` calls, by
-dotted id) so they run concurrently. The agent is read-only and returns a
-flag-only report.
-
-**Then triage each report — the flags are not all yours to act on.** `lesson-style`
-audits the whole lesson, so it will flag author prose this sweep never touched.
-Split the flags:
-
-- **On text this batch wrote** (match against the `"old" → "new"` quotes in the
-  freshness report) — in scope. These are regressions the sweep introduced.
-- **On pre-existing prose** — out of scope for a freshness sweep. Record them in
-  the Style cell prefixed `pre-existing:` and leave the text alone. Widening a
-  refresh into a style rewrite is how a reviewable diff stops being reviewable.
-
-Within the in-scope flags, do not apply anything blindly: `CLEAR` flags are
-usually genuine, `REVIEW` flags are judgment calls, and prose rules do not apply
-to simulated file/terminal content inside fences, so discard flags that misfire
-there. Keep only what genuinely needs a fix, and be ready to say why you dropped
-the rest.
-
-**Verify with the user before editing.** Surface the in-scope flags you judged
-valid and the specific change you propose for each at the 4f pause, and get their
-go-ahead. Apply only what they approve, then re-run `npm run check-snippets`.
-
-### 4e. Append rows
+### 4d. Append rows
 
 Append one table row per lesson in the window (skipped ones already recorded in
 4a). Populate each column from that lesson's agent report — see **Row format**
 below. Put the batch's `check-snippets` result in the `Check` column of every
 non-skipped row.
 
-### 4f. Pause between batches
+### 4e. Pause between batches
 
 After a clean batch, report a one-line tally
-("Batch k/N: X stale, Y current, Z skipped — check PASS, style N flags") and, if
-4d produced in-scope flags, the proposed fixes for the user's go-ahead. Then
-**ask the user whether to run the next batch.** Wait for their answer. Stop if
-they decline.
+("Batch k/N: X stale, Y current, Z skipped — check PASS"), then **ask the user
+whether to run the next batch.** Wait for their answer. Stop if they decline.
+
+Do not style-check the rewritten prose. `lesson-freshness` carries its own
+four-line paraphrase of the style rules, and that is the only gate this sweep
+applies. The user runs the `lesson-style` agent by hand when they want it, so do
+not dispatch it here and do not offer to.
 
 ## Step 5 — finish
 
 When every batch in the category is done:
 
-- Print totals (stale / current / skipped, any needs-human items, and any style
-  flags left unapplied).
+- Print totals (stale / current / skipped, and any needs-human items).
 - Point the user to the report file path and to `git status` / `git diff` for the
   exact patch across all edited lessons.
 - Tell them to review the changes and suggest any further edits.
@@ -193,12 +156,9 @@ table stays intact.
   `memory ✓, best-practices ✓`, or `foo ✗ → bar` for a moved page).
 - **Verified** — the lesson's `verifiedAgainstDocsAt` after the run.
 - **Check** — the batch `check-snippets` result (`PASS` / `FAIL`).
-- **Style** — the `lesson-style` outcome: `CLEAN`, or the flags with their
-  disposition (`fixed`, `dropped: <why>`, `pre-existing: <slug>`).
-  `n/a (date only)` when the lesson had no prose change.
 
 Example row:
 
 ```
-| B3.1 — CLAUDE.md fundamentals | STALE | §Try It: `Run /memory and confirm your file is listed as loaded.` → `Run /context and confirm your file appears under Memory files.` (loading is verified by /context — memory docs)<br>frontmatter: verifiedAgainstDocsAt 2026-07-09 → 2026-07-21 | none | memory ✓, best-practices ✓ | 2026-07-21 | PASS | inflated-significance on the rewritten Try It line → fixed<br>pre-existing: hedging in §The concept, left alone |
+| B3.1 — CLAUDE.md fundamentals | STALE | §Try It: `Run /memory and confirm your file is listed as loaded.` → `Run /context and confirm your file appears under Memory files.` (loading is verified by /context — memory docs)<br>frontmatter: verifiedAgainstDocsAt 2026-07-09 → 2026-07-21 | none | memory ✓, best-practices ✓ | 2026-07-21 | PASS |
 ```
