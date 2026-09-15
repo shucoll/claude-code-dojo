@@ -6,11 +6,11 @@ type: "core"
 order: 2
 estimatedMinutes: 8
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-06"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["B1.1"]
 teaches: ["claude-code-positioning", "surfaces", "models"]
 references: ["B1.1"]
-docsSources: ["https://code.claude.com/docs/en/overview", "https://code.claude.com/docs/en/how-claude-code-works", "https://code.claude.com/docs/en/desktop-quickstart", "https://code.claude.com/docs/en/vs-code", "https://code.claude.com/docs/en/setup", "https://claude.com/pricing"]
+docsSources: ["https://code.claude.com/docs/en/overview", "https://code.claude.com/docs/en/how-claude-code-works", "https://code.claude.com/docs/en/desktop-quickstart", "https://code.claude.com/docs/en/vs-code", "https://code.claude.com/docs/en/jetbrains", "https://code.claude.com/docs/en/setup", "https://claude.com/pricing"]
 ---
 
 # What Claude Code is and where it lives
@@ -36,7 +36,7 @@ Claude Code shows up on a handful of surfaces. The engine is the same on all of 
 | **VS Code / JetBrains** | An IDE extension: inline diffs, `@`-mention files, review plans, all beside your code. | You live in your editor and want Claude in the same window. |
 | **Web** | `claude.ai/code` in the browser, running in the cloud with nothing to install. | You want to start work from any machine, or hand a long task off and check back later. |
 
-The IDE extensions bundle their own copy of Claude Code, though running `claude` in the editor's integrated terminal still wants the CLI installed. The web and Desktop apps can also run work on Anthropic's cloud instead of your machine.
+The VS Code extension bundles its own copy of Claude Code, though running `claude` in the editor's integrated terminal still wants the CLI installed. The JetBrains plugin bundles nothing: it runs the CLI, which you install separately. The web and Desktop apps can also run work on Anthropic's cloud instead of your machine.
 
 **Everything this course teaches transfers.** Context, CLAUDE.md, permissions, skills, hooks, MCP, subagents: all of it belongs to the engine, not the window, so it behaves the same on every surface. Your CLAUDE.md files, settings, and MCP servers are literally shared across them. That is why the course teaches the **CLI first**: learn it once in the terminal and you know it everywhere, and when a surface adds something of its own (the Desktop diff viewer, say) we call it out.
 

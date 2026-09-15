@@ -108,7 +108,7 @@ export const mechanismDecisionTree: ChartDef = {
           tone: 'violet',
           lines: [
             'Structured data, managed auth, and operations no CLI exposes cleanly.',
-            'The most expensive option at startup: every tool schema is resident.',
+            'Cheap at startup: only tool names are resident, with schemas loading on use.',
           ],
           target: lesson(home('mcp-servers', 'mcp-giving-claude-new-tools')),
         },

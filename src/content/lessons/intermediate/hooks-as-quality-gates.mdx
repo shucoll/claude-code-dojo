@@ -6,7 +6,7 @@ type: "milestone"
 order: 4
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 teaches: ["hooks-as-gates", "migration-guard-hook", "stop-hook-test-gate"]
 prerequisites: ["I8.3"]
 references: ["I4.2", "I4.3"]
@@ -198,7 +198,6 @@ chmod +x .claude/hooks/run-tests.sh
   "hooks": {
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
@@ -215,7 +214,7 @@ The exit codes are the contract from <LessonLink id="I4.2" />: on `Stop`, exit `
 
 Test it by asking Claude to add a feature with a deliberately failing test, then telling it you are done. Watch it be unable to stop: the hook runs the suite, sees red, and sends Claude back to fix it.
 
-One edge to know. If Claude genuinely cannot make the suite pass, this gate can loop. The `Stop` input carries a `stop_hook_active` flag, set to `true` once the turn is already continuing because of a stop hook; a production version checks that flag to cap retries rather than blocking forever. For this project the suite is small and the loop terminates when it goes green.
+One edge to know. If Claude genuinely cannot make the suite pass, this gate can loop. Claude Code overrides a `Stop` hook after it blocks eight times in a row, so the turn ends rather than looping forever. The `Stop` input also carries a `stop_hook_active` flag, set to `true` once the turn is already continuing because of a stop hook; a production version checks that flag and bails out sooner. For this project the suite is small and the loop terminates when it goes green.
 
 ### 4. Notify yourself, in your own scope
 

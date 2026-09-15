@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.2"]
 references: ["B3.1"]
 docsSources: ["https://code.claude.com/docs/en/claude-directory", "https://code.claude.com/docs/en/settings", "https://code.claude.com/docs/en/debug-your-config"]
@@ -125,7 +125,7 @@ Every one of these is a silent failure, which is why they cost so much time.
 - **Config in `~/.claude.json`.** You put `permissions` or `hooks` in it, nothing happens, and nothing warns you. They belong in `~/.claude/settings.json`.
 - **Hooks in a standalone file.** There is no project-level hooks file. Hooks go under the `"hooks"` key in a settings file, and `/hooks` showing nothing is the tell.
 - **`.mcp.json` in the wrong place.** It belongs at the repository root. Inside `.claude/` it is ignored, and an `mcpServers` key in `settings.json` is ignored too.
-- **A `settings.json` value that seems ignored.** The same key is almost certainly set in `settings.local.json`, which outranks it. `/status` and `/permissions` will show you.
+- **A `settings.json` value that seems ignored.** The same key is almost certainly set in `settings.local.json`, which outranks it. `/status` lists the files that loaded, and `/permissions` shows permission rules by the scope each came from.
 - **A hand-made `settings.local.json` getting committed.** Claude Code only adds the gitignore entry when it creates the file itself. Make it yourself and you have to ignore it yourself, or your machine-specific paths land in your teammate's checkout.
 - **Expecting a subdirectory `CLAUDE.md` at startup.** Nested files load on demand, when Claude reads a file in that directory, not at launch. Absence from `/context` at session start is normal, not broken.
 
@@ -136,7 +136,7 @@ Every one of these is a silent failure, which is why they cost so much time.
 1. Run `/status`. Note which settings sources are active, and whether managed settings are in effect.
 2. Run `/context`. Find the memory files section. Confirm whether this project's `CLAUDE.md` actually loaded, and note what else is already spending context before you typed anything.
 3. Run `/permissions`. For each rule, read the file it came from. If you did the last lesson's Try It, your three rules should name `settings.local.json`.
-4. Prove precedence to yourself. Put a key in `.claude/settings.json` and the same key with a different value in `.claude/settings.local.json`. Restart, then confirm the local value is the one in effect.
+4. Prove precedence to yourself. Put a key in `.claude/settings.json` and the same key with a different value in `.claude/settings.local.json`. Confirm the local value is the one in effect. No restart needed, since Claude Code reloads settings files as they change.
 5. Run `claude --safe-mode` and `/context` again. Compare: everything missing from this run is something *you* configured.
 
 **Success criteria:** you can name every settings file currently in effect, say which one won for the key you tested and why, and state from evidence rather than belief whether your `CLAUDE.md` loaded.
@@ -153,7 +153,7 @@ Every one of these is a silent failure, which is why they cost so much time.
 
 **Does `.mcp.json` really not live in `.claude/`?** It really does not. Repository root. This one costs people an afternoon roughly once.
 
-**Do I have to restart after editing settings?** Not for hooks: edits take effect in the running session after a brief delay. If `/hooks` still shows the old definition, run it again to refresh.
+**Do I have to restart after editing settings?** Usually not. Claude Code watches the settings files and applies most edits, `permissions` and `hooks` included, to the running session after a brief delay. A few keys such as `model` are read once at startup. If `/hooks` still shows the old definition, run it again to refresh.
 
 ## Where next
 

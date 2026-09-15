@@ -6,7 +6,7 @@ type: "resolver"
 order: 2
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-09"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["B3.1"]
 teaches: ["auto-memory", "claude-md", "memory-audit"]
 references: ["B3.1", "B2.2"]
@@ -44,17 +44,17 @@ So the instruction you thought you had committed to a versioned file that your t
 | **Versioned, reviewable** | Yes, it shows up in pull requests | No, it changes without a diff |
 | **Loaded** | Every session, **in full** | Every session, but only the first 200 lines or 25KB of `MEMORY.md` |
 | **Enforced?** | No, it is context | No, it is context |
-| **Best for** | Coding standards, workflows, architecture | Build commands, debugging insights, preferences it discovers |
+| **Best for** | Coding standards, workflows, architecture | Your preferences, corrections you give it, project context it cannot read from the code |
 
 Three rows deserve more than a cell.
 
 **"Shared with your team" is the important one.** `CLAUDE.md` is a team artifact: committed, reviewed, improved by everyone. Auto memory is a private notebook. A convention that lives only in your auto memory works perfectly for you and does not exist for anyone else, which is a confusing way for a team to operate.
 
-**"Versioned, reviewable" is the one that bites later.** Auto memory changes without a diff. Nothing tells you it happened beyond a brief "Writing memory" in the interface. Facts accumulate, and some of them go stale.
+**"Versioned, reviewable" is the one that bites later.** Auto memory changes without a diff. Nothing tells you it happened beyond a brief "Saved 2 memories" in the interface. Facts accumulate, and some of them go stale.
 
 **Neither is enforced.** Both are context, both shape behavior, and neither guarantees it. When you need a guarantee, you need a hook, as in <LessonLink id="B3.1" />.
 
-There is also a structural difference worth knowing. Auto memory's directory holds a `MEMORY.md` index plus topic files (`debugging.md`, `api-conventions.md`, and so on). Only `MEMORY.md` loads at startup, and only its first 200 lines. The topic files sit on disk and Claude opens them when it needs them. That is a deliberately cheaper design than `CLAUDE.md`, which loads in full no matter how long it is, and it is why auto memory does not blow up your context the way an unpruned `CLAUDE.md` would (see <LessonLink id="B2.2" />).
+There is also a structural difference worth knowing. Auto memory's directory holds a `MEMORY.md` index plus topic files (`user_role.md`, `feedback_testing.md`, and so on). Only `MEMORY.md` loads at startup, and only its first 200 lines. The topic files sit on disk and Claude opens them when it needs them. That is a deliberately cheaper design than `CLAUDE.md`, which loads in full, and it is why auto memory does not blow up your context the way an unpruned `CLAUDE.md` would (see <LessonLink id="B2.2" />).
 
 ## Which one, in one rule
 
@@ -100,8 +100,8 @@ Auto memory is on by default and you can turn it off: toggle it in `/memory`, se
 
 **Environment:** whichever repository you have actually used Claude in the most. This only reads and edits memory files, never your code.
 
-1. Start Claude and run `/memory`. Note which `CLAUDE.md` files are listed as loaded. If one you expected is missing, that is why its rules were being ignored.
-2. Open the auto memory folder from the same menu. Read `MEMORY.md`.
+1. Start Claude and run `/context`. Check the list under **Memory files** for which `CLAUDE.md` files actually loaded. If one you expected is missing, that is why its rules were being ignored.
+2. Run `/memory` and open the auto memory folder. Read `MEMORY.md`.
 3. Find one entry that is stale, wrong, or that you would be embarrassed to have a teammate inherit. Delete it.
 4. Find one entry that *should* be a team fact. Move it: ask Claude to *"add this to CLAUDE.md,"* then delete the auto memory version so the two cannot disagree.
 
@@ -119,9 +119,9 @@ Auto memory is on by default and you can turn it off: toggle it in `/memory`, se
 
 **What happens when the two disagree?** Both load as context and Claude may pick either. Resolve it yourself by editing the source of the wrong one.
 
-**How do I inspect or delete what Claude saved?** `/memory` lists loaded files and opens the auto memory folder. Everything is plain markdown you can read, edit, or delete.
+**How do I inspect or delete what Claude saved?** `/memory` lists your memory file locations and opens the auto memory folder, and `/context` shows which files actually loaded this session. Everything is plain markdown you can read, edit, or delete.
 
-**Does auto memory bloat my context like a long `CLAUDE.md`?** Much less. Only the first 200 lines (or 25KB) of `MEMORY.md` load at startup; topic files are read on demand. `CLAUDE.md` loads in full regardless of length.
+**Does auto memory bloat my context like a long `CLAUDE.md`?** Much less. Only the first 200 lines (or 25KB) of `MEMORY.md` load at startup; topic files are read on demand. `CLAUDE.md` loads in full.
 
 **Can I turn it off?** Yes, via the `/memory` toggle, `"autoMemoryEnabled": false`, or `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`.
 

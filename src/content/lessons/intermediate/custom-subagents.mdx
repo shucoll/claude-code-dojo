@@ -6,9 +6,9 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I6.1"]
-references: ["I1.2", "I3.1", "I5.1"]
+references: ["I1.2", "I1.4", "I3.1", "I5.1"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents"]
 ---
 
@@ -42,7 +42,7 @@ Identity comes from the `name` field rather than the filename or folder, and bot
 
 The same scope logic as settings in <LessonLink id="I1.4" />, with the same instinct: personal habits go in `~/.claude/agents/`, anything encoding team standards belongs in the repository where it can be reviewed and improved like code.
 
-Claude Code watches both directories and picks up edits within a few seconds, so iterating on an agent does not mean restarting. The exception is creating a scope's very first agent file: the watcher only covers directories that existed at session start, so a brand new `agents/` folder needs a restart before its contents load.
+Claude Code watches both directories and picks up edits within a few seconds, so iterating on an agent does not mean restarting. The main exception is creating a scope's very first agent file: the watcher only covers directories that existed at session start, so a brand new `agents/` folder needs a restart before its contents load.
 
 ### Writing one
 
@@ -70,7 +70,7 @@ Only `name` and `description` are required. `description` is load-bearing beyond
 |---|---|
 | `tools` | allowlist; inherits everything if omitted |
 | `disallowedTools` | denylist; applied before `tools` is resolved |
-| `model` | `sonnet`, `opus`, `haiku`, `fable`, a full model ID, or `inherit` (the default) |
+| `model` | `sonnet`, `opus`, `haiku`, `fable`, a full model ID, or `inherit` |
 | `skills` | skills whose full content is preloaded at startup |
 | `mcpServers` | servers this subagent can reach |
 | `memory` | `user`, `project`, or `local`; enables a persistent directory |
@@ -103,7 +103,7 @@ A few tools depend on the main conversation's UI and never reach a subagent even
 
 ### Choosing a model
 
-`model` defaults to `inherit`. Naming a cheaper one is how a high-volume, low-judgment delegate stops costing Opus rates:
+`model` is optional, and leaving it off runs the delegate on your session's model. Naming a cheaper one is how a high-volume, low-judgment delegate stops costing Opus rates:
 
 ```yaml
 model: haiku
@@ -111,7 +111,7 @@ model: haiku
 
 Match the model to the reasoning the job needs, not to the job's importance. Scanning changed files for a fixed checklist runs well on a small model; reasoning about whether an architectural change is sound does not.
 
-When several sources disagree, resolution runs in this order: the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then a per-invocation model Claude passes, then the frontmatter, then your main conversation's model.
+When several sources disagree, resolution runs in this order: a per-invocation model Claude passes, then the frontmatter, then the `CLAUDE_CODE_SUBAGENT_MODEL` environment variable, then your main conversation's model.
 
 ### Preloading skills
 

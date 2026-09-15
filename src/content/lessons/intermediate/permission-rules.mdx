@@ -6,11 +6,11 @@ type: "core"
 order: 2
 estimatedMinutes: 13
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-15"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.1"]
 teaches: ["permission-rules", "allow-deny-ask", "rule-syntax"]
 references: ["B1.3", "B3.3"]
-docsSources: ["https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/settings"]
+docsSources: ["https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/settings", "https://code.claude.com/docs/en/permission-modes"]
 interactive:
   - kind: "diagram"
     spec: "permission-rule-shapes"
@@ -62,7 +62,7 @@ One detail carries most of the confusion: **the space before `*` enforces a word
 
 - `Read(.env)` matches any `.env` at or below the current directory (a bare name matches at any depth).
 - `Edit(src/**)` matches everything under `src/`.
-- `/path` anchors to the *settings file's* location, not the filesystem root. In project settings, `Edit(/src/**)` means `<project>/src`.
+- `/path` anchors to the *settings source*, not the filesystem root. In project settings, `Edit(/src/**)` means `<project>/src`; the same rule in user settings means `~/.claude/src`.
 - `//path` is a real absolute path; `~/path` is home-relative.
 
 **Reaches the network (WebFetch).** A `domain:` prefix matched against the hostname:
@@ -106,7 +106,7 @@ Read it top to bottom, but remember Claude Code reads it deny-first:
 - The **ask** list is for actions that are fine most of the time but that you want to see. `git push *` leaves your machine and rewrites a shared branch, so it prompts every time, and because ask beats allow, it keeps prompting even if you later allow `Bash(git *)` wholesale.
 - The **allow** list clears the daily friction: your test command, your run scripts, and edits inside `src/`.
 
-You do not have to hand-write this. The fastest way to grow a policy is to click **"Yes, don't ask again"** on a prompt you trust; Claude Code writes the matching rule for you (a command prefix for Bash, the exact path for a file). Run `/permissions` any time to see what has accumulated and from which file, and to add or remove rules directly.
+You do not have to hand-write this. The fastest way to grow a policy is to click **"Yes, and don't ask again"** on a prompt you trust; Claude Code writes the matching rule into `.claude/settings.local.json` for you, a command prefix for Bash or a domain for WebFetch. File edits are the exception: that approval lasts until the session ends instead of becoming a saved rule. Run `/permissions` any time to see what has accumulated and from which file, and to add or remove rules directly.
 
 ## Use-case scenarios
 
@@ -132,7 +132,7 @@ These are the rule-syntax surprises that cost people the most time.
 
 - **The space before `*`.** `Bash(ls *)` and `Bash(ls*)` are different rules: the first requires a word boundary and matches only `ls`, the second also matches `lsof`, `lsblk`, and anything else starting `ls`.
 - **It is not regex.** Paths are gitignore patterns and Bash is glob matching. A `.` is literal, `*` spans one path segment (or, in Bash, any run of characters), `**` crosses directories. Writing `Read(.*env)` expecting regex will not do what you think.
-- **`/path` is not absolute.** A single leading slash anchors to the settings file's own location. `Edit(/src)` in project settings means `<project>/src`, not `/src` on your disk. Use `//` for a true absolute path.
+- **`/path` is not absolute.** A single leading slash anchors to the settings source that defines the rule. `Edit(/src)` in project settings means `<project>/src`, not `<project>/.claude/src` and not `/src` on your disk. Use `//` for a true absolute path.
 - **A deny cannot carry an exception.** `deny: Bash(aws *)` blocks every `aws` call, including one that also matches `allow: Bash(aws s3 ls)`. Deny is all-or-nothing; if you need a hole, do not deny that broadly.
 - **Bare name versus scoped deny behave differently.** `deny: Bash` removes Bash from Claude entirely, so it never even tries to use it. `deny: Bash(rm *)` leaves Bash available and blocks only matching calls. Denying a whole tool by name is a bigger hammer than it looks.
 - **Compound commands split.** A rule is checked against each subcommand. Approving `git status && npm test` saves a rule for `npm test`, and a `Bash(safe *)` allow never covers `safe && something-else`.
@@ -147,11 +147,11 @@ Most real-world confusion is not "how do I write a rule" but "why did Claude Cod
 4. **Read the pattern literally.** Re-check the space-before-`*` boundary, the `/path` anchor, and glob-not-regex. Launch with `--verbose` to see the exact command string and parameters Claude actually sent, which is often not quite what you pictured.
 5. **"Why didn't it ask before `git status`?"** Because read-only commands never prompt in any mode. If you genuinely want a prompt for one, add it to `ask`.
 
-On a Bash prompt, `Ctrl+E` also explains what the command does and rates its risk, which settles a lot of "should I approve this" questions before you touch a rule.
+A complex Bash command arrives at the prompt with a plain-language explanation of what it does, which settles a lot of "should I approve this" questions before you touch a rule.
 
 ## Try It
 
-**Environment:** any git repository, either a small public repo you cloned or a throwaway scratch directory with `git init`. Everything here goes in `.claude/settings.local.json` (your personal, gitignored file) and acts only on a scratch file you create, so it will not touch the repo's own config or history.
+**Environment:** any git repository, either a small public repo you cloned or a throwaway scratch directory with `git init`. Everything here goes in `.claude/settings.local.json` (your personal, gitignored file) and acts only on a scratch file you create, so it will not touch the repo's own config or history. Start the session in Manual mode (`claude --permission-mode default`, or `Shift+Tab` until the status bar reads `manual mode on`), otherwise the mode rather than your rule is what decides step 2.
 
 1. Open `/permissions`, or create `.claude/settings.local.json` with an empty `permissions` block.
 2. **Allow:** add `Bash(touch *)`. Ask Claude to `touch scratch-test.txt`. It should create the file with no prompt.

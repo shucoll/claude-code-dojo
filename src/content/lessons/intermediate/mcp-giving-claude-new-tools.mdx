@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/mcp"]
@@ -210,7 +210,7 @@ Bash can already call any CLI, so for services with a good CLI the gap is smalle
 A tool is an action Claude calls; a resource is content it reads. Resources are addressed as `@server:protocol://path` and behave like file mentions: type `@` and connected servers' resources appear in the autocomplete next to your files. `Can you analyze @github:issue://123 and suggest a fix?` pulls the issue in as an attachment.
 
 **What are MCP prompts?**
-Prompt templates a server publishes, which appear in your `/` menu as `/mcp__servername__promptname` and take space-separated arguments, like `/mcp__github__pr_review 456`. They are discovered from connected servers, so they show up without any config on your side.
+Prompt templates a server publishes, which appear in your `/` menu as `/servername:promptname (MCP)` and take space-separated arguments, like `/mcp__github__pr_review 456`, which is the longer name the menu entry also accepts. They are discovered from connected servers, so they show up without any config on your side.
 
 **Which transport should I pick?**
 You rarely pick. The server's documentation tells you what it is. Hosted services are `http`, things that run on your machine are `stdio`, and `sse` only appears on older servers that have not migrated.

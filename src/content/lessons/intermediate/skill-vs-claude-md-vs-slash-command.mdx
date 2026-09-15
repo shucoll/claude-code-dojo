@@ -6,7 +6,7 @@ type: "resolver"
 order: 4
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-17"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I3.2"]
 references: ["B3.1", "I2.1", "I2.2"]
 docsSources: ["https://code.claude.com/docs/en/skills", "https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/features-overview"]
@@ -37,7 +37,7 @@ That leaves two homes, and they separate on a single question: **does this apply
 | **Shared via** | checked into the repo | project folder in the repo, or personal | `.claude/commands/` in the repo |
 | **Status** | current | current | still works, superseded by skills |
 
-The legacy column earns its place only because you may inherit `.claude/commands/` files from an older config. They keep working and take the same frontmatter, but they cannot hold a folder of supporting files, and Claude cannot load them from a description the way it can a skill. For anything new, the column does not apply.
+The legacy column earns its place only because you may inherit `.claude/commands/` files from an older config. They keep working and take the same frontmatter apart from `name` and `paths`, but they cannot hold a folder of supporting files, and Claude cannot load them from a description the way it can a skill. For anything new, the column does not apply.
 
 ## The decision ladder
 
@@ -71,4 +71,4 @@ Three of these are fragments lifted straight from an overgrown `CLAUDE.md`, the 
 
 **Procedures short enough to live in either home.** A three-line routine you always want applied ("before finishing, run the type-checker and report failures") is defensible in `CLAUDE.md` as a rule or as a tiny skill. At three lines the cost difference is nothing, so decide on trigger semantics: if it should apply to every relevant turn on its own, `CLAUDE.md` is simpler; if you want to invoke it deliberately, or you expect it to grow past a few lines, start it as a skill. The tiebreaker is which way it will drift, since a skill scales and a `CLAUDE.md` entry does not.
 
-**The legacy-command migration question.** `.claude/commands/*.md` files are supported indefinitely, so migrating is a want, not a must. Convert one when you hit a wall a flat command file cannot clear: supporting files alongside the command, or letting Claude trigger it from relevance instead of only an explicit `/name`. Until then, a working command is not a problem to fix. If you do migrate and leave both in place, remember the skill takes precedence over a command of the same name.
+**The legacy-command migration question.** Existing `.claude/commands/*.md` files keep working, and the docs only ask you to prefer a skill for new work, so migrating is a want, not a must. Convert one when you hit a wall a flat command file cannot clear: supporting files alongside the command, or letting Claude trigger it from relevance instead of only an explicit `/name`. Until then, a working command is not a problem to fix. If you do migrate and leave both in place, remember the skill takes precedence over a command of the same name.

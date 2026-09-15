@@ -6,7 +6,7 @@ type: "core"
 order: 5
 estimatedMinutes: 9
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-09"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["B2.3"]
 teaches: ["sessions", "resume", "fork"]
 references: ["B2.4"]
@@ -51,7 +51,7 @@ To choose from a list instead, open the session picker:
 claude --resume
 ```
 
-The picker shows one row per session with its name (or the first prompt, if unnamed), how long ago you touched it, the message count, and its git branch. `Space` previews a session before you commit to it, `Enter` resumes. If what you want is not there, widen the search: `Ctrl+W` shows every worktree of this repository, `Ctrl+A` shows every project on the machine.
+The picker shows one row per session with its name (or a generated title, if unnamed), how long ago you touched it, its git branch, and the transcript's file size. `Space` previews a session before you commit to it, `Enter` resumes. If what you want is not there, widen the search: `Ctrl+W` shows every worktree of this repository, `Ctrl+A` shows every project on the machine.
 
 You do not have to leave Claude to switch. From inside a running session, this opens the same picker:
 
@@ -61,7 +61,7 @@ You do not have to leave Claude to switch. From inside a running session, this o
 
 ### Name: make it findable later
 
-Unnamed sessions are identified by their first prompt, which is a terrible label a week later. Name anything you expect to return to.
+Unnamed sessions are identified by a title Claude writes from your first prompt, which is a vague label a week later. Name anything you expect to return to.
 
 At startup:
 
@@ -81,7 +81,7 @@ Then you can jump straight back to it without the picker at all:
 claude --resume auth-refactor
 ```
 
-One trap: recent versions give every session a **default display name**, like `my-app-3f`, combining the directory and a short suffix. It looks like a name and it is not one. `claude --resume <name>` matches only names *you* set. Naming the session replaces the default.
+One trap: recent versions give every session a **default display name**, like `my-app-3f`, combining the directory and a short suffix. It looks like a name and it is not one: pass it to `claude --resume` and nothing is found. The generated title does resolve, but it is still a label you did not choose. Naming the session replaces both.
 
 ### Branch: try two approaches from one starting point
 
@@ -93,9 +93,9 @@ You are deep in a session and about to try something you are not sure about. You
 
 This copies the conversation so far into a **new** session and drops you into it. The original is untouched and still sits in the picker. Now you can explore, and if it goes badly you resume the original as though the detour never happened.
 
-The command prints two session ids: the branch you are now in, and the original. In the picker, branches are grouped under the session they came from; press `→` to expand the group. From the shell, the same move is `claude --continue --fork-session`.
+The command prints two session ids: the branch you are now in, and the original. The branch gets its own id and its own row in the picker, so both are sitting there to return to. From the shell, the same move is `claude --continue --fork-session`.
 
-Two things to know about a branch. Permissions you approved with "allow for this session" **do not** carry over, so you may be asked again. And this is a beginner's version of a technique that becomes serious later in the course, when you run several forked sessions in parallel deliberately.
+Two things to know about a branch. `/branch` keeps the same process running, so permissions you approved with "allow for this session" **do** carry over; fork from the shell with `--fork-session` instead and the new process starts without them. And this is a beginner's version of a technique that becomes serious later in the course, when you run several forked sessions in parallel deliberately.
 
 Finally, a thing not to do: resuming the *same* session in two terminals without forking. Both terminals write to one transcript and the messages interleave. If you want two, branch.
 
@@ -119,9 +119,9 @@ Three cautions:
 2. Quit entirely with `/exit`. Close the terminal if you want to make the point properly.
 3. Reopen, `cd` back to the repo, and run `claude --resume belt-practice`. Ask Claude what you just discussed.
 4. Now run `/branch experiment`, and ask a different question in the branch.
-5. Open the picker with `/resume` and expand the group with `→`.
+5. Open the picker with `/resume` and find both sessions listed.
 
-**Success criteria:** Claude recalls your original question after a full restart, the picker shows `belt-practice` with `experiment` grouped beneath it, and you can resume either one.
+**Success criteria:** Claude recalls your original question after a full restart, the picker lists `belt-practice` and `experiment` as separate rows, and you can resume either one.
 
 ## FAQ
 
@@ -133,7 +133,7 @@ Three cautions:
 
 **Where is session data stored?** As JSONL transcripts under `~/.claude/projects/`, on your machine, kept for 30 days by default. Use `/export` to get one out in readable form rather than reading the file.
 
-**Why can't I resume by the name shown in the list?** Because it is probably the auto-generated display name, not a real one. Set a name with `/rename` or `claude -n`, and it becomes a resume handle.
+**Why can't I resume by the name I see on a running session?** Because it is probably the default display name, like `my-app-3f`, which is not a resume handle. Set a name with `/rename` or `claude -n`, and it becomes one.
 
 **Does `/clear` destroy the conversation?** No, and this lesson is why. It starts a fresh conversation; the old one is saved and appears in `/resume`, as <LessonLink id="B2.4" /> promised.
 

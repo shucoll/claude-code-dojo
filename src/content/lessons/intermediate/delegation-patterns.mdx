@@ -5,11 +5,11 @@ title: "Delegation patterns"
 type: "core"
 order: 3
 estimatedMinutes: 12
-volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I6.2"]
 references: ["B2.5"]
-docsSources: ["https://code.claude.com/docs/en/sub-agents"]
+docsSources: ["https://code.claude.com/docs/en/sub-agents", "https://code.claude.com/docs/en/commands"]
 ---
 
 # Delegation patterns
@@ -64,7 +64,7 @@ The agent's prompt replaces Claude Code's default entirely, which makes this a d
 
 ## Foreground and background
 
-Subagents run in the background by default. Claude puts one in the foreground when it needs the result before it can continue.
+Subagents run in the background by default. In an interactive session Claude cannot ask for the foreground at all, because fork mode is on; where fork mode is off, as in a `-p` run, Claude puts one in the foreground when it needs the result before it can continue.
 
 | | Foreground | Background |
 |---|---|---|
@@ -74,7 +74,7 @@ Subagents run in the background by default. Claude puts one in the foreground wh
 
 A background agent that hits a permission prompt does not stall silently: the prompt appears in your session labelled with which agent wants what, and pressing Esc denies that one call without killing the agent.
 
-Steer it yourself by asking ("run that in the background"), or press **Ctrl+B** to background something already running. `background: true` in an agent's frontmatter makes it always background, even when Claude wants the result immediately.
+Press **Ctrl+B** to background something already running. Asking Claude to place a task yourself ("run that in the background") only applies where fork mode is off, and `background: true` in an agent's frontmatter makes it always background, even when Claude wants the result immediately.
 
 One consequence of results arriving later: if you ask about a background agent before it finishes, Claude reports that it is still running rather than inventing an answer. `/tasks` lists running and recently completed agents.
 
@@ -164,7 +164,7 @@ Reach for a fork when a named subagent would need too much background to be usef
 
 - **You expect a resumed agent to know what happened in your conversation while it was idle.** It retains its own history, not yours. Anything that changed in the meantime has to travel in the follow-up.
 
-- **You hit the subagent limit mid-session.** Claude can spawn 200 per session by default; past that the Agent tool fails and Claude finishes the work with its own tools. `/clear` resets the count.
+- **You hit the concurrent subagent limit.** Twenty subagents can run at once by default; spawning another fails with `Concurrent subagent limit reached`, and the error tells Claude not to retry. Nothing caps the session total, so spawning works again as soon as a running agent finishes.
 
 ## Try It
 
@@ -172,8 +172,8 @@ Reach for a fork when a named subagent would need too much background to be usef
 
 1. Ask a question that fans out: "Compare how the API layer and the data layer each handle errors. Use separate subagents." Watch two rows appear in the panel.
 2. While they run, keep typing in the main conversation. Confirm you are not blocked.
-3. Press `↑` and `Enter` on one row to open its transcript. Read what it is doing, then send it a narrowing instruction: "focus on the retry paths only."
-4. `Esc` back to the prompt and let both finish. Compare the two reports.
+3. While both are still running, press `↑` and `Enter` on one row to open its transcript. Read what it is doing, then send it a narrowing instruction: "focus on the retry paths only."
+4. `Esc` back to the prompt and let both finish. Each row leaves the panel the moment its agent succeeds, and the footer shows `/tasks to see subagents` for 30 seconds; run `/tasks` inside that window and press `Enter` on an agent to reopen its transcript. Compare the two reports.
 5. Resume one of them: "go back to the API investigation and check the timeout handling too." Confirm it continues rather than restarting, which shows in the tool count.
 6. Now run `/subtask summarize what we have concluded so far`. Confirm it needs no explanation of what "so far" means, unlike every subagent in step 1.
 

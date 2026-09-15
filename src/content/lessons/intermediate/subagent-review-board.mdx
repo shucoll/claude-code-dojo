@@ -6,7 +6,7 @@ type: "milestone"
 order: 5
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 teaches: ["review-subagent", "separation-of-duties", "fresh-context-review"]
 prerequisites: ["I8.4"]
 references: ["I6.2", "I6.3"]
@@ -17,11 +17,11 @@ docsSources: ["https://code.claude.com/docs/en/sub-agents"]
 
 The hooks from <LessonLink id="I8.4" /> made the machine-checkable standards non-negotiable: format, protected paths, passing tests. The standards a machine cannot check, whether the error handling is sound, whether a secret leaks into a log, whether the change is actually covered, still ride on judgment. This milestone gives the project two specialists that carry that judgment: a reviewer and a test-writer, each built for PulseBoard's conventions and wired into the working rhythm.
 
-The reviewer is the one that matters most. It reviews in a fresh window it cannot edit from, two deliberate choices doing two different jobs.
+The reviewer is the one that matters most. It reviews in a fresh window, with no editing tool in its belt, two deliberate choices doing two different jobs.
 
 ## Goal for this stage
 
-Build two committed subagents in `.claude/agents/`: a `code-reviewer` that is structurally read-only, and a `test-writer` that fills coverage gaps. Then run them as a pipeline on a real change, implement then review then address then cover, so review becomes a step in the rhythm rather than something you remember to ask for.
+Build two committed subagents in `.claude/agents/`: a `code-reviewer` built to read rather than change, and a `test-writer` that fills coverage gaps. Then run them as a pipeline on a real change, implement then review then address then cover, so review becomes a step in the rhythm rather than something you remember to ask for.
 
 **Environment:** the PulseBoard repository. Creating the first file in a new `.claude/agents/` directory needs a session restart before it loads, the watcher caveat from <LessonLink id="I6.2" />; later edits are picked up live.
 
@@ -29,7 +29,7 @@ Build two committed subagents in `.claude/agents/`: a `code-reviewer` that is st
 
 ### 1. Build the read-only reviewer
 
-Two frontmatter choices define this agent, and both come from <LessonLink id="I6.2" />. The `tools` list has no `Write` or `Edit`, so "does not modify files" is enforced by the tool belt rather than requested in prose. And the body is a review checklist written for this codebase, so the reviewer arrives already knowing what PulseBoard cares about instead of being told each time.
+Two frontmatter choices define this agent, and both come from <LessonLink id="I6.2" />. The `tools` list has no `Write` or `Edit`, so "does not modify files" is a configuration choice rather than a request in prose. And the body is a review checklist written for this codebase, so the reviewer arrives already knowing what PulseBoard cares about instead of being told each time.
 
 Create `.claude/agents/code-reviewer.md`:
 
@@ -68,7 +68,7 @@ You do not modify files. If a fix is obvious, describe it.
 After the review, add any recurring pattern you noticed to your memory.
 ```
 
-`model: inherit` keeps the review on whatever model the session is using, since judging soundness is not the kind of work you downgrade. `memory: project` lets the reviewer accumulate the mistakes this project keeps making, committed alongside the agent so the whole team inherits the sharper reviewer. Restart if the `agents` directory is new, then make a change and invoke it:
+`model: inherit` keeps the review on whatever model the session is using, since judging soundness is not the kind of work you downgrade. `memory: project` lets the reviewer accumulate the mistakes this project keeps making, committed alongside the agent so the whole team inherits the sharper reviewer. Memory also switches Read, Write, and Edit on so the agent can maintain its own notes, the caveat from <LessonLink id="I6.2" />, so the read-only belt here is a boundary you accept rather than one the `tools` list alone guarantees. Restart if the `agents` directory is new, then make a change and invoke it:
 
 ```prompt
 @"code-reviewer (agent)" review my changes
@@ -107,7 +107,7 @@ that instead of changing it.
 Report what you added, what you deliberately did not cover, and why.
 ```
 
-Writing tests means writing files, so `Write` and `Edit` are in the list. So "do not modify the code under test" cannot be enforced by the tool belt here: the same `Edit` tool writes the tests, so that rule lives in the prompt as a strong instruction rather than a guarantee. The reviewer cannot edit your code; the test-writer is asked not to. `model: sonnet` is a deliberate step down, since matching existing test patterns is pattern-work that runs fine a tier below the session's model.
+Writing tests means writing files, so `Write` and `Edit` are in the list. So "do not modify the code under test" cannot be enforced by the tool belt here: the same `Edit` tool writes the tests, so that rule lives in the prompt as a strong instruction rather than a guarantee. The reviewer's list leaves editing off; the test-writer holds it and is asked not to point it at the code under test. `model: sonnet` is a deliberate step down, since matching existing test patterns is pattern-work that runs fine a tier below the session's model.
 
 ### 3. Run the board as a pipeline
 
@@ -141,7 +141,7 @@ Commit the two agents under .claude/agents/ with a message naming each, then pus
 
 At the end of this stage you have:
 
-- `.claude/agents/code-reviewer.md`, read-only by its `tools` list, carrying PulseBoard's review checklist, learning from `memory: project`.
+- `.claude/agents/code-reviewer.md`, read-only over your code by its `tools` list, carrying PulseBoard's review checklist, learning from `memory: project`.
 - `.claude/agents/test-writer.md`, able to write tests, told not to touch the code under test, running a tier down on `sonnet`.
 - A working rhythm, implement then review then cover, demonstrated on a real change and run through Claude rather than agent to agent.
 - Both committed and pushed.
@@ -152,8 +152,8 @@ At the end of this stage you have:
 
 Two design choices carry this milestone.
 
-The first is **separation of duties**. The reviewer has no `Write` or `Edit`, so it is structurally incapable of changing the code it judges. A reviewer that can also fix tends to fix, and a fix folded silently into a review is a change nobody reviewed. Taking the tools away makes the boundary real instead of relying on the agent to respect it.
+The first is **separation of duties**. The reviewer's `tools` list has no `Write` or `Edit`, so the only editing tooling it carries is what `memory` turns on for its own notes. A reviewer that can also fix tends to fix, and a fix folded silently into a review is a change nobody reviewed. Leaving the editing tools off the list keeps the boundary in the configuration instead of in the agent's good behavior; drop `memory` if you want it absolute.
 
 The second is **fresh context**. The reviewer runs in its own window, and it has never seen the conversation where the code was written. In the implementation thread, every shortcut came with a reason that felt good at the time, and a reviewer sitting in that thread inherits all of it. A reviewer that starts cold with only the diff judges the code, not the story you told yourself building it. This is why review is a subagent and not a fresh prompt in the same session.
 
-Together with <LessonLink id="I8.4" />, the definition of done has moved twice now. The Stop hook made it "the tests pass." The review board makes it "reviewed by something that could not edit it, and covered by tests written against it." Next milestone, <LessonLink id="I8.6" />: you run a whole feature through the pipeline you have now assembled, and narrate which mechanism fires where.
+Together with <LessonLink id="I8.4" />, the definition of done has moved twice now. The Stop hook made it "the tests pass." The review board makes it "reviewed by something with no editing tool of its own, and covered by tests written against it." Next milestone, <LessonLink id="I8.6" />: you run a whole feature through the pipeline you have now assembled, and narrate which mechanism fires where.
