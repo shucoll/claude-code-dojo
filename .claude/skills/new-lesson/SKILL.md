@@ -18,7 +18,7 @@ after scaffolding; if you ever change frontmatter by hand afterwards, rerun
 
 ## Part 0 — before writing anything
 
-The curriculum spec (`curriculum-design/claude-code-craft-curriculum_v9.md`) is
+The curriculum spec (`curriculum-design/claude-code-craft-curriculum_v10.md`) is
 the source of truth for each lesson's metadata: its per-lesson table already
 lists the `volatility`, `docsSources`, and the lesson's `Structure` line. Start
 from those — don't invent them from scratch.
