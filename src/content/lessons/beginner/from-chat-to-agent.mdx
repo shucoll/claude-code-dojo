@@ -5,10 +5,10 @@ title: "From chat to agent"
 type: "core"
 order: 1
 estimatedMinutes: 10
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-06"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-09-15"
 teaches: ["agentic-loop", "tools", "agentic-harness", "permissions"]
-docsSources: ["https://code.claude.com/docs/en/overview", "https://code.claude.com/docs/en/how-claude-code-works"]
+docsSources: ["https://code.claude.com/docs/en/overview", "https://code.claude.com/docs/en/how-claude-code-works", "https://code.claude.com/docs/en/permission-modes"]
 interactive:
   - kind: "diagram"
     spec: "agentic-loop-diagram"
@@ -64,9 +64,9 @@ The whole cycle looks like this. Click any stage to see what happens inside it, 
 
 **What does "agentic" actually mean?** It means the model can take actions through tools (read, edit, run) and react to what those actions return, not just emit text. That feedback-driven cycle, decide then act then observe then repeat, is the "agent" part.
 
-**Does it act without asking me?** Not by default. Claude asks before it edits files or runs shell commands, and it always asks before actions that reach outside your project, like deleting data or calling a live service. You approve each step until you deliberately choose to loosen that. You are steering the whole time.
+**Does it act without asking me?** Nothing with side effects runs unreviewed, but who does the reviewing depends on the session's **permission mode**. In Manual mode Claude stops and asks you before it edits files or runs shell commands. In auto mode, where sessions start on Pro, Max, and Team plans, a classifier model screens those same actions and blocks the risky ones. You pick the mode, so you are steering the whole time.
 
-**Can it break my computer?** It is scoped to the directory you start it in, so it works inside your project, not across your whole machine. On top of that, every file edit is snapshotted first, so you can rewind changes. The actions a snapshot cannot undo, the ones that touch systems outside your files, are the ones it stops to ask about first.
+**Can it break my computer?** It is scoped to the directory you start it in, so it works inside your project, not across your whole machine. On top of that, every file edit is snapshotted first, so you can rewind changes. The actions a snapshot cannot undo, the ones that touch systems outside your files, are the ones that get the firmest gate before they run.
 
 ## Where next
 

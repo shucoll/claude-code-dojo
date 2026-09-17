@@ -6,7 +6,7 @@ type: "resolver"
 order: 4
 estimatedMinutes: 9
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-09-17"
 prerequisites: ["I1.3"]
 references: ["B3.1", "B3.2"]
 docsSources: ["https://code.claude.com/docs/en/settings", "https://code.claude.com/docs/en/memory"]
@@ -101,7 +101,7 @@ As an if/then ladder, in the order worth checking:
 
 **Can I put permissions in `CLAUDE.md`?** No. `CLAUDE.md` is prose Claude reads; permissions are keys the harness parses. Writing "deny edits to migrations" in `CLAUDE.md` produces advice, not a rule.
 
-**What if managed settings conflict with mine?** Managed wins, always, including over CLI flags. Run `/status` to see whether they are in effect before you spend an afternoon on it.
+**What if managed settings conflict with mine?** Managed wins, including over CLI flags. The exceptions run one way only: for a short list of security keys, a stricter value from a lower file is honored. Run `/status` to see whether managed settings are in effect before you spend an afternoon on it.
 
 ## Where next
 

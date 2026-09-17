@@ -5,12 +5,12 @@ title: "Git and Claude Code"
 type: "core"
 order: 3
 estimatedMinutes: 11
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-10"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-09-15"
 prerequisites: ["B2.1"]
 teaches: ["git-with-claude", "commits-branches-prs", "git-recovery"]
 references: ["B3.4", "B4.2"]
-docsSources: ["https://code.claude.com/docs/en/quickstart", "https://code.claude.com/docs/en/common-workflows"]
+docsSources: ["https://code.claude.com/docs/en/quickstart", "https://code.claude.com/docs/en/common-workflows", "https://code.claude.com/docs/en/permission-modes"]
 ---
 
 # Git and Claude Code
@@ -43,7 +43,7 @@ The operations you will actually use:
 - **Pull request.** *"create a PR."* Claude pushes, runs `gh pr create`, and drafts the title and body from the diff. Creating a PR with `gh` auto-links the session to it, so you can return later with `claude --from-pr 123`.
 - **Resolve conflicts.** *"help me resolve these merge conflicts,"* walking each one with you.
 
-Two things Claude will not do silently, and both are protections you met in <LessonLink id="B3.3" />: it asks before commands with external effects, so a `push` is a decision you confirm, and it cannot auto-approve writes to `.git` internals in any normal permission mode.
+Two protections you met in <LessonLink id="B3.3" /> apply here. Whether a push stops to ask you depends on the mode: Manual mode prompts, while auto mode has the classifier screen it instead, letting through a push to the repo you are working in and a PR that matches what you asked for, and blocking force pushes and anything that would carry secrets out of the repository. Add an ask rule for `Bash(git push *)` if you want the prompt back while staying in auto mode. And in any normal mode Claude cannot auto-approve writes to `.git` internals.
 
 ## Walkthrough: branch, commit, PR
 
@@ -79,7 +79,7 @@ Read it. This is the review step, and it is thirty seconds. Does the message mat
 push the branch and open a PR. describe the change and call out anything a reviewer should look at closely.
 ```
 
-Claude pushes (you confirm the push), runs `gh pr create`, and writes a description from the diff. Read that too before it goes up, and ask it to flag risks: *"add a note about the edge case where progress is already disabled."* The docs are blunt about this: review Claude's PR before submitting.
+Claude pushes (a confirmation prompt in Manual mode, a classifier check in auto mode), runs `gh pr create`, and writes a description from the diff. Read that too before it goes up, and ask it to flag risks: *"add a note about the edge case where progress is already disabled."* The docs are blunt about this: review Claude's PR before submitting.
 
 That is the loop. You wrote nothing, and reviewed everything that mattered.
 
@@ -104,7 +104,7 @@ The rule underneath: reach for `/rewind` while you are still editing, and reach 
 | Let Claude drive | Keep your hands on the wheel |
 |---|---|
 | Writing commit messages from the diff | Deciding what belongs in a commit (you set the concern) |
-| Creating branches and PRs | Approving the push, every time |
+| Creating branches and PRs | Reading what is about to be pushed, every time |
 | Reverting or amending a bad commit | History rewrites (rebase, force-push) you can't read yourself |
 | Summarizing and searching history | Resolving conflicts on critical code without reading the result |
 
@@ -141,7 +141,7 @@ The cost here is not tokens, it is trust. Claude committing is cheap; Claude com
 
 **What if it commits something wrong?** Fix it with git, not `/rewind`. Amend or soft-reset a local commit; `git revert` one that's already pushed. `/rewind` can't touch committed history, per <LessonLink id="B3.4" />.
 
-**Will it push without asking?** No. A push has an effect outside your machine, so it's a confirmation prompt, the same protection from <LessonLink id="B3.3" />. Read what it's about to push before you approve.
+**Will it push without asking?** It depends on the mode, per <LessonLink id="B3.3" />. Manual mode prompts. Auto mode, where Pro, Max, and Team sessions start, lets a push to the repo you're working in through once the classifier screens it, and blocks force pushes and pushes that would send secrets out. Either way, read what is about to go up, and add an ask rule for `Bash(git push *)` if you want a prompt every time.
 
 ## Where next
 

@@ -6,7 +6,7 @@ type: "milestone"
 order: 2
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-14"
+verifiedAgainstDocsAt: "2026-09-17"
 prerequisites: ["B5.1"]
 teaches: ["plan-mode-cycle", "plan-review"]
 references: ["B3.3", "B3.5"]
@@ -34,7 +34,7 @@ The artifact is a working tagging feature. The skill is the cycle that produced 
 
 The health check did not need a plan. It was one file and one obvious line; per the ladder in <LessonLink id="B3.5" />, you just do those. Tagging is different: it changes the database schema, the data layer in `db.js`, and the routes in `server.js`. That is three touch points you do not fully hold in your head at once, the threshold <LessonLink id="B3.3" /> describes for reaching for plan mode.
 
-Enter it by pressing `Shift+Tab` to cycle to **plan** (the status bar shows the mode), or prefix a single prompt with `/plan`, or launch with `claude --permission-mode plan`. In plan mode Claude reads files and explores but cannot edit anything. Edits stay blocked until you approve a plan, so there is no risk in letting it look around.
+Enter it by pressing `Shift+Tab` to cycle to **plan** (the status bar shows the mode), or prefix a single prompt with `/plan`, or launch with `claude --permission-mode plan`. In plan mode Claude reads files and explores but does not edit your source. Edits stay blocked until you approve a plan, so there is no risk in letting it look around. That block holds unless you deliberately started the session with permission checks switched off, as <LessonLink id="B3.3" /> explains.
 
 ### 2. Ask for a plan, not code
 
@@ -102,7 +102,7 @@ If any answer is wrong, do not approve. Choose **keep planning** at the prompt a
 
 ### 4. Approve, then execute
 
-When the plan holds up, approve it. Claude presents the plan and asks how to proceed; the options include approving and reviewing each edit manually, approving and accepting edits, or approving and letting it run in auto mode. For a change this size, reviewing each edit is a fine default. Approving exits plan mode and Claude starts writing the code it just described.
+When the plan holds up, approve it. Claude presents the plan and asks how to proceed; the options are approving and reviewing each edit manually, or approving and letting it run in auto mode, which reads *auto-accept edits* when auto mode is unavailable. For a change this size, reviewing each edit is a fine default. Approving exits plan mode and Claude starts writing the code it just described.
 
 ### 5. Read the diff against the plan
 

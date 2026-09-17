@@ -5,8 +5,8 @@ title: "Plan mode vs \"make a plan\" vs just prompting"
 type: "resolver"
 order: 5
 estimatedMinutes: 10
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-09"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-09-17"
 prerequisites: ["B3.3"]
 teaches: ["plan-mode", "prompting-strategy", "ceremony-cost"]
 references: ["B3.3", "B2.2"]
@@ -44,7 +44,7 @@ The difference between the three is not what they produce. It is **what stops Cl
 
 Two rows carry the whole lesson.
 
-**"Can Claude edit source?"** is the real distinction, and it is the one the names hide. Asking for a plan is a *request*, and Claude is a model reading context, not a machine obeying configuration. It very often complies. It may also decide the change is simple and get on with it. Plan mode does not rely on compliance: it is enforced, and no amount of misunderstanding on Claude's part will produce an edit.
+**"Can Claude edit source?"** is the real distinction, and it is the one the names hide. Asking for a plan is a *request*, and Claude is a model reading context, not a machine obeying configuration. It very often complies. It may also decide the change is simple and get on with it. Plan mode does not rely on compliance: it is enforced, and no amount of misunderstanding on Claude's part will produce an edit. The exception is a session you deliberately started with permission checks switched off, where plan mode stops enforcing, as <LessonLink id="B3.3" /> explains.
 
 **"Time cost when all goes well"** is what people never account for. Plan mode always costs an extra cycle, even on the tasks where nothing would have gone wrong. That cost is real and you pay it every time. The question is not "is planning good?" It is "is this task one where the plan will have earned its cycle?"
 
@@ -107,7 +107,7 @@ Pick one small, well-understood change: add a parameter with a default value to 
 
 1. **Just prompt it.** Ask Claude to make the change. Time it, roughly. Then `git checkout .` to reset.
 2. **Ask for a plan.** In Manual mode: *"before you change anything, describe what you would do."* Read it, then tell Claude to proceed. Reset again.
-3. **Plan mode.** `Shift+Tab` twice, same request, read the plan, approve with "review each edit manually."
+3. **Plan mode.** `Shift+Tab` twice, same request, read the plan, approve with "Yes, manually approve edits."
 
 **Success criteria:** all three produced the same change, and you can say which felt proportionate and why. Then answer the real question: **what would have to be different about the task** for your answer to flip? Name the specific property, unfamiliar code, more files, harder to reverse. That property, not the size of the request, is what should drive the choice.
 
@@ -115,7 +115,7 @@ Pick one small, well-understood change: add a parameter with a default value to 
 
 **These three all produce a plan. Which do I actually want?** Match the ceremony to the risk *and* the reversibility. One-sentence diff, just prompt. Familiar code but you want the route, ask for a plan. Unfamiliar code, many files, or expensive to unpick, plan mode.
 
-**Is "make a plan" really different from plan mode?** Yes, in the way that matters. Asking is advisory: Claude may plan, or may decide the task is simple and start editing. Plan mode structurally prevents edits to your source until you approve. One is a request, the other is a guarantee.
+**Is "make a plan" really different from plan mode?** Yes, in the way that matters. Asking is advisory: Claude may plan, or may decide the task is simple and start editing. Plan mode structurally prevents edits to your source until you approve, unless you started the session with permission checks switched off. One is a request, the other is a guarantee you can only waive on purpose.
 
 **Then why ever just ask?** Because it is free. No mode switch, no approval cycle. When you trust the terrain and only want to see the route, that is exactly enough.
 

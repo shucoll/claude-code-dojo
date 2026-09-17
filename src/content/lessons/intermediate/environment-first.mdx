@@ -6,7 +6,7 @@ type: "milestone"
 order: 1
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-17"
 teaches: ["environment-as-deliverable", "permission-policy", "config-before-code"]
 prerequisites: ["I1.4", "I2.3", "I3.4", "I4.5", "I5.4", "I6.4", "I7.4"]
 references: ["I1.2", "I1.3", "I2.2"]
@@ -56,7 +56,7 @@ Sort every action into one of four buckets:
 
 The fourth bucket is the posture itself. Leaving something unlisted is a decision: it prompts, and you promote it into `allow` deliberately the first time it comes up. A policy that starts narrow and grows on purpose is safer than one that starts broad to save typing.
 
-One line of the policy cannot be written as a permission rule, and noticing why is worth more than the rule. **Migrations must be protected from being rewritten, but new ones must still be created.** A path deny like `Edit(migrations/**)` cannot tell those apart; it blocks both. That is the boundary from <LessonLink id="I1.2" />: a permission rule cannot carry an exception. So the migration guard waits for <LessonLink id="I8.4" />, where a hook can allow a new file and block edits to an existing one. For now the policy protects `.env`, and the written conventions declare migrations untouchable so the promise is on record before the enforcement exists.
+One line of the policy cannot be written as a permission rule, and noticing why is worth more than the rule. **Migrations must be protected from being rewritten, but new ones must still be created.** A path deny like `Edit(migrations/**)` cannot tell those apart; it blocks both. That is the boundary from <LessonLink id="I1.2" />: a rule carves by path, and "new file yes, existing file no" is a distinction between operations, not paths. So the migration guard waits for <LessonLink id="I8.4" />, where a hook can allow a new file and block edits to an existing one. For now the policy protects `.env`, and the written conventions declare migrations untouchable so the promise is on record before the enforcement exists.
 
 ### 2. Write `CLAUDE.md` before any code
 
@@ -286,6 +286,6 @@ At the end of this stage you have:
 
 The lesson of this milestone is that **environment design is engineering, and it comes first**. At the beginner level `CLAUDE.md` was a note to your future self. Here the environment is a system with parts that enforce each other: the written convention in `CLAUDE.md` records the intent, the scoped rule delivers it at the right moment, the permission policy blocks what must never happen, and the hooks and subagents in later milestones enforce the promises a permission rule cannot keep. Building it first is what makes every later milestone cheaper, because each one drops into a project that already knows its own standards.
 
-The permission policy also surfaced a real boundary. Protecting `.env` is a job a deny rule does completely. Protecting migrations is not, because "new files yes, edits no" is an exception, and a permission rule cannot carry one. Finding that limit here, on paper, is what sends the migration guard to <LessonLink id="I8.4" /> as a hook instead of a rule that would block your own build.
+The permission policy also surfaced a real boundary. Protecting `.env` is a job a deny rule does completely. Protecting migrations is not, because "new files yes, edits no" splits by operation, and a permission rule only sees the path. Finding that limit here, on paper, is what sends the migration guard to <LessonLink id="I8.4" /> as a hook instead of a rule that would block your own build.
 
 Next milestone, <LessonLink id="I8.2" />: you connect Claude to the repository you just pushed, adding the GitHub MCP server at project scope, and make the honest case for why MCP earns its place here over the `gh` CLI.

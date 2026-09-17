@@ -6,11 +6,11 @@ type: "resolver"
 order: 4
 estimatedMinutes: 10
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-09"
+verifiedAgainstDocsAt: "2026-09-15"
 prerequisites: ["B2.2", "B2.3"]
 teaches: ["clear", "compact", "session-reset"]
 references: ["B2.2"]
-docsSources: ["https://code.claude.com/docs/en/context-window", "https://code.claude.com/docs/en/sessions", "https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/checkpointing"]
+docsSources: ["https://code.claude.com/docs/en/context-window", "https://code.claude.com/docs/en/sessions", "https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/checkpointing", "https://code.claude.com/docs/en/best-practices"]
 interactive:
   - kind: "diagram"
     spec: "clear-compact-new-tree"
@@ -113,7 +113,7 @@ Now the reset is free. Anything that mattered is on disk, not in a summary you a
 
 **Why is `/rewind` in a lesson about resets?** Because it is the option people fail to consider. The urge to reset most often arrives right after a bad edit, and a reset does not fix a bad edit.
 
-**Can I control what compaction keeps?** Yes. `/compact focus on the API changes` biases the summary, and a "Compact Instructions" section in `CLAUDE.md` states what must always survive.
+**Can I control what compaction keeps?** Yes. `/compact focus on the API changes` biases the summary, and a line in `CLAUDE.md` such as "when compacting, always preserve the list of modified files and any test commands" states what must always survive.
 
 ## Where next
 

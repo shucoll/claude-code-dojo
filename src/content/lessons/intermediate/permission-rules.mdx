@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 13
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-09-17"
 prerequisites: ["I1.1"]
 teaches: ["permission-rules", "allow-deny-ask", "rule-syntax"]
 references: ["B1.3", "B3.3"]
@@ -133,7 +133,7 @@ These are the rule-syntax surprises that cost people the most time.
 - **The space before `*`.** `Bash(ls *)` and `Bash(ls*)` are different rules: the first requires a word boundary and matches only `ls`, the second also matches `lsof`, `lsblk`, and anything else starting `ls`.
 - **It is not regex.** Paths are gitignore patterns and Bash is glob matching. A `.` is literal, `*` spans one path segment (or, in Bash, any run of characters), `**` crosses directories. Writing `Read(.*env)` expecting regex will not do what you think.
 - **`/path` is not absolute.** A single leading slash anchors to the settings source that defines the rule. `Edit(/src)` in project settings means `<project>/src`, not `<project>/.claude/src` and not `/src` on your disk. Use `//` for a true absolute path.
-- **A deny cannot carry an exception.** `deny: Bash(aws *)` blocks every `aws` call, including one that also matches `allow: Bash(aws s3 ls)`. Deny is all-or-nothing; if you need a hole, do not deny that broadly.
+- **A Bash deny cannot carry an exception.** `deny: Bash(aws *)` blocks every `aws` call, including one that also matches `allow: Bash(aws s3 ls)`. For Bash, deny is all-or-nothing; if you need a hole, do not deny that broadly. Path rules are the exception: within one settings file, a `Read` or `Edit` deny listed after a broader one can start with `!` to carve paths back out, the way `.gitignore` does. `deny: ["Read(*.env)", "Read(!sample.env)"]` blocks every `.env` file except `sample.env`. The carve-out only reaches rules from the same source, and it cannot reopen a file inside a directory blocked as a whole.
 - **Bare name versus scoped deny behave differently.** `deny: Bash` removes Bash from Claude entirely, so it never even tries to use it. `deny: Bash(rm *)` leaves Bash available and blocks only matching calls. Denying a whole tool by name is a bigger hammer than it looks.
 - **Compound commands split.** A rule is checked against each subcommand. Approving `git status && npm test` saves a rule for `npm test`, and a `Bash(safe *)` allow never covers `safe && something-else`.
 
