@@ -19,44 +19,24 @@ interactive:
 
 ## You are here
 
-You finished Intermediate by packaging PulseBoard's environment as the `pulseboard-dev` plugin and writing an `ENVIRONMENT.md` that defends every mechanism choice in it. You can read a permission rule and predict which prompt it suppresses, split an overgrown CLAUDE.md into path-scoped rules, teach Claude a procedure as a skill, enforce one as a hook when advice is not strong enough, connect a service through MCP, and hand heavy work to a subagent that returns a summary instead of a transcript. The map you built in <LessonLink id="I7.3" /> is the picture you now carry: those mechanisms interlocking inside one running session. That single session is where this level begins.
+{/* @@TODO@@ The previous level's exit capabilities mirrored back in one tight paragraph, anchored to its exit artifact. Capabilities, not a lesson list. */}
 
 ## The gap
 
-Every technique so far shared four assumptions: one developer, one session, running interactively, with you watching. Production breaks all four.
-
-- An epic breaks into three independent pieces of work. Each wants its own session, and three sessions sharing one checkout will overwrite each other's files. Even once you solve that, you still need somewhere to watch all three from, and a way to tell afterwards whether running them in parallel was worth what it cost.
-- You run the same review by hand on every pull request, and you would rather the repository ran it for you, on a machine you are not sitting at. Then your team lead asks what that costs per month, and you need an answer.
-- Your setup has to survive twenty developers. `ENVIRONMENT.md` explains your choices to anyone who reads it, but some rules have to hold for the person who does not, and a written convention cannot do that.
-
-Intermediate was about *shaping* Claude Code. Advanced is about *operating* it.
+{/* @@TODO@@ 2–3 concrete scenarios the learner cannot handle yet; the problems this level exists to solve. */}
 
 ## The map
 
-The level splits into six territories, one per module, and each removes one of those assumptions.
-
 <ChartEmbed id="advanced-stack-map" />
-
-The vertical order tracks dependency rather than difficulty. The last three sit side by side because nothing forces them into a sequence.
 
 ## How it fits together
 
-<LessonLink id="A1.1">Orchestration (A1)</LessonLink> supplies the parts everything else is assembled from: a separate git checkout per session, a screen for dispatching and monitoring background sessions, coordinated sessions that share a task list and message each other, and scripted runs that fan out to many subagents and cross-check their findings. <LessonLink id="A2.1">Automation (A2)</LessonLink> then takes you out of the loop, first by making Claude scriptable, then by moving the trigger into the repository and onto a schedule.
-
-<LessonLink id="A3.1">Safety and governance (A3)</LessonLink> is a boundary condition on that automation. An agent reads untrusted input, and an unattended agent acts on it with nobody present to refuse, so the sandbox tier and the permission rules are what make a scheduled job defensible.
-
-The remaining three answer questions the first three raise. Parallel work multiplies token spend, so <LessonLink id="A4.1">cost and scale (A4)</LessonLink> is where you learn to measure it; until you do, every claim about which arrangement was cheaper is a guess. <LessonLink id="A5.1">Extensions (A5)</LessonLink> turns your plugin into something other people can install and upgrade, with versions and a marketplace behind it. And <LessonLink id="A6.1">the Agent SDK (A6)</LessonLink> takes the same engine out of the terminal entirely, so you can embed it in software you own.
+{/* @@TODO@@ Short prose on the relationships and dependencies between the components — the shape of the system, not its mechanics. */}
 
 ## Suggested route
 
-Take <LessonLink id="A1.1">A1</LessonLink> first, since <LessonLink id="A2.1">A2</LessonLink> automates the primitives it introduces.
-
-<LessonLink id="A3.1">A3</LessonLink> before anything runs unattended is the one ordering rule this level treats as hard. Read it early as background or late as configuration, but not after the first scheduled job has already fired.
-
-<LessonLink id="A4.1">A4</LessonLink>, <LessonLink id="A5.1">A5</LessonLink>, and <LessonLink id="A6.1">A6</LessonLink> come in any order. Start with whichever question is live for you: the bill that surprised you, the teammates who keep asking for your setup, or the product you want to build that has no terminal in it. This overview and the <LessonLink id="A6.4">self-assessment</LessonLink> are both skippable, though the assessment is where you find out whether <LessonLink id="A1.5" /> has become a reflex.
+{/* @@TODO@@ The default module order, what can be reordered or skipped and what shouldn't, with reasons. */}
 
 ## What you'll build
 
-The level lands in <LessonLink id="A7.1">Ship It Like a Team</LessonLink>, which takes PulseBoard from a project that works on your machine to one that is operated. A feature epic gets decomposed into pieces that touch disjoint files, then executed by an agent team. Review runs on every pull request in layers. A sandboxed maintenance job runs on a schedule behind a written guardrail document. Managed settings and a version-pinned marketplace go out as if rolling to twenty developers, and an OpenTelemetry dashboard gives you the numbers to argue for a cheaper model assignment. You act as tech lead throughout, and you finish with the repository plus a `RUNBOOK.md`, a `GOVERNANCE.md`, and a published marketplace.
-
-<LessonLink id="A6.1" /> ends the level on a reframe: Claude Code is one application built on an engine, and the SDK hands you the engine.
+{/* @@TODO@@ The guided-project teaser, linked. */}
