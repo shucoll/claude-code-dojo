@@ -1091,7 +1091,7 @@ export const curriculum: Level[] = [
             order: 3,
             estimatedMinutes: 16,
             volatility: 'volatile',
-            verifiedAgainstDocsAt: '2026-09-17',
+            verifiedAgainstDocsAt: '2026-09-18',
             prerequisites: ['A1.1', 'A1.2'],
             teaches: ['cross-session-messaging', 'agent-discovery', 'inbound-controls', 'message-is-not-consent'],
             references: ['I6.4', 'B2.5'],

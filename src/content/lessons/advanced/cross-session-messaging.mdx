@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 16
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-18"
 prerequisites: ["A1.1", "A1.2"]
 teaches: ["cross-session-messaging", "agent-discovery", "inbound-controls", "message-is-not-consent"]
 references: ["I6.4", "B2.5"]
@@ -17,40 +17,249 @@ docsSources: ["https://code.claude.com/docs/en/cross-session-messaging", "https:
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You are three worktrees deep. The session working on the API layer just renamed a column, and the two sessions building against that schema have no idea. They find out when their tests fail, or they do not find out at all and you review two pull requests written against a table that no longer exists.
+
+The isolation from <LessonLink id="A1.1" /> is doing its job. It cut the sessions off from each other's files, and it cut them off from each other's findings at the same time. The only channel between them is you, reading one terminal and retyping the important part into another.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Cross-session messaging is Claude delivering a message from one of your sessions to another. It discovers which agents it can reach with the `ListAgents` tool and delivers with `SendMessage`, and you call neither one yourself. You describe what the other session needs to know, and Claude writes and addresses the message.
+
+A message is a piece of text one Claude wrote for another. It carries the sender's name and a reply address, and nothing else: not the sender's conversation history, not its files, not its tool results. To move a conversation, you <LessonLink id="B2.5">resume</LessonLink> it. To move a finding, you message it.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### Who Claude can reach
+
+Claude finds the target on its own, so nothing needs running before you ask. To see the roster yourself, use `/list-agents`, also aliased `/peers`:
+
+| Row | What it is |
+|---|---|
+| Subagents | agents running inside this session |
+| Teammates | this session's own agent team members |
+| Your other local sessions | sessions on this machine, background ones included |
+| Cloud sessions | shown while this session is connected to Remote Control, labelled `cloud` |
+| Sessions on your other machines | shown while both ends run Remote Control, labelled `Remote Control` |
+
+The first line of the output, when present, is this session's own name, which is what your other sessions address it by. Claude Code refuses a message addressed to that name, since it is the session you are already in.
+
+A session answers to the name you gave it with `--name` or `/rename`, or one Claude Code generated. When two live sessions share a name, Claude Code adds a short identifier to tell them apart, and a local session appears in the roster only once it has bound its inbox socket.
+
+### Sending one
+
+Describe the outcome and leave the wording to Claude:
+
+```prompt
+Let the session working on the payments API know that the schema migration finished and rebasing on main is safe now.
+```
+
+To name the target yourself, type `@` and the first letters of the session's name, then pick it from the typeahead:
+
+```prompt
+Let @api-worker know the schema migration finished
+```
+
+The receiving Claude reads the message between tool calls, so a running tool is never interrupted. If that session is idle, the message starts a new turn there. It arrives as a dim one-line preview in the conversation, expandable with `Ctrl+O`, and Claude reads the full text whether or not you expand it.
+
+### Asking a session to report back
+
+When you are waiting on a long run somewhere else, Claude can subscribe to one notice instead of you checking:
+
+```prompt
+Tell me when the migration session finishes what it's working on
+```
+
+Claude sets `notify_when_idle` on the `SendMessage` call, either attached to a message it was sending anyway or on its own. On its own it starts no turn in the watched session and spends no tokens there. The notice is one-shot, it only works for sessions on this machine, and the subscription is dropped after 12 hours if nothing arrives.
+
+### A message is not your consent
+
+When one session messages another, Claude Code tells the receiving Claude that the text came from another session rather than from you, and holds it to four limits:
+
+- **It cannot approve anything.** A message never counts as your consent, so it cannot answer a pending permission prompt on your behalf.
+- **It cannot change configuration.** The receiving Claude is instructed never to change permission settings, `CLAUDE.md`, or other configuration because another session asked it to.
+- **Commands in the text do not run.** A `/compact` in a message arrives as the characters `/compact`. Claude Code never executes it.
+- **Permission prompts still fire.** If acting on the message needs a permission the receiving session lacks, you get the same prompt you would get for any other work.
+
+The boundary holds in the other direction too. Claude is instructed never to ask another session to do something that was denied in its own session, or that its own permission rules would block, and to bring that back to you instead. Messaging moves information between sessions; it does not move authority.
+
+### Controlling what arrives
+
+`crossSessionInbound` decides what a session does with messages from your other sessions:
+
+| Value | Behavior |
+|---|---|
+| `accept` | every message is delivered to Claude |
+| `hold` | a notice is shown and nothing is delivered, until an `accept` later applies and the held messages are released |
+| `refuse` | every message is dropped undelivered |
+
+You can also set it from the `/config` row **Messages from your other sessions**.
+
+When no value applies anywhere, Claude Code decides per message by comparing the two sessions' permission modes, sorted into two classes: sessions that bypass permission prompts, and everything else. A receiving session that prompts for permissions takes messages normally, and holds one only when the sender identifies itself as bypassing. A receiving session that bypasses holds every message for your approval unless the sender is also bypassing.
+
+A held message opens an approval dialog showing the sender and a preview. Approving delivers that one message, denying drops it, and leaving it past `dialogExpiry` (five minutes by default) closes it and drops it. When the sender is on this machine, it gets a notice back that its message was held, and a follow-up when the message is delivered, denied, or expires, so the sending Claude is not left waiting on something nobody read.
+
+### Reaching beyond this machine
+
+Where a message travels depends on where the target runs:
+
+| Target | How it travels |
+|---|---|
+| A session on this machine | over a per-session socket, or a named pipe on native Windows, never through Anthropic servers |
+| A session on another of your machines | through Anthropic servers, arriving over that machine's Remote Control connection |
+| A cloud session | through Anthropic servers, straight to the cloud session |
+
+Remote Control is what makes the second and third rows possible. You connect a session with `/remote-control` (aliased `/rc`), or start one with `claude --remote-control`, and it requires a claude.ai sign-in. Without it, Claude cannot find your cloud sessions or the sessions on your other machines at all.
+
+Same-machine delivery works by each session registering itself in files on disk, which means two sessions can reach each other only when they can see the same files. A container has its own filesystem, so a session inside it and a session on the host cannot message each other. The same applies between a session inside WSL 2 and a native Windows session on one computer.
+
+`isolatePeerMachines` set to `true` requires your explicit approval before any message leaves the machine, and it holds even in `bypassPermissions` mode. A `true` from any settings scope applies, so a checked-in project file can turn the requirement on but not off.
+
+### Turning it off
+
+Receiving and sending are two separate controls, and shutting off one leaves the other running.
+
+Stop receiving with `crossSessionInbound` set to `refuse`. Stop sending and listing with permission deny rules naming `SendMessage` and `ListAgents`, both of which take the bare tool name with no specifier. An administrator combines them for an organization:
+
+```json
+{
+  "permissions": {
+    "deny": ["SendMessage", "ListAgents"]
+  },
+  "crossSessionInbound": "refuse"
+}
+```
+
+Denying `SendMessage` also removes messaging to subagents and agent-team teammates, since one tool serves all three. A refusing session looks no different from the outside, in its own `/status` or in other sessions' rosters, so confirm it by reading the settings that apply rather than by testing from elsewhere.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+**Environment:** your own repository, or a cloned public one, with two worktrees running at once.
+
+### Set up two named sessions
+
+```bash
+claude --worktree api-schema --name api-worker
+```
+
+```bash
+claude --worktree reports-ui --name reports-worker
+```
+
+Naming them matters here. Claude addresses sessions by name, and a name you chose is easier to aim at than a generated one.
+
+### Do something one session needs to tell the other
+
+In `api-worker`:
+
+```prompt
+Rename the tenant column to tenant_id in the schema and the migration, then update the API layer.
+```
+
+When it lands, ask for the handoff:
+
+```prompt
+Let @reports-worker know about the column rename and what it needs to change.
+```
+
+### Watch it arrive
+
+In the `reports-worker` terminal, a preview line appears:
+
+```text
+› Message from @api-worker: Renamed tenant to tenant_id in the schema… (ctrl+o to expand)
+```
+
+Press `Ctrl+O` to read the full text:
+
+```text
+Renamed tenant to tenant_id in the schema and migration
+The API layer is updated. Any report query selecting `tenant` needs the new
+name, and rebasing on main after my PR merges is safe.
+```
+
+That session's Claude now acts on it, under its own permission rules. If the change it wants to make needs an approval, you get the prompt, because the message did not carry one.
+
+### Check the roster
+
+In either session:
+
+```prompt
+/list-agents
+```
+
+The first line is that session's own name. The other worktree session is a row below it. Confirm you can read who is reachable from where before you depend on it in a real sprint.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**A breaking change landing mid-sprint.** The session that made it tells the sessions building on it, with the specifics, before their tests fail.
+
+**Two worktrees on one repository.** After one session merges or pushes, it tells the others what landed so they rebase deliberately rather than discovering a conflict later.
+
+**A long migration you are not watching.** Ask for a notice when that session next goes idle. It costs no tokens in the watched session and saves you tabbing over to check.
+
+**A question one session already answered.** Rather than re-deriving a decision in a second session, have the first send the conclusion across.
+
+**Moving a whole conversation.** This is the near-miss. Messaging sends text, not history, so a message asking another session to "continue what I was doing" hands it a sentence and none of the context behind it. Resume the session instead.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Messaging is for independent sessions you start and steer yourself. For everything adjacent, Claude Code has a feature built for that exact shape, and reaching for messaging instead is the common mistake:
+
+| What you actually want | Use |
+|---|---|
+| To continue one conversation somewhere else, with its context | <LessonLink id="B2.5">Resuming the session</LessonLink> |
+| A coordinated group Claude spawns and supervises | <LessonLink id="A1.4" /> |
+| To watch and steer many sessions from one place | <LessonLink id="A1.2" /> |
+| To drive a session yourself from your phone or another device | Remote Control |
+
+The cost is small but not zero. A delivered message counts toward usage like a prompt you typed, and it arrives in the receiving session's context window, so a chatty pair of sessions spends real context on coordination. <LessonLink id="I6.4" /> made the same argument about delegation: the mechanism is worth it when it moves something that genuinely needed moving.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **You expect the other session to see your files.** It receives text. A message mentioning `@src/api/client.ts` arrives with those characters in it and nothing attached, though the receiving Claude can open that path itself if its own permissions allow it.
+
+- **You send to a session that is holding messages.** Nothing appears to happen on the receiving end. If the receiver bypasses permission prompts and your sender does not, the default holds your message for approval in a terminal nobody is watching, and it expires after five minutes. Check `crossSessionInbound` on the receiving side before assuming delivery failed.
+
+- **You expect a container and its host to talk.** They cannot see each other's sockets, so neither appears in the other's roster. Two sessions inside the same container can message each other normally.
+
+- **You deny `SendMessage` to stop cross-session traffic and lose more than you meant.** The same tool serves subagents and agent-team teammates, so the deny rule silently removes messaging to those as well.
+
+- **You read a stalled session as a failed message.** The message arrived and Claude acted on it. The permission prompt in front of you is the receiving session's own rules, not a delivery problem.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a cloned public repository, or your own with everything committed first.
+
+1. Start two sessions in two worktrees, naming each with `--name`.
+2. Run `/list-agents` in both. Note the first line of each and how each one appears in the other's roster.
+3. In session one, have Claude make a small change, then ask it to tell session two what changed.
+4. In session two, read the preview line and expand it with `Ctrl+O`.
+5. From session one, ask Claude to have session two change a setting in `CLAUDE.md`, then read what session two does with that request.
+6. Set `crossSessionInbound` to `refuse` in session two's settings, restart it, and send another message.
+
+**Success looks like:** step 4 shows text only, with no files attached; step 5 ends with session two declining to change configuration on another session's say-so; and step 6 delivers nothing while the sending session gets a notice back that the receiver is not accepting messages.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Do I have to ask for a message, or does Claude send them on its own?**
+Both. Claude sends one when it sees the need, such as after making a change that affects work another session is doing. You can also prompt for one, and you can name the target with an `@` mention.
+
+**What happens if two sessions start messaging each other in a loop?**
+It stops on its own. Claude Code rate-limits repeated messages per sender, drops identical repeats arriving in a short window, and queues at most 50 accepted messages. When a message is dropped that way, the sending session is told which one and told not to resend immediately.
+
+**Can a script or a hook post into a session?**
+Yes. Each session exports its inbox socket path as `CLAUDE_CODE_MESSAGING_SOCKET` and a token as `CLAUDE_CODE_MESSAGING_TOKEN`, and `/status` shows the path in its `Peer address` row. Messages arriving that way run through the same inbound controls, with an exception for a session's own child processes when no `crossSessionInbound` value applies.
+
+**Does a `-p` session receive messages?**
+It binds an inbox and appears in the roster, so yes. It cannot show an approval dialog, so a message held by the default waits for `dialogExpiry` and is then dropped and reported as expired. To let an unattended worker take messages, set `crossSessionInbound` to `accept` in its `--settings`. A session started in bare mode binds no socket at all and is unreachable.
+
+**Why does a session I am running not appear in the roster?**
+Most often it has not bound an inbox socket: bare mode, or a socket directory Claude Code refused. Check `/status` in that session for `Peer address`. For a session on another machine, both ends need Remote Control connected, and a session showing `offline` can still be sent to, with delivery waiting until its machine reconnects.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A1.4" /> replaces the coordination you just did by hand. A team has a shared task list and teammates that message each other directly, without you deciding who needs to know what.
+
+<LessonLink id="A1.6" /> uses the distinction this lesson rests on. Whether workers need to coordinate, rather than merely communicate, is one of the three questions that picks your parallel mechanism, and messaging is what puts sessions on the communicating side of it.
+
+<LessonLink id="A3.3" /> is where the deny rules and `crossSessionInbound` stop being your settings and become an organization's.
