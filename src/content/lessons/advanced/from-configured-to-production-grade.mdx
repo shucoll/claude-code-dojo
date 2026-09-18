@@ -19,24 +19,52 @@ interactive:
 
 ## You are here
 
-{/* @@TODO@@ The previous level's exit capabilities mirrored back in one tight paragraph, anchored to its exit artifact. Capabilities, not a lesson list. */}
+You finished Intermediate holding two things. The first is the system map from <LessonLink id="I7.3" />: every configuration mechanism drawn as one running session, so a requirement arrives and you can name the mechanism it calls for instead of reaching for whichever one you used last. The second is `pulseboard-dev`, the versioned plugin you shipped in <LessonLink id="I8.7" />, which stands that whole environment up in a clean clone, alongside an `ENVIRONMENT.md` that defends every choice in it against the resolver that owns the decision.
+
+So you can shape Claude Code's substrate, choose between its mechanisms deliberately, and hand the result to a teammate as one installable unit.
 
 ## The gap
 
-{/* @@TODO@@ 2–3 concrete scenarios the learner cannot handle yet; the problems this level exists to solve. */}
+All of that assumed one situation without ever saying so: one developer, one session, a terminal you are sitting in front of, approving the work as it happens.
+
+The assumption runs out in ordinary places.
+
+A feature epic splits into four pieces that do not depend on each other. You still work through them one after another, because two sessions in one checkout overwrite each other's files. A week of independent work takes as long as a week of sequential work.
+
+You want the dependency bumps checked every Monday, the tests run, and a pull request opened when they pass, whether or not you open a terminal that morning. Every mechanism you know so far waits for you to approve its first tool call.
+
+Your team adopts what you built, and the questions that come back are not about features. Which of these hooks can a developer switch off? What stops a subagent reading the production credentials in `.env`? What does this cost per developer per month, and how would anyone know?
+
+Those are the same tool under different conditions. Everything up to here was one developer, one session, interactive and supervised. Production work is parallel, automated, unattended, governed, measured, and distributed. This level's six territories are those six adjectives, one module each.
 
 ## The map
+
+The stack below is ordered by what depends on what rather than by difficulty, and every node links through to the module that teaches it.
 
 <ChartEmbed id="advanced-stack-map" />
 
 ## How it fits together
 
-{/* @@TODO@@ Short prose on the relationships and dependencies between the components — the shape of the system, not its mechanics. */}
+Two of the six set constraints the others have to respect.
+
+<LessonLink id="A1.1">Orchestration (A1)</LessonLink> supplies the primitives: the several ways to have more than one Claude working at once, and the isolation that decides whether they can safely touch the same repository. <LessonLink id="A2.1">Automation and CI (A2)</LessonLink> spends those primitives with nobody watching, running the same work on a commit, a schedule, or a pull request instead of on your keystroke. Automation is largely orchestration with the human removed, which is why the primitives come first.
+
+<LessonLink id="A3.1">Safety and governance (A3)</LessonLink> is the precondition on all of it. An agent reads untrusted content, untrusted content can carry instructions, and an unattended agent has nobody to catch what happens next. Sandboxing, narrow permissions, and controls a developer cannot override are what let the rest of this level run anywhere other than a terminal you are watching.
+
+The last three stand on their own. <LessonLink id="A4.1">Performance, cost, and scale (A4)</LessonLink> turns what you could previously only estimate into something you measure: cache behavior, model assignment, and telemetry broken down per user, per model, and per feature. <LessonLink id="A5.1">Building and distributing extensions (A5)</LessonLink> takes the plugin you already shipped and treats it as a product, with a marketplace, real versions, and an upgrade story. <LessonLink id="A6.1">The Agent SDK (A6)</LessonLink> is the same engine as a library you import, for agents that live inside your own product rather than in your terminal.
 
 ## Suggested route
 
-{/* @@TODO@@ The default module order, what can be reordered or skipped and what shouldn't, with reasons. */}
+Take <LessonLink id="A1.1">A1</LessonLink> before <LessonLink id="A2.1">A2</LessonLink>, for the reason above.
+
+Take <LessonLink id="A3.1">A3</LessonLink> before you run anything unattended, and treat that as a hard rule rather than a preference. Broad permissions combined with nobody in the loop is the most expensive misconfiguration in this level, and A3 is where you learn what to close off before a scheduled job runs at 3am against your repository.
+
+<LessonLink id="A4.1">A4</LessonLink>, <LessonLink id="A5.1">A5</LessonLink>, and <LessonLink id="A6.1">A6</LessonLink> are independent of each other and of the order they appear in. Take whichever your work calls for. A team adopting your setup makes A5 urgent; a bill that surprised somebody makes A4 urgent.
+
+This overview and the <LessonLink id="A6.4">level self-assessment</LessonLink> are both skippable.
 
 ## What you'll build
 
-{/* @@TODO@@ The guided-project teaser, linked. */}
+<LessonLink id="A7.1">Ship It Like a Team</LessonLink> takes PulseBoard from working on your machine to operated in production, with you as tech lead of a Claude-powered team. You decompose a feature epic into genuinely independent tasks and hand them to a three-teammate agent team. You wire Claude into your repository host so it answers issues and reviews pull requests, and you add a sandboxed scheduled job that maintains the repository while you sleep, gated behind a guardrail document you write first. You draft managed settings as though rolling out to twenty developers, promote your plugin into a version-pinned marketplace, and stand up a telemetry dashboard you then use to argue for one specific cost change with numbers behind it. You finish with the repository, a `RUNBOOK.md`, a `GOVERNANCE.md`, and a published marketplace.
+
+The level keeps one door for the end. <LessonLink id="A6.1" /> reframes everything behind it: Claude Code is one application built on an engine, and the SDK hands you that engine as a Python or TypeScript library, with the built-in tools, the agent loop, subagents, hooks, permissions, and skills all carried over intact. The system map you brought into this level survives the move.
