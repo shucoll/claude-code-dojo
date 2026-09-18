@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-18"
 prerequisites: ["A1.1"]
 teaches: ["agent-view", "dispatch", "background-sessions", "supervisor"]
 references: ["I6.3"]
@@ -17,40 +17,223 @@ docsSources: ["https://code.claude.com/docs/en/agent-view"]
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+<LessonLink id="A1.1">Worktrees</LessonLink> solved collisions. They did not solve attention.
+
+Three isolated sessions means three terminals, and you can see at most one of them at a time. One finished twenty minutes ago and has been sitting idle since. Another stopped to ask a permission question and has been waiting just as long. You find out by cycling tabs and reading scrollback. Every session you add costs you another place to look, which is the part of parallel work that stops scaling first.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Agent view is one screen over every background session: what each one is doing, which ones need you, and which are finished. You open it with `claude agents`.
+
+A background session is a full Claude Code conversation that keeps running with no terminal attached to it. You dispatch a task, it works, and you come back when the row says it needs you.
+
+Agent view is a research preview, so its interface and keyboard shortcuts can change. The sessions it manages are ordinary Claude Code sessions, so nothing you dispatch is trapped inside the feature.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### Reading the view
+
+```bash
+claude agents
+```
+
+Sessions are grouped by state, in the order you would triage them: pinned first, then ready for review (sessions with an open pull request), needs input, working, and completed. `Ctrl+S` switches to grouping by directory instead, and that choice persists.
+
+Each row carries a name, a one-line summary, its age, and a pull request number when it has one. The summary is written by a Haiku-class model so you can read what a session is doing without opening its transcript. It refreshes from the session's own output at most once every 15 seconds without costing a model request, gets rewritten when a turn ends, and is refreshed again every few minutes during long turns. With no Haiku model configured it falls back to the session's main model.
+
+Selecting a row and pressing `Enter` or `→` attaches to that session in your terminal. `Space` opens a peek panel instead, which is the cheaper look when you only want to know whether to intervene.
+
+### Three ways to dispatch
+
+**From the view.** Type a prompt into the input at the bottom and press `Enter`. Prefixing it with a subagent name runs that subagent as the main agent, `@<repo>` targets a specific repository, and `!` runs a shell command as a background job.
+
+**From inside a session.** `/bg` moves the conversation you are in to the background and gives you your terminal back, optionally with one more instruction attached:
+
+```prompt
+/bg run the full test suite and fix whatever fails
+```
+
+`/fork` instead makes an independent background copy that carries your conversation context with it, leaving your session where it is.
+
+**From your shell.** `claude --bg` dispatches without opening the view at all:
+
+```bash
+claude --bg "investigate the flaky SettingsChangeDetector test"
+claude --agent code-reviewer --bg "address the review comments on PR 1234"
+```
+
+`--name`, `--model`, and `--permission-mode` all apply, and `claude --resume <id> --bg` sends an existing conversation to the background to continue on its own.
+
+### How file edits are isolated
+
+A background session starts in your working directory. Before it edits anything, it moves itself into a worktree under `.claude/worktrees/`, and from that moment the four enforcement checks from <LessonLink id="A1.1" /> apply to it and to every subagent it spawns. You configure nothing for this; it is what a dispatched session does on its own.
+
+A session that made changes in a worktree Claude created preserves the work before it finishes. It commits without asking, pushes when the repository has a remote, and opens a draft pull request when the task calls for one, which is where the `#1234` on the row comes from. It never pushes to `main` or `master`, never force-pushes, and never merges. If your `CLAUDE.md` says you handle git yourself, that wins and the session leaves the commit to you.
+
+Isolation is skipped in four cases: the session is already inside a linked worktree, the file being edited is already inside one, the working directory is not a git repository and no `WorktreeCreate` hook exists, or the write lands outside the working directory. Where isolation is impractical for a whole repository, turn it off in `.claude/settings.json`:
+
+```json
+{
+  "worktree": {
+    "bgIsolation": "none"
+  }
+}
+```
+
+A session editing a checkout it did not isolate asks before committing or switching branches, rather than preserving work silently.
+
+### Where state lives, and what keeps it running
+
+| Path | Holds |
+|---|---|
+| `~/.claude/daemon.log` | the supervisor's log |
+| `~/.claude/daemon/roster.json` | the list of running background sessions |
+| `~/.claude/jobs/<id>/state.json` | per-session state, better read with `claude agents --json` |
+| `~/.claude/jobs/<id>/tmp/` | per-session scratch space, where writes do not prompt |
+
+Each background session gets `CLAUDE_JOB_DIR` pointing at its own job directory.
+
+The supervisor is the background service that hosts these sessions so they keep working after you close the view. It starts the first time you background a session or open agent view, restarts session processes that fail, stops idle ones after about an hour to free resources, and carries session state across auto-updates. Inspect it with `claude daemon status`, which reports whether it is reachable, its process ID and version, how many live sessions it holds, and a warning when its version has drifted from your `claude` binary.
+
+### Names that are not each other
+
+Four commands sound like they do this lesson's job. Three of them do not.
+
+| You type | What it does |
+|---|---|
+| `claude agents` | opens agent view, the subject of this lesson |
+| `/agents` | not agent view. As of v2.1.198 it prints where your subagent files live |
+| `/tasks` | lists everything running in the background of the current session, finished subagents included |
+| `/fork` vs `/subtask` | `/fork` copies the whole session into a background session; `/subtask` forks a subagent inside the one you are in |
+
+### What survives when you background a session
+
+Pressing `←` on an empty prompt backgrounds the session you are in and opens agent view with that row selected.
+
+Work already in flight mostly comes along: background shell commands, backgrounded subagents, dynamic workflows, and scheduled tasks you created with `/loop` all keep running. So do your configuration flags, directories added with `/add-dir`, permission mode, model and effort changes, and a name you set with `/rename`.
+
+Two things stop. Running monitors do not carry over, and neither do shell commands that subagents started.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+**Environment:** any git repository with at least one commit and a remote, since part of this watches a dispatched session open a pull request.
+
+### Dispatch two tasks
+
+From your shell, without opening anything:
+
+```bash
+claude --bg --name flaky-test "investigate why the SettingsChangeDetector test fails intermittently and fix it"
+```
+
+Then open the view and dispatch the second from inside it:
+
+```bash
+claude agents
+```
+
+In the input at the bottom:
+
+```prompt
+Update the README install section to match the current package scripts.
+```
+
+### Watch them
+
+The view fills in as the sessions work:
+
+```text
+  WORKING
+  ✽ flaky-test          reading SettingsChangeDetector.test.ts, reproducing the failure   2m
+  ✽ eager-silver-moth   comparing README install steps against package.json scripts       40s
+```
+
+Press `Space` on a row to peek at what it is doing without attaching. Press `Enter` to attach properly, and `←` to drop back to the view.
+
+A session that hits a permission prompt moves itself to **Needs input** and waits there. Attach to it, answer, and it returns to working.
+
+### Collect the results
+
+When the first finishes, its row moves to **Completed**, and if it changed files the row carries a pull request number:
+
+```text
+  READY FOR REVIEW
+  ✓ flaky-test          opened a draft PR fixing a race in the debounce timer   #218   14m
+```
+
+The work is on a branch in its own worktree, committed and pushed, which is the commit-and-push behavior above. Nothing landed in your checkout while you were reading.
+
+### Confirm what is holding it up
+
+```bash
+claude daemon status
+```
+
+Close agent view entirely and run it again. The sessions are still there, because the supervisor is what hosts them, not the view.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**Several independent investigations at once.** Dispatch each with `claude --bg` and check the view when you surface. Each one is a full session with its own context, so a long search in one does not crowd out another.
+
+**A long task you want out of your terminal.** `/bg` mid-session hands the current conversation over without restarting it, so the context you already built is what continues the work.
+
+**The same conversation taken two directions.** `/fork` copies the session and backgrounds the copy. You keep exploring in the foreground while the copy writes up the version you already agreed on.
+
+**A dispatched session that needs your local uncommitted files.** This is the near-miss. Dispatched sessions isolate into a fresh worktree before editing, so your uncommitted work is not there. Either commit first, or set `worktree.bgIsolation` to `"none"` for that repository and accept that the session now edits your working copy directly.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+| Dispatch it | Keep it in the foreground |
+|---|---|
+| Independent tasks you will check back on | Work where you want to steer each turn |
+| Long runs with a clear finish line | A task whose success criteria you are still deciding |
+| Anything you want to survive closing the terminal | A quick question |
+| Work that should end as a reviewable pull request | Edits you want in your working copy right now |
+
+The cost is that every background session is a full session. Three dispatched tasks spend roughly three sessions' worth of tokens, on top of the per-row Haiku summaries, which are billed under normal usage. Dispatching work you would have done in two foreground turns is a straightforward loss. <LessonLink id="I6.3" /> already made the narrower version of this call for subagents, and the same test applies: delegate what genuinely runs on its own.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **You go looking for the view with `/agents`.** It prints subagent file locations and nothing opens. The command is `claude agents`, from your shell, not a slash command inside a session.
+
+- **You close agent view expecting the work to stop.** It does not. The supervisor keeps hosting every session. Stop one with `Ctrl+X` on its row or `claude stop <id>`, and stop everything with `claude daemon stop --any`.
+
+- **You background a session with a workflow mid-flight.** Claude Code warns you first, and the warning is worth reading: running subagents restart from the beginning and you pay for their tokens again. Let the workflow finish, then background.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a cloned public repository, or your own with everything committed first.
+
+1. Dispatch two small independent tasks with `claude --bg`, giving each a `--name` you will recognize.
+2. Run `claude agents` and watch both rows. Note the one-line summary on each and how it changes.
+3. Press `Space` on one row to peek, then `Enter` to attach, then `←` to return.
+4. Quit agent view entirely, then run `claude daemon status`.
+5. Reopen `claude agents` and confirm both sessions are where you left them.
+6. When one completes with edits, run `git branch -a` in your main checkout.
+
+**Success looks like:** step 4 reports a reachable supervisor with live sessions while no view is open, and step 6 shows a branch you never created, with your own working tree unchanged throughout.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Can I see the sessions without the terminal UI?**
+`claude agents --json` prints them as a JSON array and exits, with `--all` to include completed ones. Each object carries the session's `state`, `status`, `cwd`, `id`, and `name`, which is enough to drive a script or a status line.
+
+**What is the difference between `state` and `status` in that output?**
+`state` is about the conversation: `working`, `blocked` on you, `done`, `failed`, or `stopped`. `status` is about the process: `busy`, `waiting`, or `idle`. A session can be `done` with an `idle` process, because the supervisor stops idle processes after about an hour while the conversation stays on disk and resumes when you come back.
+
+**How do I stop a session, and does that delete it?**
+`Ctrl+X` on its row, or `claude stop <id>`. That stops the session and leaves it in the list. Pressing `Ctrl+X` again within two seconds deletes the row. `claude rm <id>` removes it from the list while keeping the transcript, so `claude --resume` can still reach it.
+
+**Can I turn agent view off?**
+Yes, with `CLAUDE_CODE_DISABLE_AGENT_VIEW=1` or `"disableAgentView": true` in settings, and an administrator can enforce it through managed settings. With it off, `claude agents`, `/bg`, and `/subtask` are unavailable, and `/fork` reverts to spawning a forked subagent rather than a background session.
+
+**Does a dispatched session pick up my project configuration?**
+It starts in your working directory, so your `CLAUDE.md`, settings, and project-scope plugins apply the same way they do in a foreground session. Flags you pass at dispatch, such as `--settings`, `--add-dir`, `--mcp-config`, and `--plugin-dir`, persist across the supervisor restarting the session.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A1.3" /> closes the loop this lesson opens. You now have several sessions working in isolation and no way for a finding in one to reach another, which is the problem cross-session messaging exists to solve.
+
+<LessonLink id="A1.4" /> moves the coordination from you to Claude. Where you dispatch tasks and check back here, a team has a lead that assigns them, and teammates that message each other without you in the middle.
+
+<LessonLink id="A2.4" /> takes the dispatch you just did by hand and puts it on a schedule, which is the same mechanism with nobody at the keyboard.

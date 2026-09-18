@@ -1076,7 +1076,7 @@ export const curriculum: Level[] = [
             order: 2,
             estimatedMinutes: 14,
             volatility: 'volatile',
-            verifiedAgainstDocsAt: '2026-09-17',
+            verifiedAgainstDocsAt: '2026-09-18',
             prerequisites: ['A1.1'],
             teaches: ['agent-view', 'dispatch', 'background-sessions', 'supervisor'],
             references: ['I6.3'],
