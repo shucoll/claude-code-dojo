@@ -1062,7 +1062,7 @@ export const curriculum: Level[] = [
             order: 1,
             estimatedMinutes: 16,
             volatility: 'evolving',
-            verifiedAgainstDocsAt: '2026-09-17',
+            verifiedAgainstDocsAt: '2026-09-18',
             teaches: ['worktrees', 'parallel-isolation', 'subagent-worktree-isolation', 'checkout-hygiene'],
             references: ['B2.5', 'I6.4'],
             docsSources: ['https://code.claude.com/docs/en/worktrees', 'https://code.claude.com/docs/en/common-workflows'],
