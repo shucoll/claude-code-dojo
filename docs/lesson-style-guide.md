@@ -115,6 +115,26 @@ feels flat, the fix is a sharper fact, not a flourish.
   - Before: "The hook fires on every write, no exceptions."
   - After: "The hook fires on every write, including writes Claude makes without
     asking."
+- **No "this, not that" antithesis** (`this-not-that`). State the positive claim
+  and stop. The short comma form is the one that slips past review: "Isolation is
+  enforced, not advisory", "The test is scale, not determinism", "a schedule, not
+  a way to parallelize", "Named here, not taught", "Three teammates, not
+  fifteen". It is the compact sibling of `flourish-clause`'s "X is not
+  [dismissive picture]; it is Y", and the same fix applies: delete the negated
+  half, which carries no information the positive half does not.
+  - Before: "Isolation is enforced, not advisory."
+  - After: "Claude Code enforces the isolation."
+  - Before: "worktrees decide how the chosen mechanism runs, not which one you
+    pick."
+  - After: "worktrees are the isolation layer under all four."
+  - **When fixing a flagged antithesis, check the replacement is not another
+    one.** The second example above was itself a repair for a flagged
+    "not a fifth answer", and reintroduced the pattern it was meant to remove.
+  - This rule targets the rhetorical shape. Three kinds of negation stay:
+    an enumerated exclusion where the list is the content ("not its files, not
+    its tool results"), a corrective fact the learner needs ("the command is
+    `claude agents`, not a slash command"), and `rather than` comparatives that
+    genuinely compare two real options.
 - **No manufactured punchlines or staccato drama** (`staccato`). One short
   sentence for emphasis is fine. A run of clipped fragments engineered to build
   tension is not.
@@ -294,6 +314,9 @@ writing. The following are **not** violations:
   marketing phrasing in sample output or a quoted doc are content (see Scope).
 - **A watched phrase being discussed rather than used.** A lesson that quotes a
   bad prompt in order to fix it is using the phrase correctly.
+- **A negation that is the content.** `this-not-that` targets the rhetorical
+  shape. An enumerated exclusion list, a correction the learner specifically
+  needs, and a `rather than` comparative between two real options are all fine.
 - **Bold on a genuine defined term** or a template label such as
   `**Environment:**`.
 - **Hyphenated compounds in attributive position.** "A real-time preview" is
@@ -331,6 +354,10 @@ grep -niE "as of this writing|based on available information|it is believed|pres
 
 # Chatbot artifacts
 grep -niE "great question|i hope this helps|let me know if|would you like me|certainly!|of course!" <file>
+
+# "This, not that" antithesis — judge each hit; keep enumerated exclusions,
+# corrective facts, and genuine `rather than` comparatives
+grep -nE ", not [a-z]|\bis not a \b|\bare not a \b" <file>
 
 # Curly quotes and stray emoji in prose (check each hit is inside a fence)
 grep -nP "[\x{2018}\x{2019}\x{201C}\x{201D}]|[\x{1F300}-\x{1FAFF}]" <file>
