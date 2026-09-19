@@ -4,52 +4,391 @@ slug: "headless-mode"
 title: "Headless mode"
 type: "core"
 order: 1
-estimatedMinutes: 16
+estimatedMinutes: 18
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["headless", "output-formats", "scripted-permissions"]
+verifiedAgainstDocsAt: "2026-09-18"
+teaches: ["headless", "output-formats", "scripted-permissions", "bare-mode"]
 references: ["B2.3", "I1.2", "A6.1"]
-docsSources: ["https://code.claude.com/docs/en/headless", "https://code.claude.com/docs/en/cli-reference"]
+docsSources: ["https://code.claude.com/docs/en/headless", "https://code.claude.com/docs/en/cli-reference", "https://code.claude.com/docs/en/permissions"]
 ---
 
 # Headless mode
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+You want every pull request's diff checked for deployment risk before a human opens it. The check is a paragraph of instructions you have typed into Claude twenty times, and it works every time. It cannot run in CI. A CI job hands a command its input and reads what comes back, so a permission prompt waiting on a keystroke stalls the job until it times out.
+
+The second problem arrives as soon as you solve the first. The same command in the same repository behaves differently on your laptop and on the build machine, because your laptop loads your hooks, your skills, your plugins, your `CLAUDE.md`, and whatever MCP servers the project declares. A check has to give the same answer on every machine that runs it.
+
+<LessonLink id="B2.3" /> gave you the command belt for a session you sit in front of. This lesson covers the runs that happen while you are elsewhere.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+`claude -p` runs one prompt and exits. Its whole interface is stdin, stdout, and an exit code, so it goes in a pipeline next to `grep` and `jq`. A permission prompt that would pause an interactive session has to be settled in advance, by the flags you set before the run starts.
+
+That shape raises a second question: what should Claude Code load before it starts? An interactive session loads everything it can discover. A scripted run usually wants the opposite, and `--bare` is the flag that gives it.
+
+One framing note, because the docs say it plainly. This is the Agent SDK driven from the CLI. <LessonLink id="A6.1" /> hands you the library; the flags here are the same options in a different notation.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### One prompt, one exit code
+
+Add `-p` (or `--print`) to any `claude` command:
+
+```bash
+claude -p "What does the auth module do?"
+```
+
+Claude Code prints the response and exits 0. A failed run exits non-zero, so a script can branch on the status. The two failure shapes land in different streams: an invalid flag is reported to stderr before the run starts, while a failure inside the run, such as missing authentication, is printed as the result on stdout. A script that only parses stdout will happily treat an authentication error as an answer, so check the exit code too.
+
+Not every option combines with `-p`. Claude Code rejects `--bg`, and rejects `--cloud` with a task description, naming the conflict in the error.
+
+### Piping data in
+
+Headless mode reads stdin, so Claude slots into a pipeline:
+
+```bash
+cat build-error.txt | claude -p 'concisely explain the root cause of this build error' > output.txt
+```
+
+Piping is also how you keep permissions narrow. A script that pipes `git diff` in needs no Bash permission at all, because Claude never runs git; the diff is already in the prompt.
+
+Stdin is capped at 10MB. Past that, Claude Code exits non-zero with a clear error, and the fix is to write the content to a file and name the path in the prompt instead.
+
+The same idea as a project script, so `npm run lint:claude` becomes a repository-specific linter:
+
+```json
+{
+  "scripts": {
+    "lint:claude": "git diff main | claude -p \"you are a typo linter. for each typo in this diff, report filename:line on one line and the issue on the next. return nothing else.\""
+  }
+}
+```
+
+The escaped double quotes keep that portable to Windows.
+
+### Output formats
+
+`--output-format` takes three values.
+
+| Value | What you get | Reach for it when |
+|---|---|---|
+| `text` (default) | the response as plain text | a person reads the terminal, or the next command in the pipe does |
+| `json` | one object with the result, session id, usage, and cost | the script needs metadata as well as the answer |
+| `stream-json` | newline-delimited JSON events as they happen | you are showing progress or building your own interface |
+
+The `json` payload carries `total_cost_usd` and a per-model breakdown, so a script tracks spend per invocation without opening the usage dashboard. Both figures are client-side estimates and can differ from your bill.
+
+`jq` pulls the fields out:
+
+```bash
+claude -p "Summarize this project" --output-format json | jq -r '.result'
+```
+
+Streaming needs two companion flags:
+
+```bash
+claude -p "Explain recursion" --output-format stream-json --verbose --include-partial-messages
+```
+
+Each line is one event, and the last line is a `result` message carrying the final text, cost, and session metadata. The first event is usually `system/init`, which reports the model, tools, MCP servers, and loaded plugins for the session. Its `plugin_errors` and `mcp_server_errors` keys are omitted when nothing failed, which gives a CI gate something to fail on: a non-empty array means a plugin or server you expected never loaded, and the run continued without it.
+
+### Constraining the result to a schema
+
+`--json-schema` with `--output-format json` puts a validated object in `structured_output`:
+
+```bash
+claude -p "Extract the main function names from auth.py" \
+  --output-format json \
+  --json-schema '{"type":"object","properties":{"functions":{"type":"array","items":{"type":"string"}}},"required":["functions"]}'
+```
+
+A downstream script then indexes a field instead of parsing prose, which is what makes the result safe to branch on. An invalid schema exits with `Error: --json-schema is not a valid JSON Schema` followed by the validator's diagnostic. Schemas using the `format` keyword, such as `"format": "email"`, are accepted, but `format` is treated as an annotation and Claude Code does not enforce it: validate that yourself.
+
+<LessonLink id="A6.2" /> uses the same schemas from the library side.
+
+### Bare mode
+
+Without `--bare`, `claude -p` loads the same context an interactive session would: hooks, skills, custom commands, subagents, plugins, MCP servers, auto memory, and `CLAUDE.md`, from the working directory and from `~/.claude`. `--bare` skips that whole discovery pass.
+
+```bash
+claude --bare -p "Summarize README.md" --allowedTools "Read"
+```
+
+This is what makes a CI run reproducible. A hook in a teammate's `~/.claude` and a server in the project's `.mcp.json` have no effect, because bare mode never reads them. Startup is faster for the same reason.
+
+Two consequences to plan for. The first is credentials: in bare mode Claude Code reads no OAuth credentials and no system keychain, so an Anthropic API run needs `ANTHROPIC_API_KEY` in the environment, or an `apiKeyHelper` supplied in the `--settings` JSON. Amazon Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry keep reading their own provider credentials as usual.
+
+The second is tools. Claude has Bash, file read, and file edit. Anything else you pass by flag:
+
+| To load | Use |
+|---|---|
+| System prompt additions | `--append-system-prompt`, `--append-system-prompt-file` |
+| Settings | `--settings <file-or-json>` |
+| MCP servers | `--mcp-config <file-or-json>` |
+| Custom agents | `--agents <json>` |
+| A plugin | `--plugin-dir <path>`, `--plugin-url <url>` |
+
+A directory you add with `--add-dir` is a partial exception: bare mode still loads skills from its `.claude/skills/` folder, while its `.claude/commands/` and `.claude/agents/` folders stay skipped.
+
+`--bare` is the documented recommendation for scripted and SDK calls, and will become the default for `-p` in a future release. Writing it explicitly today means the behavior of your script does not change when that lands.
+
+### Permissions in an unattended run
+
+Under `-p`, the starting permission mode is Manual on every plan, so Claude asks before anything that needs approval. In an unattended run, configuration has to answer in your place. Two flags do that, and they do different jobs.
+
+The first is the allow-list. `--allowedTools` takes the permission-rule syntax from <LessonLink id="I1.2" />:
+
+```bash
+claude -p "Look at my staged changes and create an appropriate commit" \
+  --allowedTools "Bash(git diff *),Bash(git log *),Bash(git status *),Bash(git commit *)"
+```
+
+The trailing ` *` turns on prefix matching, and the space before it is load-bearing: `Bash(git diff*)` would also match `git diff-index`. Grant the four commands the job needs and nothing else. `bypassPermissions` turns the whole system off, which is a choice for a disposable sandbox (<LessonLink id="A3.2" />) rather than for a job with credentials in its environment.
+
+A permission mode sets the baseline for everything the allow-list does not name:
+
+| `--permission-mode` | Behavior under `-p` |
+|---|---|
+| `auto` | a classifier reviews most actions in your place |
+| `dontAsk` | denies every call that would otherwise prompt |
+| `acceptEdits` | writes files without prompting and auto-approves common filesystem commands such as `mkdir`, `touch`, `mv`, and `cp` |
+
+`dontAsk` is the locked-down CI shape. Plenty still runs under it: actions that need no approval in Manual mode, including file reads in your working directories and the built-in read-only command set, plus anything your `--allowedTools` entries or `permissions.allow` rules cover. Three things it denies even when an allow rule matches are `AskUserQuestion`, connector tools your organization set to `ask`, and MCP tools marked `requiresUserInteraction`.
+
+The second flag answers what happens when something prompts anyway:
+
+```bash
+claude -p "Update the dependency pins and run the tests" --permission-mode auto --permission-prompts none
+```
+
+With `--permission-prompts none`, anything that would prompt is denied unless a `PermissionRequest` hook allows it, Claude is told that nobody can approve the request and not to retry it, and the run continues. Claude Code also removes the tools that need an answer from a person, such as `AskUserQuestion`, and cancels any MCP elicitation request no `Elicitation` hook answers. Your permission rules, `PermissionRequest` hooks, and permission mode still decide every call first; the flag only catches what nothing else resolved.
+
+It matters most when the run has a permission host to consult, such as an Agent SDK app with a `canUseTool` callback or an MCP tool passed with `--permission-prompt-tool`. Without the flag, the run waits on that host to answer each request. The flag requires Claude Code v2.1.259 or later, and earlier versions reject it with an unknown-option error.
+
+Under `--output-format stream-json`, denials appear as `permission_denied` system messages and the final result message lists them in `permission_denials`. Log that array. It is how you find out that a job came back green having done half the work.
+
+### Continuing a conversation
+
+`--continue` picks up the most recent conversation in the current directory:
+
+```bash
+claude -p "Review this codebase for performance issues"
+claude -p "Now focus on the database queries" --continue
+claude -p "Generate a summary of all issues found" --continue
+```
+
+On v2.1.257 or later, `--continue` will open a background session that has finished, while leaving one that is still running alone.
+
+When several conversations are in flight, capture the session id and resume by it:
+
+```bash
+session_id=$(claude -p "Start a review" --output-format json | jq -r '.session_id')
+claude -p "Continue that review" --resume "$session_id"
+```
+
+Those two commands can run from different directories, because Claude Code finds the session by id in any project on the machine. `--resume` also accepts the absolute path to a session's `.jsonl` transcript file.
+
+### When the run ends
+
+A `-p` run does not always exit the moment Claude answers, and scripts that assume it does hang or lose output.
+
+- **A background Bash task**, such as a dev server or a watch build, is terminated about five seconds after Claude returns its final result and stdin closes. The grace period lets a task that finishes just after the result still deliver its output.
+- **A background subagent or workflow** holds the process open until it completes, because its result is part of the final output. The wait ends after 10 minutes of continuous idle waiting, at which point Claude Code stops what is still running and drops the partial result. `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` changes the limit, and `0` removes it.
+- **SIGTERM**, from `kill` or a process supervisor, exits with code 143. The turn in progress is left unfinished with no result recorded, the process tree of any running Bash command is terminated, `SessionEnd` hooks run, and the process exits. Resuming that session continues the unfinished turn.
+
+### Bare mode, read again as a security control
+
+The workspace trust dialog gates what a repository's configuration may do on your machine. Claude Code shows it in interactive sessions. A `-p` run never shows it, and trusting a parent folder does not count.
+
+So a `-p` run in a repository you have never trusted connects the servers in its `.mcp.json` without asking, approved or not, and runs the hooks in its `.claude/settings.json`, its `env` block, helper commands such as `apiKeyHelper`, and a project skill's hooks and `allowed-tools`. Cloning a repository and running one scripted prompt in it is enough.
+
+Some of the repository's configuration is still held back under `-p`. Its `permissions.allow` rules and `additionalDirectories` are skipped, with a `this workspace has not been trusted` warning on stderr, as are frontmatter hooks in a project subagent and inline `mcpServers` in subagent frontmatter. The dividing line is what each kind of content does: configuration that grants Claude more access waits for trust, and configuration that executes code runs immediately.
+
+Before running `-p` in a repository you did not write, decide what it may run:
+
+- `--bare` reads no hooks, skills, custom commands, subagents, plugins, or `.mcp.json` servers from the project. The project's `env` block and helpers such as `awsAuthRefresh` still apply, and `apiKeyHelper` is read only from `--settings`.
+- `--setting-sources user` reads neither the project's settings files nor its `.mcp.json`.
+- `--settings '{"disableAllHooks": true}'` turns hooks off for that run. Setting it in your user settings alone is not enough, because the project's settings take precedence over yours and can set it back to `false`.
+- A `disabledMcpjsonServers` entry rejects a `.mcp.json` server by name in every session type.
+
+<LessonLink id="A3.1" /> treats the repository as an untrusted input and works out what an attacker does with the rows above.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+### A diff risk summary a CI job can branch on
+
+The goal is a script that reads a branch's diff, judges deployment risk, and emits JSON with a field a build step can test.
+
+**1. Write the schema first.** The shape of the answer is a design decision, and fixing it up front is what separates this from a prompt that returns a paragraph. Save it as `risk-schema.json`:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+    "summary": { "type": "string" },
+    "concerns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": { "type": "string" },
+          "issue": { "type": "string" }
+        },
+        "required": ["file", "issue"]
+      }
+    }
+  },
+  "required": ["risk", "summary", "concerns"]
+}
+```
+
+**2. Write the script.** Save it as `diff-risk.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BASE="${1:-main}"
+
+git diff "$BASE"... | claude --bare -p \
+  "Assess this diff for deployment risk. Name each concern with the file it is in." \
+  --append-system-prompt "You review diffs for deployment risk. Judge only what the diff shows." \
+  --output-format json \
+  --json-schema "$(cat risk-schema.json)" \
+  | jq '.structured_output'
+```
+
+`git diff main...` compares the merge base with your current head, so the script sees the branch's own changes. The diff arrives on stdin, which means Claude never runs git and the run needs no Bash permission.
+
+**3. Run it.** Bare mode reads no OAuth credentials, so export a key first:
+
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+chmod +x diff-risk.sh
+./diff-risk.sh main
+```
+
+Skip the export and the run fails with an authentication error printed as the result on stdout, which is the failure shape from the first section. On success:
+
+```text
+{
+  "risk": "medium",
+  "summary": "Adds a public export endpoint and widens the CORS allowlist.",
+  "concerns": [
+    {
+      "file": "src/server/routes/export.ts",
+      "issue": "New /export route has no authentication middleware."
+    },
+    {
+      "file": "src/server/cors.ts",
+      "issue": "Allowlist now accepts a wildcard subdomain."
+    }
+  ]
+}
+```
+
+**4. Branch on a field.** The build step reads `risk` rather than the prose:
+
+```bash
+RISK=$(./diff-risk.sh main | jq -r '.risk')
+if [ "$RISK" = "high" ]; then
+  echo "High-risk diff. Requesting human review." >&2
+  exit 1
+fi
+```
+
+**5. Harden it for CI.** Three additions turn a script that works on your machine into one that behaves in a pipeline:
+
+```bash
+git diff "$BASE"... | claude --bare -p \
+  "Assess this diff for deployment risk. Name each concern with the file it is in." \
+  --append-system-prompt "You review diffs for deployment risk. Judge only what the diff shows." \
+  --output-format json \
+  --json-schema "$(cat risk-schema.json)" \
+  --permission-mode dontAsk \
+  --permission-prompts none \
+  --max-turns 5 \
+  | jq '.structured_output'
+```
+
+`dontAsk` denies anything that would have prompted, `--permission-prompts none` stops the run waiting on a host that does not exist, and `--max-turns 5` bounds a job that could otherwise keep going. <LessonLink id="A2.2" /> puts this script in a GitHub Actions workflow.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**A repository-specific linter.** Pipe a diff into `-p` with instructions no general linter encodes, and wire it to an npm script. Claude reads the diff from stdin, so the run needs no tool permissions and stays cheap.
+
+**A CI gate with a machine-readable verdict.** Use `--json-schema` and branch on a field. A build step cannot act on a paragraph, and a schema removes the parsing step along with the ambiguity.
+
+**A multi-step script that builds on itself.** Run the analysis, capture `session_id` from the JSON, then `--resume` it for the follow-up. Each step keeps the context of the last without you re-supplying it.
+
+**Progress in an interface you built.** `--output-format stream-json --verbose --include-partial-messages` gives you tokens as they arrive, and `parent_tool_use_id` tells you which subagent a message came from.
+
+**A refactor you plan to supervise.** This is the near-miss. Headless mode suits work whose result you can check mechanically. A refactor where you want to redirect Claude after seeing the first file belongs in an interactive session, because every correction in `-p` costs a fresh run and a cold cache.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+| Run it headless | Stay interactive |
+|---|---|
+| The instructions are stable enough to write down | You expect to redirect Claude mid-task |
+| Something other than a person consumes the output | You read the answer and decide what is next |
+| The run has to happen on a schedule or in CI | The work is exploratory |
+| You can express success as a field or an exit code | Success is a judgment you make by reading |
+
+The cost sits in three places. Every `-p` invocation is a fresh session, so the prompt cache starts cold and you pay full price for the context each time, which <LessonLink id="A4.1" /> puts numbers on. Running without `--bare` adds your `CLAUDE.md`, skill descriptions, and MCP tool names to every one of those runs. And an unbounded agentic loop in a scheduled job spends until it finishes, which is what `--max-turns` and `total_cost_usd` are for.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **The script parses stdout and gets an error message.** A run that fails inside the turn, most often on authentication after adding `--bare`, prints the failure as the result on stdout and exits non-zero. A pipeline into `jq` then fails on invalid JSON, or worse, a text-mode script treats the error as the answer. Check the exit code before reading stdout.
+
+- **It worked locally and did nothing in CI.** The local run picked up your `permissions.allow` rules from settings, and the CI run did not. With `--output-format stream-json`, read `permission_denials` on the result message; with `json`, expect to see the work missing from the result text and widen `--allowedTools` to the specific commands the job needs.
+
+- **`--permission-prompts none` is rejected as an unknown option.** The runner is on Claude Code older than v2.1.259. Pin the version in CI so a runner image refresh does not silently change which flags exist.
+
+- **The allow-list is wider than it looks.** `Bash(git diff*)` without the space matches `git diff-index` too, and a rule such as `Bash(npm *)` covers `npm publish`. Write the narrowest prefix that still covers the job.
+
+- **The run hangs long after the answer.** A background subagent or workflow holds the process open until it finishes, up to ten idle minutes. If a job should never wait, keep background work out of the prompt, or set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` to a limit your CI timeout tolerates.
+
+- **A large input silently stops being a pipe.** Stdin over 10MB exits with an error rather than truncating. Write the content to a file and reference the path in the prompt.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a git repository with at least one commit on a branch ahead of `main`, and `jq` installed.
+
+1. Run `claude -p "What is this project?" --output-format json | jq -r '.result'` and read the answer.
+2. Run the same command again with `| jq '.total_cost_usd'` to see what the invocation cost.
+3. Add `--bare` to the same command. If it fails, read the error, export `ANTHROPIC_API_KEY`, and run it again.
+4. Build the two files from the walkthrough, `risk-schema.json` and `diff-risk.sh`, and run the script against your branch.
+5. Break the schema on purpose by deleting a closing brace, and run it again to see the validator's message.
+6. Fix the schema, then add `--permission-mode dontAsk --permission-prompts none` and confirm the output is unchanged.
+
+**Success looks like:** a cost figure in step 2, an answer in step 3 that no longer reflects your `CLAUDE.md`, a `structured_output` object in step 4 with a `risk` value from the enum, a named schema error in step 5, and identical output in step 6, which tells you the job never needed a permission it was not granted.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Can I use skills and slash commands in `-p`?**
+User-invoked skills and custom commands work: put `/skill-name` in the prompt string and Claude Code expands it before the run. Built-in commands that only exist in the terminal interface, such as `/login`, are unavailable. `/model`, `/effort`, `/fast`, `/color`, and `/rename` take their value as an argument, as in `/model sonnet`, and `/config` takes `key=value`. Those forms need v2.1.205 or later. Remember that `--bare` skips skill discovery, so a run that needs a skill has to load it another way.
+
+**How do I pin the model for a scripted run?**
+`--model` with an alias or a full model name. Pinning it matters more here than interactively, because a default that changes underneath a scheduled job changes its cost and its output shape without anyone deciding to.
+
+**Can I choose the session id in advance?**
+Yes. `--session-id` takes a UUID you generate, which saves capturing it from the JSON when a later step has to resume the run. `--fork-session` makes a resumed run take a new id instead of writing back into the original.
+
+**Does a `-p` run cost less than the same work interactively?**
+Not by itself, and often more, because each invocation starts a cold prompt cache. `--bare` does cut the tokens, since the run loads no `CLAUDE.md`, skill descriptions, or MCP tool definitions. Headless mode is worth paying for when the run has to happen without you.
+
+**Can I run headless in the cloud or in the background?**
+`--bg` is rejected with `-p`, as is `--cloud` with a task description. `--cloud` with a session id and `-p` queues a message into that cloud session and exits. For work that should run without your machine on, <LessonLink id="A2.4" /> covers the scheduling surfaces.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A2.2" /> takes the script you just wrote and gives it a home in a repository host, where `@claude` mentions on issues and pull requests run the same engine. That lesson is also where `--bare` stops being a preference, because CI runs on pull request content from people outside your team.
+
+<LessonLink id="A2.4" /> answers what starts the run when no pipeline does, and carries `--permission-prompts none` forward as one of the non-negotiables for unattended operation.
+
+<LessonLink id="A3.1" /> picks up the trust behavior from the last section of this lesson and builds the threat model around it.
+
+<LessonLink id="A6.1" /> is where the CLI flags become library options, and where moving from a script to the SDK gets its own criteria.
