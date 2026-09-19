@@ -110,7 +110,7 @@ Subagent worktrees use the same base branch as `--worktree`, so they branch from
 
 ### What isolation actually blocks
 
-Isolation is enforced, not advisory. While a session is in a worktree, Claude Code applies four checks to everything that session and its subagents run:
+Claude Code enforces the isolation. While a session is in a worktree, Claude Code applies four checks to everything that session and its subagents run:
 
 - **File edits.** An `Edit`, `Write`, or `NotebookEdit` targeting a path in the main checkout is blocked.
 - **Command working directory.** A Bash, PowerShell, or Monitor command is blocked when its working directory resolves to the main checkout, or when Claude Code cannot verify that it stays outside it.
@@ -229,7 +229,7 @@ Commit in each worktree, push the branch, then exit the session. Claude Code fin
 | Two or more tasks running at the same time | One task at a time, however large |
 | Work you want kept off your current branch | A quick edit you will commit in a minute |
 | A subagent making sweeping edits | A subagent that only reads |
-| A pull request you want to run, not just read | Reading a diff you can get with `git show` |
+| A pull request you want to check out and run | Reading a diff you can get with `git show` |
 
 The cost is real in three places. Each worktree is a full checkout, so disk use multiplies and so does environment setup: dependencies are not installed there until you or Claude install them. Concurrent sessions multiply token spend, since each one is a full session. And the prompt cache is scoped per directory, so a second worktree always starts cold, which <LessonLink id="A4.1" /> puts a number on.
 
@@ -237,7 +237,7 @@ Below two concurrent tasks, none of that pays for itself.
 
 ## Pitfalls
 
-- **The worktree cannot find `.env`.** Tests fail immediately on missing configuration, or Claude starts writing code to work around a database it cannot reach. The file was gitignored, so it was never checked out. Add a `.worktreeinclude` listing it, then recreate the worktree; the file is copied at creation, not on demand.
+- **The worktree cannot find `.env`.** Tests fail immediately on missing configuration, or Claude starts writing code to work around a database it cannot reach. The file was gitignored, so it was never checked out. Add a `.worktreeinclude` listing it, then recreate the worktree; the file is copied when the worktree is created, so an existing worktree will not pick it up.
 
 - **You read an enforcement refusal as a bug.** A command comes back refused with a message about the main checkout, and the obvious conclusion is that something is broken. Nothing is. The command-shape check in particular fires on one-liners whose git target cannot be parsed, and it cannot be switched off. Have Claude rewrite it as separate plain commands.
 

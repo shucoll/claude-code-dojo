@@ -199,7 +199,7 @@ The first line is that session's own name. The other worktree session is a row b
 
 **A question one session already answered.** Rather than re-deriving a decision in a second session, have the first send the conclusion across.
 
-**Moving a whole conversation.** This is the near-miss. Messaging sends text, not history, so a message asking another session to "continue what I was doing" hands it a sentence and none of the context behind it. Resume the session instead.
+**Moving a whole conversation.** This is the near-miss. Messaging sends text only, so a message asking another session to "continue what I was doing" hands it a sentence and none of the context behind it. Resume the session instead.
 
 ## When to use / when not to use
 
@@ -224,7 +224,7 @@ The cost is small but not zero. A delivered message counts toward usage like a p
 
 - **You deny `SendMessage` to stop cross-session traffic and lose more than you meant.** The same tool serves subagents and agent-team teammates, so the deny rule silently removes messaging to those as well.
 
-- **You read a stalled session as a failed message.** The message arrived and Claude acted on it. The permission prompt in front of you is the receiving session's own rules, not a delivery problem.
+- **You read a stalled session as a failed message.** The message arrived and Claude acted on it. The permission prompt in front of you comes from the receiving session's own rules.
 
 ## Try It
 

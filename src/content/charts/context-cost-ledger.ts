@@ -24,7 +24,7 @@ export const contextCostLedger: ChartDef = {
   rows: [
     {
       kind: 'ledger',
-      label: 'A session’s startup, broken down',
+      label: "A session's startup, broken down",
       entries: [
         {
           id: 'system-prompt',

@@ -6,31 +6,104 @@ type: "resolver"
 order: 6
 estimatedMinutes: 16
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-18"
 prerequisites: ["A1.4", "A1.5"]
 teaches: ["orchestration-choice", "isolation-model", "cost-driven-downgrade"]
 references: ["I6.4", "I7.4", "A1.3"]
-docsSources: ["https://code.claude.com/docs/en/agents", "https://code.claude.com/docs/en/agent-teams", "https://code.claude.com/docs/en/workflows", "https://code.claude.com/docs/en/sub-agents", "https://code.claude.com/docs/en/agent-view"]
+docsSources: ["https://code.claude.com/docs/en/agents", "https://code.claude.com/docs/en/agent-teams", "https://code.claude.com/docs/en/workflows", "https://code.claude.com/docs/en/sub-agents", "https://code.claude.com/docs/en/agent-view", "https://code.claude.com/docs/en/claude-projects"]
+interactive:
+  - kind: "diagram"
+    spec: "orchestration-decision-tree"
 ---
 
 # Subagents vs agent teams vs parallel sessions vs workflows
 
 ## The confusion
 
-{/* @@TODO@@ State exactly what people mix up and why the confusion exists. */}
+Four mechanisms in this module all answer the sentence "do several things at once," and from the outside they look interchangeable. Each one spawns Claude sessions, costs more tokens than working alone, and comes back with results you have to read.
+
+The confusion has a specific source: people pick by scale. Two tasks feels like subagents, five feels like a team, fifty feels like a workflow. Scale is one input and not the first one, which is how a three-file refactor ends up as a five-teammate team that costs seven times a single session and spends most of its time coordinating.
+
+Two more things feed it. The names overlap with commands that do something else, so `claude agents` and `/agents` and `/tasks` get conflated. And the official comparison lists five rows where this lesson shows four, which reads like staleness until you know why.
 
 ## Side-by-side
 
-{/* @@TODO@@ Compare the options on: what it does, when it runs/loads, cost, who controls it, persistence. */}
+The properties that actually separate them:
+
+| | Subagents | Agent view | Agent teams | Workflows |
+|---|---|---|---|---|
+| **Who coordinates** | Claude, inside one conversation | you, handing off and checking back | a lead Claude supervising peers | a script the runtime executes |
+| **Worker communication** | return a result to the caller; a named one can be messaged after | report only to you, though Claude can pass findings with <LessonLink id="A1.3">cross-session messaging</LessonLink> | teammates message each other and share a task list | none; the script holds the results |
+| **File isolation** | one worktree each, if you ask | a worktree automatically, before first edit | **none**, so you partition by hand | per-agent, as the script arranges |
+| **Where results live** | your context window | your context window, one report at a time | a shared task list | script variables |
+| **Scale** | a few per turn | as many as you can track | 3 to 5 peers | dozens to hundreds per run |
+| **Token cost** | lowest | one full session each | about 7x a single session when teammates plan | highest per run, bounded by agent caps |
+| **Typical failure** | a report you needed detail from | a session sitting unnoticed in Needs input | two teammates overwriting one file | a mid-fan-out failure rerunning finished work |
+| **Survives you leaving** | no | yes, the supervisor hosts it | no | only if you background the session |
+
+"Parallel sessions" is labelled agent view here because that is the documented surface for dispatching and watching them.
+
+Three rows carry most decisions. Who coordinates is the question that rules a mechanism in rather than out. File isolation is the row people discover too late, since it is the only one where a team differs structurally from everything else. And token cost is what turns a defensible choice into a bad one when the first two rows were close.
 
 ## Decision tree
 
-{/* @@TODO@@ The resolver logic as a flowchart (static clickable diagram in Phase 1). */}
+<ChartEmbed id="orchestration-decision-tree" />
+
+The order is deliberate. Coordination is asked first because a yes eliminates everything else. Who holds the plan comes second, separating a script from turn-by-turn judgment. File contention is asked last, because it more often changes how you run the mechanism you picked than which one you pick.
 
 ## Scenario walkthroughs
 
-{/* @@TODO@@ 5–8 rapid-fire scenarios, each stated then resolved with the recommended option + reasoning. */}
+**Trace every caller of a deprecated function before deleting it.**
+One subagent. It reads forty files and returns nine real usages, and the reading never enters your window. Nothing here needs a second worker.
+
+**Review a pull request for security, performance, and test coverage.**
+Three subagents if you want three reports, a team if you want the reviewers to argue. Most of the time you want the reports, so this is the cheapest correct answer and the one people skip past.
+
+**Audit 340 route handlers for missing auth checks.**
+A workflow. Three hundred subagent reports do not fit in a context window, and a team of five is not 340 files. The script fans out one agent per file and returns a ranked list.
+
+**Debug something with four plausible causes and no obvious winner.**
+A team, and this is where the extra cost is justified. Teammates instructed to disprove each other break the anchoring that makes a single investigator stop at the first plausible theory.
+
+**Build a feature while a bug fix ships today.**
+Two sessions in two worktrees, dispatched from agent view or run in two terminals. They are your tasks, on your schedule, and neither needs to know what the other found.
+
+**Migrate 500 files from JavaScript to TypeScript.**
+A workflow, each file transformed in its own isolated copy and verified. The repeatability matters as much as the scale: you will run this again on the next package.
+
+**Three independent modules, each a few days of work.**
+A team, sized at three, with each teammate owning one package directory. The partition already exists as the package boundary, which is what makes this safe.
+
+**A five-teammate team to rename a type across four files.**
+The expensive classic, and the most common real mistake at this level. Four files means one session, or one subagent if you want your context kept clean. Five teammates costs roughly seven times a single session, has no worktree isolation over four files that all reference each other, and spends its first minutes deciding who does what. Nothing about the task called for coordination.
 
 ## Edge cases
 
-{/* @@TODO@@ Situations where two options are both defensible, and what tips the balance. */}
+Two options are genuinely defensible in these, and what tips the balance is usually cost rather than capability.
+
+**A team that should have been subagents.** The test: do the workers need to *coordinate*, or merely to *communicate*? A named subagent can be messaged after it finishes, and Claude can pass findings between sessions. Only a team gives workers a shared list they claim from and the standing ability to challenge each other mid-task. If you cannot name something a teammate would say to another teammate that changes what it does, you wanted subagents.
+
+**A team that should have been a workflow.** Teams cap out around five peers. Past that, coordination overhead grows faster than throughput, and the shared task list becomes the bottleneck. When the work is the same operation many times rather than several different jobs, the script wins and costs less.
+
+**A workflow that should have been subagents.** A workflow is worth its overhead when results would flood your context or when the orchestration is worth rerunning. Six delegated tasks are neither. Writing a script for them buys you a saved command you will invoke twice.
+
+**Agent view that should have been one session.** Dispatching is a real cost: the session starts cold, isolates into a fresh worktree without your uncommitted work, and you pay a full session for it. Below two genuinely concurrent tasks, foreground is cheaper and faster.
+
+**A cost-driven downgrade that is the right call.** When a team and three subagents would both work, take the subagents; when a workflow and a team would both work, take whichever is cheaper for the shape of the work, which is usually the workflow at scale and the team below it. Picking the heaviest mechanism that fits is the expensive habit.
+
+**When file contention decides it.** Two tasks that touch the same files do not become safe by choosing a different mechanism. Teams have no isolation at all, subagents and your own sessions take a worktree only if you arrange it, and dispatched sessions get one automatically. If the work genuinely cannot be partitioned, the answer is one session, whatever the scale suggests.
+
+### Four things that look like a fifth option
+
+The tree above shows them beside the leaves, because each one gets mistaken for a coordination style:
+
+- `/batch` is a bundled skill that splits one change into 5 to 30 worktree-isolated subagents, each opening a pull request. It is a packaged use of two mechanisms rather than a fifth one.
+- A forked subagent inherits your full conversation context instead of starting fresh, via `/subtask`. It is still a subagent.
+- A background bash command spawns no agent at all.
+- A routine runs a session on a schedule in the cloud, which is an answer to "when," not to "who." <LessonLink id="A2.4" /> covers it.
+
+### The fifth mechanism this lesson does not teach
+
+The official comparison has five rows. The one missing here is **projects**: one ongoing conversation at claude.ai/code or in the desktop app, where Claude starts parallel cloud threads, gives each the project's repositories, instructions, and memory, and shows you which ones need you. It is in public beta on Pro and Max.
+
+Reach for it when work spans many tasks over days or weeks and should keep running while your machine is off. This curriculum is CLI-first and projects have no terminal surface, so it is named rather than taught. [Projects](https://code.claude.com/docs/en/claude-projects) has the full picture.

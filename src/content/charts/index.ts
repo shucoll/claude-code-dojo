@@ -11,6 +11,7 @@ import { dotClaudeDirectoryMap } from './dot-claude-directory-map'
 import { hookLifecycleClickable } from './hook-lifecycle-clickable'
 import { intermediateStackMap } from './intermediate-stack-map'
 import { mechanismDecisionTree } from './mechanism-decision-tree'
+import { orchestrationDecisionTree } from './orchestration-decision-tree'
 import { permissionRuleShapes } from './permission-rule-shapes'
 import { toolBeltMap } from './tool-belt-map'
 import type { ChartDef } from './types'
@@ -31,6 +32,7 @@ const charts: Record<string, ChartDef> = {
   [hookLifecycleClickable.id]: hookLifecycleClickable,
   [claudeCodeSystemMap.id]: claudeCodeSystemMap,
   [mechanismDecisionTree.id]: mechanismDecisionTree,
+  [orchestrationDecisionTree.id]: orchestrationDecisionTree,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)

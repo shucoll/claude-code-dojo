@@ -18,4 +18,5 @@ export const chartIds: readonly string[] = [
   'hook-lifecycle-clickable',
   'claude-code-system-map',
   'mechanism-decision-tree',
+  'orchestration-decision-tree',
 ]

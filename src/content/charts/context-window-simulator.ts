@@ -32,7 +32,7 @@ export const contextWindowSimulator: ChartDef = {
           title: 'The conversation',
           percent: 16,
           tone: 'teal',
-          lines: ['Your prompts and Claude’s replies'],
+          lines: ["Your prompts and Claude's replies"],
           target: {
             kind: 'popup',
             title: 'The conversation',
