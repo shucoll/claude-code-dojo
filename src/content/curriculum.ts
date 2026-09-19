@@ -1121,7 +1121,7 @@ export const curriculum: Level[] = [
             order: 5,
             estimatedMinutes: 18,
             volatility: 'volatile',
-            verifiedAgainstDocsAt: '2026-09-17',
+            verifiedAgainstDocsAt: '2026-09-18',
             prerequisites: ['A1.1'],
             teaches: ['dynamic-workflows', 'who-holds-the-plan', 'scale-test', 'workflow-cost-bounds'],
             references: ['I3.1', 'I6.1', 'A4.1'],
