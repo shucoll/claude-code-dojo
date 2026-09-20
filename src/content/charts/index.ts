@@ -10,6 +10,7 @@ import { demo } from './demo'
 import { dotClaudeDirectoryMap } from './dot-claude-directory-map'
 import { hookLifecycleClickable } from './hook-lifecycle-clickable'
 import { intermediateStackMap } from './intermediate-stack-map'
+import { automationSpectrum } from './automation-spectrum'
 import { mechanismDecisionTree } from './mechanism-decision-tree'
 import { orchestrationDecisionTree } from './orchestration-decision-tree'
 import { permissionRuleShapes } from './permission-rule-shapes'
@@ -31,6 +32,7 @@ const charts: Record<string, ChartDef> = {
   [dotClaudeDirectoryMap.id]: dotClaudeDirectoryMap,
   [hookLifecycleClickable.id]: hookLifecycleClickable,
   [claudeCodeSystemMap.id]: claudeCodeSystemMap,
+  [automationSpectrum.id]: automationSpectrum,
   [mechanismDecisionTree.id]: mechanismDecisionTree,
   [orchestrationDecisionTree.id]: orchestrationDecisionTree,
 }

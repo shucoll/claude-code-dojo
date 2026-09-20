@@ -4,53 +4,254 @@ slug: "scheduled-and-autonomous-operation"
 title: "Scheduled and autonomous operation"
 type: "core"
 order: 4
-estimatedMinutes: 18
+estimatedMinutes: 20
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-19"
 prerequisites: ["A2.1"]
 teaches: ["autonomy-spectrum", "scheduled-tasks", "routines", "unattended-guardrails"]
 references: ["B3.3", "I4.1", "A1.5", "A3.2"]
 docsSources: ["https://code.claude.com/docs/en/scheduled-tasks", "https://code.claude.com/docs/en/routines", "https://code.claude.com/docs/en/desktop-scheduled-tasks", "https://code.claude.com/docs/en/goal", "https://code.claude.com/docs/en/channels", "https://code.claude.com/docs/en/permission-modes", "https://code.claude.com/docs/en/auto-mode-config"]
+interactive:
+  - kind: "diagram"
+    spec: "automation-spectrum"
 ---
 
 # Scheduled and autonomous operation
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+Everything so far has started because you did something. You typed a prompt, you opened a pull request, you pushed a commit. Even the CI runs in <LessonLink id="A2.2" /> traced back to a person doing something in a repository.
 
-## The concept
+The work that most wants automating has no person behind it. Dependencies go stale on their own schedule. A nightly build fails at 3am. An issue backlog grows while everyone sleeps. For those, something other than a human has to start the turn.
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Claude Code offers six answers, and they are easy to mistake for each other because several of them are described as "running on a schedule" when only three of them are. Two are about removing supervision from a session you are already in, and one runs in the opposite direction entirely.
 
-## How it works
+## The spectrum
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+<ChartEmbed id="automation-spectrum" />
 
-## Walkthrough
+The axis is how much of your presence each mechanism still needs. The first three schedule a session. `/goal` and auto mode change a session you are already in, each removing a different half of the supervision. Channels invert the direction: instead of waking on a timer and looking for work, they wait for work to arrive.
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+## The mini-resolver
 
-## Use-case scenarios
+Four questions separate all six.
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+| | What starts the next turn | What stops it | Machine on | Session open |
+|---|---|---|---|---|
+| **`/loop`** | a time interval elapses | you cancel it, Claude decides the work is done, or seven days pass | yes | yes |
+| **Desktop scheduled task** | the schedule fires, minimum one minute | you delete or disable the task | yes | no |
+| **Cloud routine** | a schedule, an API call, or a GitHub event | you pause or delete the routine | no | no |
+| **`/goal`** | the previous turn finishes and the condition is unmet | the condition is met, judged impossible, or you run `/goal clear` | yes | yes |
+| **Auto mode** | nothing; it starts no turns | you switch modes | yes | yes |
+| **Channels** | an external event arrives | you close the session | yes | yes |
 
-## When to use / when not to use
+The rows people conflate are the first three, so read them by what has to stay alive: `/loop` needs your session, a desktop task needs your machine, and a routine needs neither.
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+## Scheduling: three places a timer can live
+
+### `/loop`, inside the session
+
+```prompt
+/loop 5m check if the deployment finished and tell me what happened
+```
+
+Both the interval and the prompt are optional, and what you give decides the behavior.
+
+| What you provide | What happens |
+|---|---|
+| Interval and prompt | your prompt runs on a fixed cron schedule |
+| Prompt only | your prompt runs at an interval Claude picks each iteration, between one minute and one hour, printing the delay and its reason |
+| Interval only, or nothing | the built-in maintenance prompt runs, or your `loop.md` if one exists |
+
+The built-in maintenance prompt works through the conversation's unfinished work, then the current branch's pull request (review comments, failed CI, merge conflicts), then cleanup passes such as bug hunts. It starts no new initiatives outside that scope, and irreversible actions such as pushing proceed only when they continue something the transcript already authorized.
+
+Replace it by writing `.claude/loop.md` for a project or `~/.claude/loop.md` for yourself. The project file wins when both exist, edits take effect on the next iteration, and content past 25,000 bytes is truncated.
+
+Underneath, `/loop` uses three tools you can also drive in plain language: `CronCreate`, `CronList`, and `CronDelete`. Each task gets an 8-character id, and a session holds at most 50 of them. A one-off reminder needs no command at all:
+
+```prompt
+in 45 minutes, check whether the integration tests passed
+```
+
+Three behaviors to plan around. The scheduler adds deterministic **jitter**, so a recurring task fires up to 30 minutes late, or up to half the interval for sub-hourly tasks, and a one-shot on the hour or half hour fires up to 90 seconds early. The offset comes from the task id, so it is stable. Pick a minute like `3 9 * * *` over `0 9 * * *` when timing matters.
+
+Recurring tasks expire seven days after creation, firing one last time before deleting themselves. Treat that as a feature: it bounds how long a loop you forgot about can keep spending.
+
+A fire that comes due while Claude is busy waits for the current turn to end, and missed intervals collapse: a task that skipped four of them fires a single time when Claude next goes idle.
+
+Press `Esc` to stop a self-paced loop while it waits. Fixed-interval loops run until you cancel them or the seven days elapse.
+
+### Desktop scheduled tasks, on your machine
+
+Created from the Desktop app's Code tab by choosing **Local** where a routine would choose **Cloud**. The schedule survives closing the session and restarting the machine, the minimum interval is one minute, and the run has what a local session has: your files, your MCP config files and connectors, and permission prompts you configure per task.
+
+This is the row to pick when the work needs something that exists only on your disk.
+
+### Cloud routines, on Anthropic's infrastructure
+
+A routine is a saved configuration: a prompt, one or more repositories, a cloud environment, and a set of connectors. Create one at `claude.ai/code/routines`, in the Desktop app, or from the CLI:
+
+```prompt
+/schedule daily PR review at 9am
+```
+
+`/schedule list`, `/schedule update`, and `/schedule run` manage them afterwards, and `/routines` is an alias. The command requires a claude.ai subscription login, so it is hidden when you authenticate with a Console API key or a cloud provider.
+
+Three trigger types attach to one routine, in any combination:
+
+- **Schedule**: hourly, daily, weekdays, or weekly presets, or a custom cron set through `/schedule update`. The minimum interval is one hour and shorter expressions are rejected. A one-off timestamp fires once and then auto-disables.
+- **API**: a POST to the routine's `/fire` endpoint with a bearer token. An optional `text` field carries run-specific context such as an alert body.
+- **GitHub**: pull request and release events, with filters on author, title, base and head branch, labels, draft state, and merged state.
+
+Each run clones the repository fresh from its default branch, so a routine sees no local files and no uncommitted work, and pushes to `claude/`-prefixed branches. Runs are fully autonomous: there is no permission-mode picker, and every connector left attached can be used, writes included, without asking.
+
+Two facts about the fire payload matter for <LessonLink id="A3.1" />. The routine's saved prompt arrives as its assigned task, because it was stored ahead of time by an authorized session. The `text` you POST arrives wrapped in a `<routine-fire-payload>` block labeled as untrusted data, and the routine ignores it unless its own prompt says to act on it. Anyone holding the bearer token can send that text, which is why the wrapper exists.
+
+```bash
+curl -X POST https://api.anthropic.com/v1/claude_code/routines/trig_01ABC.../fire \
+  -H "Authorization: Bearer sk-ant-oat01-xxxxx" \
+  -H "anthropic-beta: experimental-cc-routine-2026-04-01" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Sentry alert SEN-4521 fired in prod. Stack trace attached."}'
+```
+
+A green status in the run list means the session started and exited without an infrastructure error. Open the run to find out whether the task succeeded, because blocked network requests and missing connector tools surface in the transcript rather than the indicator.
+
+## Removing supervision from a session
+
+### `/goal`, which removes the per-turn prompt
+
+```prompt
+/goal all tests in test/auth pass and the lint step is clean
+```
+
+After every turn, a small fast model reads the condition and the conversation and returns one of three verdicts: not yet met, in which case Claude takes the reason as guidance and starts another turn; met; or impossible. The goal clears itself on the last two, and on an error you have to fix, such as authentication failure, exhausted credit, unclearable context overflow, or an unavailable model.
+
+Under the surface it is a session-scoped prompt-based `Stop` hook, the mechanism from <LessonLink id="I4.1" />. It is unavailable when `disableAllHooks` is true for the same reason.
+
+The evaluator calls no tools. It judges only what Claude has already surfaced in the conversation, so write a condition that Claude's own output can demonstrate. "All tests in `test/auth` pass" works because the test run appears in the transcript. A good condition has one measurable end state, a stated check such as "`npm test` exits 0", and any constraint that must hold on the way there. To bound it, put a clause in the condition itself, such as `or stop after 20 turns`.
+
+Setting a goal does not change your permission mode. In Manual mode, goal turns still stop at every prompt your settings do not already allow.
+
+### Auto mode, which removes the per-tool prompt
+
+A classifier reviews each tool call in your place. It starts no turns; Claude still stops when it judges the work done. That is why the two compose: `/goal` removes per-turn prompts and auto mode removes per-tool ones, and an unattended run usually wants both.
+
+The classifier trusts your working directory and the remotes configured when the session started. Everything else is external until you say otherwise. Blocked by default:
+
+- downloading and executing code, such as `curl | bash`
+- sending sensitive data to external endpoints
+- production deploys and migrations, and mass deletion on cloud storage
+- granting IAM or repository permissions, and modifying shared infrastructure
+- force push, and `git commit --amend` on a commit this session did not create
+- `git reset --hard`, `git checkout -- .`, `git restore .`, `git clean -fd`, and the stash-dropping commands, which it presumes would discard uncommitted work
+- `terraform destroy` and its equivalents, and applying a plan that destroys resources
+- committing or pushing a change that would send secrets outside the repository when CI runs it
+
+Teach it your infrastructure through the `autoMode.environment` block in `~/.claude/settings.json` or managed settings, written as prose rather than patterns:
+
+```json
+{
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Source control: github.example.com/acme-corp and all repos under it",
+      "Trusted cloud buckets: s3://acme-build-artifacts",
+      "Key internal services: Jenkins at ci.example.com"
+    ]
+  }
+}
+```
+
+The literal `"$defaults"` splices the built-in entries back in. Omitting it replaces the whole list for that section, which for `soft_deny` means discarding every built-in rule including force push and production deploys. `/auto-mode-setup` drafts the entries from your project and recent sessions, and `claude auto-mode config` prints what the classifier actually uses.
+
+The classifier reads `autoMode` from user settings, managed settings, and `--settings`, and deliberately not from a project's `.claude/settings.json`. A checked-in repository could otherwise ship its own allow rules, which is the same threat shape <LessonLink id="A2.1" /> met with `--bare`.
+
+### Channels, which wait for the world
+
+A channel is an MCP server that pushes events into a running session, so a CI failure or a message from your phone arrives where Claude already has your files open and remembers what you were debugging.
+
+```bash
+claude --channels plugin:telegram@claude-plugins-official
+```
+
+It is a research preview, and the flag does not appear in `claude --help`. Channels need Anthropic authentication through claude.ai or a Console API key and are unavailable on Bedrock, Agent Platform, and Foundry. Team and Enterprise organizations are blocked until an Owner sets `channelsEnabled`, and `allowedChannelPlugins` replaces the Anthropic-maintained plugin allowlist with your own. Being in `.mcp.json` grants nothing on its own: a server also has to be named in `--channels`.
+
+Every approved channel keeps a sender allowlist, bootstrapped by pairing. Anyone on that list can push messages, and if the channel declares permission relay, they can approve tool use in your session too, so the list is a list of people you trust with that authority.
+
+Events arrive only while the session is open, so an always-on setup means a background process or a persistent terminal.
+
+## The non-negotiables for unattended operation
+
+Autonomous Claude with broad permissions is the most dangerous misconfiguration in this level. Five controls, none of them optional once a run happens without you.
+
+**Sandbox it.** OS-level isolation holds regardless of what the model chose to run, which no permission rule can promise, because a rule is evaluated from the command string and an allowed command can do more than its name suggests. <LessonLink id="A3.2" /> covers it, and it is why A3 comes before running anything unattended.
+
+**Narrow the permissions to the job.** `--allowedTools` with specific prefixes, as <LessonLink id="A2.1" /> taught, and `permissions.deny` in managed settings for anything that must never run, since deny is evaluated before the classifier and cannot be overridden by it or by stated intent. For a routine, the equivalents are the repositories you attach, the environment's network access, and removing every connector the run does not need.
+
+**Leave nothing waiting for an answer.** `--permission-prompts none` denies what would have prompted and tells Claude not to retry, so a job fails rather than hanging. Pair it with `--permission-mode auto` or `dontAsk`.
+
+**Cap the spend.** `--max-turns` bounds an agentic loop. A goal takes its bound from a clause in the condition. Routines have a daily run cap per account, and Code Review has a monthly spend cap in admin settings. The seven-day `/loop` expiry is this same idea built in.
+
+**Review the output.** Every mechanism here produces an artifact you read afterwards: a branch, a pull request, a run transcript, a comment. Keep the result reviewable rather than applied, which is why routines push to `claude/` branches instead of the default one.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **The loop stopped and you never noticed.** Recurring tasks expire seven days after creation, and a self-paced loop is not restored when you resume the session. Run `/loop` again after a resume, and recreate a long-lived recurring task before it expires, or move it to a routine or a desktop task.
+
+- **The 9am report arrives at 9:26.** Jitter offsets every recurring task by up to 30 minutes, derived from its id, so it is the same offset every day. Schedule `3 9 * * *` rather than `0 9 * * *` if a downstream system cares.
+
+- **The goal loops without progressing.** When Claude answers the evaluator several turns running with no tool use, Claude Code stops the loop, warns, and hands control back with the goal still set. The usual cause is a condition the transcript cannot demonstrate, such as one that needs a file read the evaluator never sees.
+
+- **The routine ignored the alert you POSTed.** Fire text arrives wrapped and labeled as untrusted data. The routine's saved prompt has to reference it explicitly, as in "investigate the alert described in the routine-fire-payload block", or the text sits there as inert context.
+
+- **A green routine run did nothing.** Green means the session started and exited cleanly. Open the run and read the transcript: a blocked network request in a Trusted environment fails with `403` and `x-deny-reason: host_not_allowed`, and it shows up nowhere else.
+
+- **Auto mode blocks the same command every day.** Repeated denials for one destination mean the classifier lacks context about it. Add it to `autoMode.environment` rather than adding an allow rule per command, then run `claude auto-mode config` to confirm.
+
+- **`/schedule` says unknown command.** It needs a claude.ai subscription login. An `ANTHROPIC_API_KEY` in your shell, an `apiKeyHelper` in settings, or a cloud-provider login all take precedence over that login and hide the command.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a repository with a test suite, and a Claude Code session you can leave open.
+
+1. Run `/loop 2m check whether anything in the working tree is uncommitted and say yes or no`, then watch two iterations fire.
+2. Ask Claude what scheduled tasks you have, and note the 8-character id.
+3. Ask Claude to cancel it by id.
+4. Break one test on purpose, then run `/goal every test in the suite passes and no test file other than the broken one is modified`.
+5. Watch the evaluator's verdict after each turn, and press Ctrl+O on one to read its reason.
+6. Run `/goal` with no argument while it is active to see the condition, elapsed time, turns evaluated, and token spend.
+7. Let it finish, then run `/goal` again to see the achieved entry.
+
+**Success looks like:** two fires roughly two minutes apart in step 1, a task list in step 2 that disappears in step 3, a verdict per turn in step 5 whose reason visibly steers the next one, and a goal in step 7 that cleared itself without you typing `/goal clear`.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Which one survives my machine being off?**
+Cloud routines, and CI triggered from your repository host. A desktop scheduled task needs the machine on but no session. `/loop`, `/goal`, auto mode, and channels all need an open session, though backgrounding a session carries `/loop` tasks over and keeps them firing without a terminal.
+
+**Can I run `/goal` headlessly?**
+Yes. `claude -p "/goal CHANGELOG.md has an entry for every PR merged this week"` runs the loop to completion in one invocation. With the default text output nothing prints until it ends, so a long goal looks stuck; add `--output-format stream-json --verbose` to watch it.
+
+**Is auto mode an alternative to the others?**
+No, it composes with them. It approves tool calls within a turn and starts no turns of its own. A routine already runs autonomously without a mode picker, while a `/goal` run in Manual mode still stops at every prompt your settings do not cover.
+
+**What does a routine cost?**
+Routine runs draw down subscription usage like interactive sessions, plus a daily cap on how many runs can start per account. One-off runs do not count against that cap. With usage credits turned on, runs continue on metered overage past the cap.
+
+**How do I turn scheduling off entirely?**
+`CLAUDE_CODE_DISABLE_CRON=1` disables the scheduler, which removes the cron tools and `/loop` and stops already-scheduled tasks firing. Team and Enterprise Owners disable routines for everyone from the admin settings, which also hides `/schedule`.
+
+**Can Claude schedule work without me asking?**
+It can create tasks when you ask in plain language, and a scheduled fire only invokes skills Claude is allowed to invoke on its own. Built-in commands, skills marked `disable-model-invocation: true`, and MCP prompts reach Claude as plain text instead of executing.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A3.1" /> is the gate before any of this runs unattended. A routine's fire payload and a channel's inbound message are both input from outside your session, and that lesson builds the model for reasoning about them.
+
+<LessonLink id="A3.2" /> builds the isolation itself: which layers exist, how strong each is, and what a sandboxed Bash command can still reach.
+
+<LessonLink id="A1.5" /> is the mechanism this lesson deliberately left out. A workflow decides what runs in what order inside one invocation; everything here decides when that invocation happens.
+
+<LessonLink id="A7.3" /> is where you build a sandboxed scheduled job for the capstone and defend which of these six surfaces you picked.

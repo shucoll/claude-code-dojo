@@ -19,4 +19,5 @@ export const chartIds: readonly string[] = [
   'claude-code-system-map',
   'mechanism-decision-tree',
   'orchestration-decision-tree',
+  'automation-spectrum',
 ]

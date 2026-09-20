@@ -1,0 +1,12 @@
+Session-scoped. `/loop` re-runs a prompt while the session stays open, backed by
+the `CronCreate`, `CronList`, and `CronDelete` tools.
+
+**Next turn starts when:** a time interval elapses. With an interval you get a
+cron job; without one Claude picks each delay itself, between one minute and an
+hour, and prints the delay and its reason.
+
+**Machine on:** yes. **Session open:** yes, though backgrounding the session
+carries the tasks over.
+
+Recurring tasks expire seven days after creation, firing once more before they
+delete themselves. A session holds at most 50 tasks.

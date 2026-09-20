@@ -1,0 +1,12 @@
+A saved configuration that runs on Anthropic's cloud infrastructure: a prompt,
+one or more repositories, an environment, and a set of connectors.
+
+**Next turn starts when:** a schedule fires, an HTTP POST hits the routine's
+`/fire` endpoint, or a GitHub event matches. One routine can carry all three.
+
+**Machine on:** no. **Session open:** no.
+
+Each run clones the repository fresh from its default branch, so there are no
+local files and no uncommitted work. The minimum interval is one hour. Runs are
+fully autonomous: there is no permission-mode picker, and every connector you
+leave attached can be used without asking.
