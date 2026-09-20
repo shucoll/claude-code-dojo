@@ -4,11 +4,11 @@ slug: "automated-code-review-layered"
 title: "Automated code review, layered"
 type: "core"
 order: 3
-estimatedMinutes: 16
+estimatedMinutes: 18
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-19"
 prerequisites: ["A2.2"]
-teaches: ["review-layers", "review-customization", "severity-levels"]
+teaches: ["review-layers", "review-customization", "severity-levels", "plan-availability"]
 references: ["I6.2", "A3.4"]
 docsSources: ["https://code.claude.com/docs/en/code-review", "https://code.claude.com/docs/en/ultrareview", "https://code.claude.com/docs/en/security-guidance"]
 ---
@@ -17,40 +17,270 @@ docsSources: ["https://code.claude.com/docs/en/code-review", "https://code.claud
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+<LessonLink id="I6.2" /> had you build a reviewer subagent with a prompt describing what to look for. It worked, and it was the right thing to build at that point in the curriculum.
 
-## The concept
+Since then you have met four more things that review code, and they arrive with overlapping names. `/review` and `/code-review` sound like two commands. Code Review is a product and also a description of what all of these do. `ultra` is an argument that changes where a review runs. `/simplify` sounds like a review, and finds no bugs.
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Picking one and standardizing on it is the wrong move, because each of these catches things the others structurally cannot. A review that runs while Claude is writing code sees the moment a decision is made; a review that runs on a pull request sees the whole change in the context of the codebase. Neither can do the other's job. So start from which layers your plan gives you, and what each one is for.
 
-## How it works
+## The stack
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+Five layers, ordered by when they fire in the life of a change.
 
-## Walkthrough
+| Layer | When it fires | Where it runs | Available on |
+|---|---|---|---|
+| **security-guidance plugin** | while Claude writes, per edit, per turn, per commit | your machine | all plans |
+| **`/code-review`** | when you type it, or when Claude decides to | your machine, background subagent | all plans |
+| **`/code-review ultra`** | when you type it, before merging | Anthropic cloud sandbox | claude.ai sign-in; unavailable on Bedrock, Agent Platform, Foundry, and with ZDR |
+| **Code Review** | on pull request open, on push, or on `@claude review` | Anthropic infrastructure | Team and Enterprise, research preview; unavailable with ZDR |
+| **The GitHub Action running a review skill** | on the workflow events you choose | your own CI runner | any plan with an API key or an OAuth token |
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+Two rows carry a plan constraint sharp enough to change a team's whole design. Code Review and ultrareview are both unavailable to organizations with Zero Data Retention enabled, so turning on ZDR removes two layers from this table. <LessonLink id="A3.4" /> is where that decision gets made, and it should be made knowing what it costs here. Teams in that position build the pull request layer from the bottom row instead, which reaches a comparable artifact by the path <LessonLink id="A2.2" /> taught.
 
-## Use-case scenarios
+## The layers
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+### In session: the security-guidance plugin
 
-## When to use / when not to use
+Install it once from the official marketplace:
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+```prompt
+/plugin install security-guidance@claude-plugins-official
+```
+
+It runs automatically after that, at three depths. Every file edit gets a pattern match against known risky calls, with no model call and no usage cost: `eval(`, `new Function`, `os.system`, `pickle`, `dangerouslySetInnerHTML`, `.innerHTML =`, and edits under `.github/workflows/`, which can grant repository-level permissions. Each pattern warns once per file per session.
+
+At the end of each turn, the plugin diffs everything that changed in the working tree and sends it to a separate Claude review focused on security. That review runs in the background, so your reply is not delayed, and it catches what a string match cannot: authorization bypass, insecure direct object references, injection, server-side request forgery, weak cryptography. It covers up to 30 changed files per turn and fires at most three times in a row. When it finds something, Claude is re-prompted with the findings and fixes them as a follow-up, in front of you.
+
+When Claude runs `git commit` or `git push` through its Bash tool, a deeper agentic review reads the surrounding code, including callers and sanitizers, before deciding a finding is real. Commits you make in your own shell, including the `!` escape inside a session, are not reviewed. This layer is capped at 20 reviews per rolling hour.
+
+The reviewer is a separate Claude call with a fresh context and a security-focused prompt, so the instance that wrote the code is not the one grading it. None of the three layers block a write or a commit; findings reach Claude as instructions.
+
+Configure it with two additive files: `.claude/claude-security-guidance.md` for the model-backed reviews and `.claude/security-patterns.yaml` for the per-edit match.
+
+```yaml
+patterns:
+  - rule_name: tenant_unfiltered_query
+    regex: "\\.objects\\.all\\(\\)"
+    paths: ["**/src/tenants/**"]
+    reminder: "Multi-tenant code must filter by org_id."
+```
+
+Both files are additive only: you can add checks, and a rule saying to ignore a vulnerability class does not suppress those findings. For hard enforcement you want a hook that blocks the edit, which <LessonLink id="A5.3" /> covers.
+
+Each layer turns off independently with an environment variable: `ENABLE_PATTERN_RULES=0`, `ENABLE_STOP_REVIEW=0`, `ENABLE_COMMIT_REVIEW=0`, or `ENABLE_CODE_SECURITY_REVIEW=0` for all the model-backed ones at once.
+
+### On demand: `/code-review`
+
+```prompt
+/code-review
+```
+
+It reviews your branch's commits ahead of upstream plus any uncommitted changes, so it needs work on the branch or in the tree to have something to say. Pass a target to review something else: a file path, a PR number, a branch name, or a ref range such as `main...my-feature`.
+
+It runs as a background subagent with its own context window, so the reading does not land in your conversation. The findings arrive when it finishes.
+
+An effort level trades confidence for coverage. At `low` and `medium` it reports only what it is most confident in; `high` through `max` broaden coverage and may include findings it is less sure of. When you type no level it reuses the last one you typed, even from an earlier session, and says so.
+
+Three flags:
+
+- `--fix` applies the findings to your working tree after the review.
+- `--comment` posts them on a GitHub pull request as inline comments, or on a GitLab merge request as a single note through the `glab` CLI.
+- `--post` preselects posting an `ultra` review's findings to the PR.
+
+`/review` is an alias of this command.
+
+`/simplify` is a different command that reviews for reuse, simplification, and efficiency without hunting for bugs. Reaching for it expecting a bug hunt is the common mistake; `/code-review --fix` is the one that finds bugs and fixes them.
+
+Claude can also start `/code-review` on its own when you ask for a review in plain language, and a scheduled task can run it. To keep the command available to you while stopping Claude and scheduled tasks from starting it, add a `skillOverrides` entry to a settings file:
+
+```json
+{
+  "skillOverrides": {
+    "code-review": "user-invocable-only"
+  }
+}
+```
+
+### Before merging: ultrareview
+
+```prompt
+/code-review ultra
+```
+
+This launches a cloud session on Anthropic's infrastructure, where a fleet of reviewer agents explores the change in parallel and every reported finding is independently reproduced and verified before it reaches you. A run takes roughly 5 to 10 minutes and holds nothing on your machine, so you keep working, or close the terminal.
+
+Scope without arguments is your current branch against the default branch, including uncommitted and staged changes. Pass a branch name to compare against a different base, or a PR number to review a pull request. PR mode clones from the host, so nothing is uploaded from your machine.
+
+Ultrareview checks the diff before any review work runs: a branch review covers up to 500 changed files and 8,000 changed lines by default, and the refusal names the values in effect along with your diff's size.
+
+Billing is the part that decides who uses it. Ultrareview always bills as usage credits rather than plan usage. Pro and Max accounts get three free runs as a one-time allotment that does not refresh; Team and Enterprise get none. After that it runs roughly $5 to $25 per review depending on the size of the change, and the launch dialog shows the estimate before you confirm.
+
+For CI, the `claude ultrareview` subcommand blocks until the review finishes and prints the findings to stdout, with progress and the live session URL on stderr so stdout stays parseable:
+
+```bash
+claude ultrareview 1234 --json --timeout 30
+```
+
+It exits 0 when the review completes with or without findings, 1 when it fails to launch or times out, and 130 on Ctrl-C. Interrupting it leaves the remote review running. Running `claude -p '/code-review ultra'` launches the review and prints a tracking link without waiting for the findings.
+
+### On every pull request: Code Review
+
+An Owner enables this once for the organization from the Claude Code admin settings and picks which repositories it covers. There is no workflow file. A fleet of agents analyzes the diff and the surrounding code in parallel, a verification step checks candidates against actual behavior to filter false positives, and the results are deduplicated, ranked, and posted as inline comments on the lines where they were found. A review takes about 20 minutes on average.
+
+Each repository gets one of three trigger behaviors:
+
+| Behavior | What starts a review |
+|---|---|
+| Once after PR creation | opening the PR or marking it ready for review |
+| After every push | every push to the branch, resolving threads as you fix things |
+| Manual | only a `@claude review` comment |
+
+Three comment commands work regardless of that setting. `@claude review` runs one review without subscribing the PR to later pushes. `@claude review always` runs one and subscribes it. `@claude review once` is the same as the bare command. Post them as a top-level PR comment with the command at the start, and you need write, maintain, or admin permission on the repository.
+
+A pull request from a fork is never reviewed automatically, in any mode. Only a comment command starts one, and re-running the check does nothing.
+
+Findings carry a severity marker:
+
+| Marker | Severity | Meaning |
+|---|---|---|
+| 🔴 | Important | a bug that should be fixed before merging |
+| 🟡 | Nit | a minor issue, worth fixing but not blocking |
+| 🟣 | Pre-existing | a bug in the codebase that this PR did not introduce |
+
+The **Claude Code Review** check run always completes with a neutral conclusion, so branch protection never blocks a merge on it. To gate merges yourself, read the severity breakdown from the check run: its Details text ends with a machine-readable comment your own workflow can parse.
+
+```bash
+gh api repos/OWNER/REPO/check-runs/CHECK_RUN_ID \
+  --jq '.output.text | split("bughunter-severity: ")[1] | split(" -->")[0] | fromjson'
+```
+
+That returns counts per severity, such as `{"normal": 2, "nit": 1, "pre_existing": 0}`, where `normal` holds the Important findings. A non-zero `normal` is the condition to fail on.
+
+Each review costs $15 to $25, billed through usage credits separately from your plan's included usage, and the trigger you choose multiplies it: reviewing on every push runs the most reviews and costs the most. Admins set a monthly spend cap, and when it is reached Code Review posts one comment on the PR explaining that the review was skipped.
+
+### In your own CI: the action running a review skill
+
+The last layer is the one you built in <LessonLink id="A2.2" />: `anthropics/claude-code-action` in a workflow file, running the `code-review` plugin's skill with `--comment` so the findings land on the pull request. It reaches a similar artifact to the managed product, on any plan, with the prompt, model, triggers, and cost controls in your hands and the maintenance in your hands too.
+
+This is the row that matters for a ZDR organization and for anyone below Team, because it is the only pull request layer they have.
+
+## What each layer reads
+
+Two files configure reviews, and the split is the part people get wrong.
+
+**`CLAUDE.md` is read by everything.** It is project context for all Claude Code work, reviews included. Code Review reads it and treats newly introduced violations as nit-level findings. That works in both directions: if your pull request changes code so that a `CLAUDE.md` statement is now wrong, Claude flags the documentation as needing an update too. Files at every level of the directory hierarchy apply, so a rule in a subdirectory's `CLAUDE.md` covers only files under that path.
+
+**`REVIEW.md` is read by Code Review alone.** It sits at the repository root, and its contents go to the agents that find and verify findings, and are consulted by the agents that rank and report them. Local `/code-review` does not read it at all. A team that puts its review policy in `REVIEW.md` and then tests it with `/code-review` will conclude the file does nothing.
+
+Seven things `REVIEW.md` is good at:
+
+- **Severity.** Redefine what Important means for this repository. The default calibration targets production code; a docs repo or a prototype wants a narrower one. State which classes are Important and which are Nit at most. You can escalate as well, for example treating any `CLAUDE.md` violation as Important.
+- **Nit volume.** Cap how many nits one review posts. "Report at most five nits, mention the rest as a count in the summary" keeps a review actionable.
+- **Skip rules.** Name paths, branch patterns, and categories to stay quiet on: generated code, lockfiles, vendored dependencies, machine-authored branches, and anything CI already enforces.
+- **Repo-specific checks.** Rules you want applied on every pull request, such as "new API routes must have an integration test." These land more reliably here than the same rule buried in a long `CLAUDE.md`, because `REVIEW.md` reaches every finding and verification agent directly.
+- **A verification bar.** Require evidence before a class of finding is posted: "behavior claims need a `file:line` citation in the source." Each false positive costs the author a round trip.
+- **Re-review convergence.** Say how to behave on a pull request already reviewed. "After the first review, suppress new nits and post Important findings only" stops a one-line fix reaching round seven on style.
+- **Summary shape.** Ask for a one-line tally at the top, such as `2 factual, 4 style`, and for "no factual issues" to lead when that is the case.
+
+A working example:
+
+```markdown
+# Review instructions
+
+## What Important means here
+
+Reserve Important for findings that would break behavior, leak data,
+or block a rollback: incorrect logic, unscoped database queries, PII
+in logs or error messages, and migrations that aren't backward
+compatible. Style, naming, and refactoring suggestions are Nit at
+most.
+
+## Cap the nits
+
+Report at most five Nits per review. If you found more, say "plus N
+similar items" in the summary instead of posting them inline.
+
+## Do not report
+
+- Anything CI already enforces: lint, formatting, type errors
+- Generated files under `src/gen/` and any `*.lock` file
+- Test-only code that intentionally violates production rules
+
+## Always check
+
+- New API routes have an integration test
+- Log lines don't include email addresses, user IDs, or request bodies
+- Database queries are scoped to the caller's tenant
+```
+
+Length has a cost here. A long `REVIEW.md` dilutes the rules that matter most, so keep it to instructions that change review behavior and leave general project context in `CLAUDE.md`.
+
+## Composing them
+
+The plugin sees the moment a decision is made, with the conversation that produced it still in reach, and it fixes what it finds before the code ever reaches a branch. It reduces what arrives at the pull request.
+
+`/code-review` sees your branch before anyone else does, which makes it the cheap pass you run before pushing. It is also the one you point at a teammate's pull request before approving it.
+
+Ultrareview sees the change with verification behind every finding, which is what you want on a substantial change where a false positive costs a round trip and a missed bug costs a rollback. You run it on the changes that justify the price.
+
+Code Review sees the change in the context of the whole codebase, on every pull request, without anyone remembering to ask.
+
+A workable default stack: the plugin on always, `/code-review` before you push, Code Review or the action on every pull request, and ultrareview reserved for changes you would be nervous about rolling back. <LessonLink id="I6.2" />'s reviewer subagent still has a place in that picture, for the review criteria that are specific to your repository and belong to a subagent you control.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **`REVIEW.md` appears to do nothing.** You wrote the file, ran `/code-review` to test it, and the rules were ignored. Local review does not read `REVIEW.md`. Test it on a pull request in a repository with Code Review enabled, or move the rule into `CLAUDE.md` if you want it to apply everywhere.
+
+- **`/rewind` will not undo a `--fix`.** A background review applies its edits outside your session's checkpoints, so rewinding leaves them in place. Use git to revert them. Running the review in the foreground, which happens under `-p` or with `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`, edits during your own turn and rewinds normally.
+
+- **A fork pull request silently skips review.** Automatic triggers skip fork pull requests in every mode, and clicking Re-run on the check does nothing. Someone with write access has to comment `@claude review`.
+
+- **Claude reacts to your `@claude review` comment and no review starts.** If your organization membership is private, which is GitHub's default, GitHub does not identify you to Claude as a member, so write access granted through a team does not count. Make your membership public, or get added to the repository as a direct collaborator.
+
+- **You expected the check to block the merge.** The check run always concludes neutral by design. Parse the severity JSON from its output in your own workflow if you want a gate.
+
+- **Nobody acts on the findings because replying feels like enough.** Replying to an inline comment does not prompt Claude to respond or update the pull request. Fix the code and push, or resolve the thread to dismiss a finding.
+
+- **The review bill comes from a trigger someone set once and forgot.** After every push multiplies cost by the number of pushes, and `@claude review always` opts an individual pull request into the same thing. Set the monthly spend cap before you need it.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+This works on any plan, because every step is local.
+
+**Environment:** a repository with a branch that has a few commits ahead of `main`.
+
+1. Run `/code-review low` on the branch and read the findings.
+2. Run `/code-review max` on the same branch and compare. Note which findings appeared only at the higher effort.
+3. Create a `REVIEW.md` at the repository root with one unmistakable rule, such as "report every function longer than 10 lines as Important."
+4. Run `/code-review` again and check whether that rule changed anything.
+5. Move the same rule into `CLAUDE.md` and run it once more.
+6. Install the security-guidance plugin, then ask Claude to write a small function that builds a SQL query by concatenating a parameter into a string.
+
+**Success looks like:** more findings at `max` than at `low` in step 2, including at least one the review is visibly less certain about; no change at all in step 4, which is the `REVIEW.md` fact from this lesson demonstrated rather than read; a difference in step 5; and in step 6, a warning that arrives without you asking for a review, followed by Claude fixing it in the same turn.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**We enabled Zero Data Retention. What is left?**
+The security-guidance plugin, local `/code-review`, and the GitHub Action running a review skill. Code Review and ultrareview are both unavailable, and `/code-review ultra` quietly runs a local review instead of the cloud one. Build the pull request layer with the action, and put the policy you would have written in `REVIEW.md` into the skill's prompt or your `CLAUDE.md` instead. <LessonLink id="A3.4" /> covers the decision from the other side.
+
+**We run through Bedrock or Agent Platform. Does that change anything?**
+Ultrareview is unavailable there, since it needs a claude.ai sign-in. Code Review still bills to your Anthropic account regardless of which provider your other Claude Code usage runs through. The plugin's model-backed reviews work, though they need Python 3.10 or later on a third-party provider rather than 3.7.
+
+**What happened to `/review`?**
+It is an alias of `/code-review` now. It used to be a separate command that did a single-pass, read-only review of a GitHub pull request, so documentation and blog posts written before v2.1.223 describe a layer that no longer exists separately.
+
+**Can I stop Claude starting reviews on its own?**
+Yes, with `"code-review": "user-invocable-only"` under `skillOverrides` in a settings file. That keeps the command available when you type it while stopping both Claude and scheduled tasks from launching it.
+
+**Which layer should a solo developer on Pro actually run?**
+The plugin and `/code-review`, both free with your plan, plus the three ultrareview runs on a change you are genuinely unsure about. The pull request layers are built for teams with more pull requests than attention.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A2.4" /> is the last piece of this module, and it takes the trigger question further than an event in a repository. A scheduled review runs while everyone is asleep, which turns the controls this lesson treated as optional into requirements.
+
+<LessonLink id="A3.4" /> is where Zero Data Retention gets decided, with this lesson's table as part of the cost.
+
+<LessonLink id="A5.1" /> is how the security-guidance plugin is built: hooks on `PostToolUse`, `Stop`, and `UserPromptSubmit`, running a separate model call and feeding the result back into the session. Its source is a working example for the plugin you write there.
+
+<LessonLink id="A7.2" /> asks you to pick a review layer for the capstone and defend the choice in writing, including a `REVIEW.md` if your plan gives you a product that reads one.
