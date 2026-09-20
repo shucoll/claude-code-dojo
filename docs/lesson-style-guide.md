@@ -273,12 +273,22 @@ feels flat, the fix is a sharper fact, not a flourish.
 ## Content mechanics
 
 - **Fence discipline** (`fence-discipline`). Use a ` ```prompt ` fence for
-  anything the learner types into Claude (natural-language prompts, `@`-mentions,
-  `!` shell passthrough, slash commands); it renders as a "Prompt:" card. Use
-  ` ```bash ` for a command the learner runs in their own shell, and ` ```text `
-  for terminal or UI output they only read (a permission dialog, sample output).
-  The fence type tells the learner *where* the thing goes, so a typed prompt in a
-  ` ```bash ` fence, or a runnable command in a ` ```text ` fence, is a bug.
+  anything the learner types into Claude (natural-language prompts, `@`-mentions
+  of files, `!` shell passthrough, slash commands); it renders as a "Prompt:"
+  card. Use ` ```bash ` for a command the learner runs in their own shell, and
+  ` ```text ` for terminal or UI output they only read (a permission dialog,
+  sample output). The fence type tells the learner *where* the thing goes, so a
+  typed prompt in a ` ```bash ` fence, or a runnable command in a ` ```text `
+  fence, is a bug.
+  - **Text typed into a surface outside Claude Code** takes ` ```text `, and the
+    surrounding prose names the surface. A GitHub or GitLab comment box is the
+    case that comes up: `@claude implement this` is typed by the learner, so
+    neither of the first two fences fits it, and in every other lesson the
+    "Prompt:" card means "type this into your Claude session". Rendering a
+    `@claude` mention that way sends the learner to the wrong window, while
+    ` ```text ` leaves the destination to the sentence introducing it. Use
+    ` ```prompt ` for `@claude` only in a lesson where the learner is genuinely
+    typing it into a Claude Code session.
 - **Never leave a bare dotted id as plain text** (`bare-id`). A lesson reference
   written literally in prose ("from I8.1", "the rule I4.2 built", "you learned in
   I1.3") must be a `<LessonLink>`, not inert text. When the sentence reads better
@@ -314,6 +324,8 @@ writing. The following are **not** violations:
   marketing phrasing in sample output or a quoted doc are content (see Scope).
 - **A watched phrase being discussed rather than used.** A lesson that quotes a
   bad prompt in order to fix it is using the phrase correctly.
+- **A ` ```text ` fence holding text the learner types into an external UI**,
+  such as a `@claude` mention in a pull request comment. See `fence-discipline`.
 - **A negation that is the content.** `this-not-that` targets the rhetorical
   shape. An enumerated exclusion list, a correction the learner specifically
   needs, and a `rather than` comparative between two real options are all fine.
