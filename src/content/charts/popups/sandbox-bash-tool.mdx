@@ -1,0 +1,15 @@
+Operating-system primitives applied to every Bash, PowerShell, and Monitor
+command Claude runs, and to every process those commands spawn. Seatbelt on
+macOS, bubblewrap on Linux and WSL2. Native Windows is unsupported, so run
+Claude Code inside a WSL2 distribution there.
+
+**Isolates:** writes, which default to the working directory, `--add-dir`
+directories, and the session temp directory. Network, which pre-allows no
+domains at all.
+
+**Still outside:** Read, Edit, and WebFetch run inside the Claude Code process
+under permission rules instead. MCP servers and command hooks are separate
+processes on the host, unconstrained.
+
+Reads default to the whole computer, `~/.ssh` and `~/.aws/credentials`
+included, until you list them under `sandbox.credentials` or `denyRead`.

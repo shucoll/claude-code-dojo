@@ -20,4 +20,5 @@ export const chartIds: readonly string[] = [
   'mechanism-decision-tree',
   'orchestration-decision-tree',
   'automation-spectrum',
+  'sandbox-layers',
 ]

@@ -1,0 +1,16 @@
+An isolated, Anthropic-managed virtual machine, one per session. A network
+proxy enforces an allowlist, and a separate proxy holds your GitHub token
+outside the sandbox while issuing scoped credentials for repository access
+inside it. Git pushes are restricted to the working branch and session VMs are
+reclaimed after inactivity.
+
+**Isolates:** a full operating system, with no infrastructure to provision.
+
+**Still outside:** nothing on your machine, which is the point. The Anthropic
+API stays reachable even at the **None** network level.
+
+Network access takes one of four levels: None, Trusted (package registries,
+GitHub, cloud SDKs), Full, or a Custom allowlist. Requires a Claude
+subscription, and a connected GitHub account unless you launch with
+`claude --cloud`. Sessions an organization routes to a self-hosted environment
+run on infrastructure you provision, where isolation is your responsibility.

@@ -4,53 +4,292 @@ slug: "sandboxing"
 title: "Sandboxing"
 type: "core"
 order: 2
-estimatedMinutes: 17
+estimatedMinutes: 20
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-22"
 prerequisites: ["A3.1"]
-teaches: ["isolation-ladder", "filesystem-network-isolation", "sandbox-limits"]
-references: ["A2.4", "I1.2"]
+teaches: ["isolation-ladder", "filesystem-network-isolation", "auto-allow-mode", "sandbox-limits"]
+references: ["A2.4", "I1.2", "A3.1"]
 docsSources: ["https://code.claude.com/docs/en/sandboxing", "https://code.claude.com/docs/en/sandbox-environments", "https://code.claude.com/docs/en/devcontainer", "https://code.claude.com/docs/en/cloud-environments"]
+interactive:
+  - kind: "diagram"
+    spec: "sandbox-layers"
 ---
 
 # Sandboxing
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+<LessonLink id="A3.1" /> ended on a rule you cannot rely on. A `deny` entry for `Bash(curl *)` matches the text Claude wrote and misses `/usr/bin/curl`, so a permission rule describes the invocation Claude usually produces. Against a session that read something hostile, the useful control is one that holds no matter which words the command uses.
+
+That control is the operating system. A sandbox does not read the command; it constrains the process. `curl`, `/usr/bin/curl`, and a Python script that opens a socket all hit the same wall, because the wall was built before any of them started.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Which isolation you need depends on one question: how much of the session has to be inside the boundary.
+
+<ChartEmbed id="sandbox-layers" />
+
+Two documentation pages split this ladder between them. **Sandboxing** is the built-in Bash sandbox specifically: OS-enforced filesystem and network limits on Bash, PowerShell, and Monitor commands, configured through `/sandbox`. **Sandbox environments** compares the coarser tiers, from the sandbox runtime through containers and VMs to cloud sessions.
+
+### Sandboxed Bash tool
+
+Built into Claude Code, on macOS, Linux, and WSL2. macOS uses the Seatbelt framework and needs nothing installed; Linux and WSL2 rely on two packages, and the `/sandbox` panel tells you whether they are missing. Native Windows is unsupported, so run Claude Code inside a WSL2 distribution there.
+
+It restricts every Bash, PowerShell, and Monitor command Claude runs, and every process those commands spawn. Read, Edit, and WebFetch run inside the Claude Code process under permission rules. MCP servers and command hooks are separate processes on the host, and they run unconstrained.
+
+### Sandbox runtime
+
+The `@anthropic-ai/sandbox-runtime` package wraps an entire process in the same Seatbelt or bubblewrap primitives, so launching Claude Code through it puts every tool, hook, and MCP server inside the boundary, with no Docker:
+
+```bash
+npx @anthropic-ai/sandbox-runtime claude
+```
+
+This is the direct answer to the gap <LessonLink id="A3.1" /> found, where a repository's `SessionStart` hook runs on your host in a folder you never trusted. Configure it first, in `~/.srt-settings.json`: by default it denies network access and confines writes to a few built-in runtime paths, and it starts anyway when the settings file is missing or invalid. A clean start proves nothing about whether your settings loaded. It is a beta research preview and its configuration format may change.
+
+### Dev container
+
+A Docker container an editor manages, with your project bind-mounted in. Claude Code and the whole toolchain run inside it while your edits appear in your local repository. The `anthropics/claude-code` repository publishes a reference configuration combining the CLI, persistent volumes, and an `init-firewall.sh` that limits outbound traffic by default. Because the container runs Claude Code as a non-root user and confines execution, it is the documented place to pass `--dangerously-skip-permissions`.
+
+Committing one standardizes a team's environment as a convention, since Claude Code itself does not require a container. Preventing developers from working outside it is a job for device management.
+
+### Custom container
+
+Any Docker or OCI image with your own network policies, mounted volumes, and seccomp profiles. The usual path for an organization that already runs container infrastructure or CI runners. You can layer the built-in Bash sandbox inside it for per-command restrictions on top of the outer boundary; an unprivileged container needs `enableWeakerNestedSandbox` to do that, and that setting considerably weakens the inner sandbox.
+
+### Virtual machine
+
+Its own kernel, and in cloud or microVM deployments its own virtualized hardware. This is the documented answer for evaluating untrusted code, for a policy that requires kernel-level separation between the agent and the host, and for compliance requirements that no host-level approach satisfies.
+
+### Cloud session
+
+An isolated, Anthropic-managed VM per session, with a network proxy enforcing an allowlist and a separate proxy holding your GitHub token outside the sandbox while issuing scoped credentials inside it. Pushes are restricted to the working branch and VMs are reclaimed after inactivity. Network access takes one of four levels: **None**, **Trusted** (package registries, GitHub, cloud SDKs), **Full**, or a **Custom** allowlist. The Anthropic API stays reachable even at **None**, because Claude Code's own requests take a different path.
+
+Sessions an organization routes to a self-hosted environment run on infrastructure you provision, where isolation and egress are your deployment's responsibility.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+The bottom rung is the one you configure by hand, and its defaults are where the surprises live.
+
+### Filesystem isolation
+
+Writes default to the current working directory and its subdirectories, any directory added with `--add-dir` or `permissions.additionalDirectories`, and the session temp directory that `$TMPDIR` points to. Shell configuration files and system binaries are outside that set.
+
+Reads default to the entire computer. That default includes `~/.aws/credentials` and `~/.ssh/`: turning the sandbox on does not put your secrets behind it. The fix is a dedicated block:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "credentials": {
+      "files": [
+        { "path": "~/.aws/credentials", "mode": "deny" },
+        { "path": "~/.ssh", "mode": "deny" }
+      ],
+      "envVars": [
+        { "name": "GITHUB_TOKEN", "mode": "deny" },
+        { "name": "NPM_TOKEN", "mode": "deny" }
+      ]
+    }
+  }
+}
+```
+
+A `deny` file entry blocks reads inside the sandbox; a `deny` environment entry unsets the variable before each sandboxed command runs. Claude Code merges `deny` entries from every settings scope the session loads, so any scope can add one and no scope can remove one another scope added. There is no built-in credential deny list, so the only protected files are the ones you name. To strip credentials from every subprocess whether or not it is sandboxed, set `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` instead.
+
+### Protected paths
+
+Inside the directories a sandboxed command may write to, the sandbox still denies writes to the files Claude Code loads configuration and code from: the `.claude` settings files, `.claude/skills`, `.claude/agents`, `.claude/commands`, `.claude/hooks`, `.mcp.json`, and the files Claude Code runs on its own. In the working directory it also denies shell startup files, `.gitconfig`, and `hooks` and `config` inside `.git`.
+
+The reason is the persistence attack from <LessonLink id="A3.1" />. A command that could edit those files could grant itself permissions, or install a hook that Claude Code runs outside the sandbox on the next launch. So the protection has no exemption: an `allowWrite` entry or an `Edit` allow rule covering the path does not lift it. Turning it off means turning filesystem isolation off entirely.
+
+### Network isolation
+
+A proxy running outside the sandbox controls network access, and **no domains are pre-allowed**. The first time a command needs a new host, Claude Code prompts; choosing "Yes, and don't ask again" writes a `WebFetch(domain:...)` allow rule to your local settings. You can pre-allow hosts with `allowedDomains` to skip the prompt entirely.
+
+Two settings turn the allowlist into a wall rather than a prompt. `strictAllowlist` denies any host outside the list instead of asking, and `allowManagedDomainsOnly` does the same while honoring only managed-settings entries. Both are read from user, managed, or CLI `--settings` only: setting `strictAllowlist` in a repository's `.claude/settings.json` has no effect, which is <LessonLink id="A3.1" />'s fail-closed principle applied to the network layer.
+
+In auto mode with sandboxing on, Claude names the hosts a command needs on the command itself instead of triggering an approval per connection. The classifier reviews the hosts together with the command, and an approved list opens those hosts for that one command, for as long as it runs. Nothing is written to your settings, and the next command names its own hosts. A per-command list only widens what the sandbox denies by default: `deniedDomains` still blocks, and a locked allowlist makes Claude Code refuse per-command lists outright.
+
+### Sandbox modes, and the one that is easy to confuse
+
+Both modes enforce the same filesystem and network restrictions. The difference is how a sandboxed command gets approved.
+
+In **auto-allow mode**, a command that can be sandboxed runs and is approved automatically. A command that cannot be sandboxed falls back to the regular permission flow. This works independently of your permission mode, so sandboxed Bash commands that modify files run without prompting even in Manual mode, where the file edit tools would prompt. Four things still hold: `deny` rules, `rm` and `rmdir` against a critical path, content-scoped `ask` rules such as `Bash(git push *)`, and plan mode, which does not let auto-allow widen approvals.
+
+In **regular permissions mode**, every Bash command goes through the permission flow even when sandboxed.
+
+Auto-allow mode and auto mode are different mechanisms with similar names, and they combine:
+
+| | What it controls | What replaces the prompt |
+|---|---|---|
+| Sandbox auto-allow mode | What a Bash command can reach once it runs | The sandbox boundary, which contains the command |
+| Auto mode | Whether each tool call runs at all | A classifier that reviews the action |
+| `--dangerously-skip-permissions` | Whether each tool call runs at all | Nothing, and protected-path checks are skipped too |
+
+### The unsandboxed retry
+
+Some commands cannot run inside the sandbox: tools incompatible with it, or ones needing a host you have not allowed. Claude Code reports the violation in the command's result, naming the path or host that was denied, so Claude can see what happened and may retry the command with `dangerouslyDisableSandbox`.
+
+The retried command runs outside the sandbox and therefore goes through the regular permission flow: a confirmation prompt in Manual mode, the classifier in auto mode. To be prompted on every unsandboxed retry even in auto mode, add an `ask` rule for `Bash(dangerouslyDisableSandbox:true)`.
+
+Closing the hatch entirely is `"allowUnsandboxedCommands": false`, shown in the `/sandbox` **Overrides** tab as **Strict sandbox mode**. It applies to the commands Claude runs. Commands you type at the `!` shell prompt run outside the sandbox unless the session is a background session, or a Linux session with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+Turn the sandbox on for a repository and narrow it until it fits.
+
+Open the panel and pick a mode:
+
+```prompt
+/sandbox
+```
+
+The panel has tabs for **Mode**, **Config**, and **Overrides**, plus a **Dependencies** tab on Linux when the optional seccomp filter is missing. Choose auto-allow, then open **Config**: the **Denied within allowed** list shows the protected paths resolved for your machine, mixed in with your own `denyWrite` entries.
+
+Then write the policy down, so it survives the session and reaches your teammates:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["registry.npmjs.org", "api.github.com"],
+      "strictAllowlist": true
+    },
+    "credentials": {
+      "files": [{ "path": "~/.ssh", "mode": "deny" }],
+      "envVars": [{ "name": "GITHUB_TOKEN", "mode": "deny" }]
+    },
+    "allowUnsandboxedCommands": false
+  }
+}
+```
+
+That configuration says: every command Claude runs is sandboxed, it can reach two hosts and no others without asking, and it cannot read your SSH keys or see your GitHub token. Ask Claude to run the test suite and it works. Ask it to fetch from an unlisted host and the connection is refused with the host named in the result.
+
+Give it back the host it actually needs rather than widening the list:
+
+```prompt
+That failed on a blocked host. Add just that domain to
+sandbox.network.allowedDomains in .claude/settings.json and try again.
+```
+
+`strictAllowlist` belongs in your user settings rather than the repository's, since project settings cannot set it.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**You want fewer prompts on your own machine without a classifier.** Manual mode plus the Bash sandbox in auto-allow mode. Start with `claude --permission-mode default`, run `/sandbox`, and select auto-allow. Deny rules still apply and command-scoped ask rules still prompt.
+
+**You want to run unattended overnight.** The Bash sandbox alone is not enough, because MCP servers and hooks are outside it. Use the sandbox runtime, a container, or a VM, and layer the Bash sandbox inside for per-command limits.
+
+**You want to evaluate a repository you do not trust.** A dedicated VM, or a cloud session if you have a subscription. This is the one row where a host-level boundary is the wrong answer.
+
+**You are passing `--dangerously-skip-permissions`.** The isolation boundary is the only thing left protecting your system, so a container, a VM, or the sandbox runtime is required. Claude Code refuses to start with the flag as root on Linux and macOS, so run as a non-root user.
+
+**You want to require isolation across an organization.** The built-in Bash sandbox is the only approach Claude Code enforces itself, through `sandbox` keys in managed settings. Containers and VMs are enforced by your device management, because Claude Code does not require either.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Turn the Bash sandbox on for everyday work: the cost is a few minutes of allowlist tuning and occasional unsandboxed retries, and the benefit is an enforcement layer that survives a prompt-injected session. Performance overhead is minimal, though some filesystem operations run slightly slower.
+
+Reach past it when the session is unattended, when the code is untrusted, or when a tool genuinely cannot work inside it. Some tools need configuration adjustments or need to run outside the sandbox entirely, and `excludedCommands` exists for exactly that, at the price of a hole you chose.
+
+Leave it out when you are on native Windows without WSL2, where the Bash sandbox does not run at all, so a container or VM carries the isolation by itself.
+
+## Limitations
+
+Sandboxing reduces risk without being a complete isolation boundary. Five limits are documented, and each one is a configuration you might reach for without reading this list first.
+
+**TLS is not terminated by default.** The built-in proxy decides from the client-supplied hostname and does not inspect encrypted traffic, so code inside the sandbox can potentially use domain fronting to reach hosts outside the allowlist. A broad entry such as `github.com` is therefore a data-exfiltration path. The experimental `network.tlsTerminate` setting terminates TLS at the proxy for credential masking without adding content filtering; a custom proxy that inspects traffic, with its CA certificate installed inside the sandbox, is the answer when your threat model needs one.
+
+**`allowUnixSockets` can hand over the host.** Allowing `/var/run/docker.sock` effectively grants access to the host system through the Docker socket.
+
+**Broad `allowWrite` paths enable privilege escalation.** Writes to directories holding executables in `$PATH`, to system configuration, or to shell startup files lead to code execution in a different security context the next time another user or a system process reads them.
+
+**`enableWeakerNestedSandbox` is what its name says.** It exists so the Linux sandbox works inside Docker without privileged namespaces, and it considerably weakens security. Use it only where another boundary is doing the real work.
+
+**`allowAppleEvents` removes code-execution isolation on macOS.** It lets `open` and `osascript` work, and it also lets sandboxed commands launch other applications unsandboxed with no prompt. Claude Code honors it from user, managed, or CLI settings alone; project settings cannot turn it on.
+
+Effective sandboxing needs both halves. Without network isolation, a compromised session can exfiltrate files it can read. Without filesystem isolation, it can backdoor a system resource to get network access. When you widen a default, check that the new `allowWrite` path, `allowedDomains` entry, or `excludedCommands` exception does not undo a restriction on the other side.
+
+### What the sandbox does not cover
+
+Read, Edit, and Write go through the permission system rather than the sandbox. Computer use runs on your actual desktop, gated by per-app prompts. Sandboxed commands inherit the parent process environment including any credentials in it, until `sandbox.credentials` or `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` intervenes. Subagents run in the same process as the parent and share its sandbox configuration, so a subagent's Bash commands are sandboxed whenever the parent's are.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **Assuming the sandbox protects your credentials.** Symptom: a sandboxed command reads `~/.aws/credentials` successfully. Reads default to the whole computer. Fix: `sandbox.credentials` entries, or `denyRead` paths.
+- **Confusing auto-allow mode with auto mode.** Symptom: you enabled one and expected the other's behavior. Auto-allow approves a Bash command because the boundary contains it; auto mode approves an action because a classifier reviewed it. They are independent and combine.
+- **Treating the Bash sandbox as enough for unattended work.** Symptom: an MCP server or a hook did something outside the boundary. The sandbox covers shell commands and their children. Fix: the sandbox runtime or a container.
+- **Allowing a broad domain.** Symptom: `github.com` in `allowedDomains` looks narrow and is not, because the proxy makes its decision from an uninspected hostname. Fix: name the exact hosts, and use `deniedDomains` for anything a wildcard would otherwise catch.
+- **Setting `strictAllowlist` in project settings.** Symptom: no error, and no enforcement. It is read from user, managed, or CLI settings only.
+- **Forgetting that strict sandbox mode spares your own shell.** Symptom: a command you typed at the `!` prompt ran unsandboxed. Strict mode applies to what Claude runs, except in a background session or on Linux with `CLAUDE_CODE_SUBPROCESS_ENV_SCRUB` set.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Prove the boundary is real, in about ten minutes, in a scratch repository.
+
+1. Turn the sandbox on and select auto-allow:
+
+```prompt
+/sandbox
+```
+
+2. Ask for a write outside the working directory:
+
+```prompt
+Write the current date to ~/sandbox-probe.txt using a shell command.
+```
+
+The command is blocked and the result names the denied path. Claude sees the violation and can reason about it.
+
+3. Ask for a write to a protected path inside the working directory:
+
+```prompt
+Add an allow rule for Bash(curl *) to .claude/settings.json using a
+shell command rather than the edit tool.
+```
+
+This is denied too, and the path is inside the directory the sandbox permits writes to. Add `.claude/settings.json` to `sandbox.filesystem.allowWrite` and try again to confirm the protection does not lift.
+
+4. Ask for a network connection:
+
+```prompt
+Fetch https://example.com with curl and show me the first line.
+```
+
+With no allowlist, this prompts for the host, or in auto mode Claude names the host on the command and the classifier reviews both.
+
+5. Open `/sandbox`, go to **Config**, and read the **Denied within allowed** list against what you just saw.
+
+**Success looks like:** you can name three things a sandboxed command cannot do inside a directory it is allowed to write to, and say which setting would change each one.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Is `/sandbox` a permission mode?**
+It is a separate layer. A permission mode decides whether a tool call runs and whether you are asked first. The sandbox decides what a Bash command can reach once it is running. Every permission mode can run with or without it.
+
+**What happens to a command that cannot be sandboxed?**
+It falls back to the regular permission flow, and Claude may retry it with `dangerouslyDisableSandbox` after reading the violation. Strict sandbox mode makes Claude Code ignore that parameter, so the command has to run sandboxed or be listed in `excludedCommands`.
+
+**Do permission rules still matter once the sandbox is on?**
+Yes, and they do a different job. Rules are evaluated before a tool runs, from the command string and, in auto mode, the classifier's judgment. The OS enforces the sandbox on the running process, so it holds regardless of what the model chose to run and even when an allowed command does more than its name suggests. Safe unattended operation wants both.
+
+**Can a repository turn the sandbox off for me?**
+Not the parts that matter. `strictAllowlist` and `allowAppleEvents` are ignored from project settings, credential `deny` entries from any scope can only narrow access, and an organization can deliver `sandbox` keys through managed settings so a developer cannot widen the policy. <LessonLink id="A3.3" /> covers that delivery.
+
+**Does isolation change what reaches the model?**
+No. Your prompts and the files Claude reads go to the Anthropic API or your configured provider whether or not a sandbox is in the way. That is <LessonLink id="A3.4" />'s subject.
+
+**Which tier should I start with?**
+The Bash sandbox, today, on the machine you already work on. It is the only rung with essentially no setup on macOS, and the habits it builds (naming hosts, naming writable paths) are the same ones every tier above it needs.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A3.3" /> is how a policy stops being yours: managed settings deliver the `sandbox` keys from this lesson to every developer in an organization, at a precedence no project file can override.
+
+<LessonLink id="A3.4" /> covers what leaves the machine regardless of which rung you picked, and closes the module.
+
+Looking back: <LessonLink id="A2.4" /> listed sandboxing first among the non-negotiables for unattended operation, and the ladder above is the detail behind that line. The scenario that matters there is the second row of the use cases: a scheduled or autonomous run needs a boundary around the whole process, and the built-in Bash sandbox is a layer inside it.

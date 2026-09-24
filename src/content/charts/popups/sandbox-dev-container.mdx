@@ -1,0 +1,15 @@
+A Docker container that VS Code or another Dev Containers-compatible editor
+manages, with your project bind-mounted in. Claude Code and the whole toolchain
+run inside it while edits land in your local repository.
+
+**Isolates:** a full development environment, so file tools, MCP servers, and
+hooks are all inside the container.
+
+**Still outside:** the bind-mounted workspace, which is your real repository on
+the host.
+
+The reference container in `anthropics/claude-code` adds a default-deny
+`init-firewall.sh` and persistent volumes. Because the container runs as a
+non-root user and confines execution, it is the documented place to pass
+`--dangerously-skip-permissions`. Committing it standardizes a team's
+environment by convention, since Claude Code does not require a container.

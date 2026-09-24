@@ -1,0 +1,14 @@
+Any Docker or OCI image with your own network policies, mounted volumes, and
+seccomp profiles. The common path for organizations that already run container
+infrastructure or CI runners.
+
+**Isolates:** a full development environment, the same scope a dev container
+gives, under policies you write rather than a reference configuration.
+
+**Still outside:** whatever you mounted writable, and whatever credentials and
+tokens are reachable inside it.
+
+You can layer the built-in Bash sandbox inside the container for per-command
+restrictions on top of the outer boundary. An unprivileged container needs
+`enableWeakerNestedSandbox` for that, which considerably weakens the inner
+sandbox and is worth only where the outer boundary is doing the real work.
