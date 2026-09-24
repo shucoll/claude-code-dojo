@@ -6,10 +6,10 @@ type: "core"
 order: 3
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.4", "I2.3", "I3.4", "I4.5", "I5.4", "I6.4", "I7.1"]
 references: ["I1.4", "I2.1", "I3.4", "I4.5", "I5.4", "I6.4"]
-docsSources: ["https://code.claude.com/docs/en/features-overview"]
+docsSources: ["https://code.claude.com/docs/en/features-overview", "https://code.claude.com/docs/en/settings", "https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/mcp"]
 interactive:
   - kind: "diagram"
     spec: "claude-code-system-map"
@@ -27,11 +27,11 @@ Two traces and one table, then the map.
 
 Between pressing enter on `claude` and seeing a prompt, a specific sequence runs.
 
-**1. Settings resolve.** Managed settings, then project `.claude/settings.json`, then `.claude/settings.local.json`, then your user settings. This happens first because its output decides everything after it: which plugins are enabled, which permission rules apply, which model runs, whether an agent replaces the main thread. <LessonLink id="I1.3" /> has the resolution order in full.
+**1. Settings resolve.** Managed settings, then CLI flags, then `.claude/settings.local.json`, then project `.claude/settings.json`, then your user settings. This happens first because its output decides everything after it: which plugins are enabled, which permission rules apply, which model runs, whether an agent replaces the main thread. <LessonLink id="I1.3" /> has the resolution order in full.
 
 **2. Instructions load.** The `CLAUDE.md` hierarchy, every level of it, in full text. Imported files come with it. Nothing here is lazy and nothing is summarized.
 
-**3. Tool definitions register.** The built-in belt, plus every tool from every connected MCP server, each with its complete JSON schema. Servers connect at this point, so a slow one is felt at startup.
+**3. Tool definitions register.** The built-in belt, plus the tool names and server instructions from every connected MCP server, with the full JSON schemas deferred until a tool is needed. Servers connect at this point, so a slow one is felt at startup.
 
 **4. The skill index loads.** Names and descriptions only. Skill bodies stay on disk until one triggers, which is what makes a large skill library affordable.
 
@@ -53,7 +53,7 @@ You type "add rate limiting to the upload endpoint."
 
 **Claude decides how to answer.** Three of the six mechanisms are options here, and Claude picks among them from what is resident: a skill whose description matches loads its body now; a task that looks like broad search or restricted work goes to a subagent; anything else becomes direct tool calls. This is the one step driven by Claude's judgment rather than by configuration, which is why the mechanisms depending on it are the ones that occasionally do not fire.
 
-**Every tool call passes the same gate.** `PreToolUse` hooks run first and can allow, deny, or defer. If no hook decided, permission rules apply, in the order `deny`, then `ask`, then `allow`. If nothing matches, you get the prompt. A hook denial and a rule denial look identical to Claude; they differ in who authored them and how specifically they can be targeted.
+**Every tool call passes the same gate.** `PreToolUse` hooks run first and can allow, deny, or defer. A blocking hook stops the call there. Otherwise permission rules apply, in the order `deny`, then `ask`, then `allow`, and a hook that answered `allow` does not skip them: a matching deny or ask rule still holds. If nothing matches, you get the prompt. A hook denial and a rule denial look identical to Claude; they differ in who authored them and how specifically they can be targeted.
 
 **The tool runs, then `PostToolUse` hooks run.** A formatter rewrites the file, a validator inspects it, and either can send feedback that Claude reads on its next step. This is the only mechanism that reacts to what Claude just did.
 
@@ -75,14 +75,14 @@ Each of the level's four resolvers settled a local question. Side by side, the d
 | **Hook** | yes | negligible | armed at startup, fires on events | actions that must happen, and quality gates |
 | **CLAUDE.md** | no, it is instruction | full text, every turn | startup | standing facts about this project |
 | **Skill** | no, description-triggered | description only | body loads on trigger | procedures repeated on some tasks |
-| **MCP server** | n/a, it is capability | all tool schemas | startup | reaching an external system |
+| **MCP server** | n/a, it is capability | tool names, schemas deferred | startup | reaching an external system |
 | **CLI through Bash** | n/a, it is capability | none | on invocation | reaching an external system cheaply |
 | **Subagent** | no, description-triggered | roster entry | its own window, on delegation | volume isolation and capability limits |
 | **Output style** | yes, it is the system prompt | replaces rather than adds | startup | how responses are shaped |
 
 Two columns carry most of the decisions. **Guaranteed** separates the mechanisms that do not care whether Claude agrees (hooks, permission rules, output styles) from the ones that are suggestions with good odds (CLAUDE.md, skills, subagents). **Resident cost** separates what you pay for continuously from what you pay for on use.
 
-The pairs that get confused match on one column and differ on the other. A hook and a CLAUDE.md rule can express the same intent, but only one is enforcement, which is <LessonLink id="I4.5" />. A skill and a CLAUDE.md section can hold the same words, but only one is resident on every turn, which is <LessonLink id="I3.4" />. An MCP server and a CLI reach the same service, differing almost entirely in resident cost, which is <LessonLink id="I5.4" />. A subagent and the main thread differ in what they start with, which is <LessonLink id="I6.4" />.
+The pairs that get confused match on one column and differ on the other. A hook and a CLAUDE.md rule can express the same intent, but only one is enforcement, which is <LessonLink id="I4.5" />. A skill and a CLAUDE.md section can hold the same words, but only one is resident on every turn, which is <LessonLink id="I3.4" />. An MCP server and a CLI reach the same service, differing in what they return and how precisely a rule can name them, which is <LessonLink id="I5.4" />. A subagent and the main thread differ in what they start with, which is <LessonLink id="I6.4" />.
 
 ## The master tree
 

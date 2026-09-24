@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I2.1"]
 references: ["B3.1"]
 docsSources: ["https://code.claude.com/docs/en/memory", "https://code.claude.com/docs/en/large-codebases"]
@@ -101,7 +101,7 @@ See @README for project overview and @package.json for available npm commands.
 
 Import parsing skips code spans and fenced blocks, so `` `@README` `` in backticks stays literal text while `@README` outside them loads the file.
 
-Two places imports earn their keep. If your repo already has an `AGENTS.md` for other tools, `@AGENTS.md` at the top of `CLAUDE.md` keeps one source of truth. And because a gitignored `CLAUDE.local.md` only exists in the worktree where you made it, importing `@~/.claude/my-project-instructions.md` gets your personal instructions into every worktree at once.
+Two places imports earn their keep. If your repo already has an `AGENTS.md` for other tools, `@AGENTS.md` at the top of `CLAUDE.md` keeps one source of truth. And because a gitignored `CLAUDE.local.md` only exists in the worktree where you made it, importing `@~/.claude/my-project-instructions.md` gets your personal instructions into every worktree at once. That path resolves outside the project, so Claude Code asks you to approve external imports the first time it sees one.
 
 ### Per-directory files
 
@@ -184,6 +184,8 @@ Put it in `.claude/settings.local.json` if the exclusion is yours rather than th
 ```bash
 ln -s ~/company-standards/security.md .claude/rules/security.md
 ```
+
+A symlink whose target sits outside the working directory counts as an external import. The linked rules stay out of context until you approve external imports for the project, and only the ones without `paths:` load after that, so a path-scoped standard wants a committed copy rather than a link. Rules that are yours alone can live in `~/.claude/rules/`, which loads without the approval.
 
 When the standard needs its own version history, it has outgrown both and wants to be a <LessonLink id="I7.1">plugin</LessonLink>.
 

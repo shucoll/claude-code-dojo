@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 13
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-07-21"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I5.2"]
 references: ["I2.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/costs", "https://code.claude.com/docs/en/security"]
@@ -39,7 +39,7 @@ Claude Code puts rails on this:
 | Warning threshold | output over 10,000 tokens |
 | Default maximum | 25,000 tokens |
 | Raise the maximum | `MAX_MCP_OUTPUT_TOKENS` |
-| Over the persist threshold | result written to disk, replaced by a file reference |
+| Over the limit | result written to disk, replaced by a file reference |
 
 ```bash
 export MAX_MCP_OUTPUT_TOKENS=50000
@@ -125,7 +125,7 @@ Show me the schema for the orders table
 Find customers who haven't made a purchase in 90 days
 ```
 
-**Cost shape:** unbounded by default, which makes it the best argument for the output limit existing. A careless `select *` against a large table is the call that gets truncated or persisted to disk. Note the `readonly` user in that DSN: the connection string is your blast radius, and a read-only role is the cheapest guardrail available.
+**Cost shape:** unbounded by default, which makes it the best argument for the output limit existing. A careless `select *` against a large table is the call that gets persisted to disk. Note the `readonly` user in that DSN: the connection string is your blast radius, and a read-only role is the cheapest guardrail available.
 
 Pair that with the permission layer from <LessonLink id="I1.2" />. MCP tools are ordinary tools named `mcp__server__tool`, so you can allow the schema-reading tool outright and leave the query tool on `ask`, which is finer control than a CLI behind one Bash rule.
 
@@ -147,7 +147,7 @@ The discipline that replaces the old ration-your-servers advice is not "connect 
 
 ## Pitfalls
 
-- **A tool result gets truncated and Claude works from a partial answer.** The symptom is a warning about output size, then a confident conclusion drawn from half a dataset. Narrow the request (a `LIMIT`, a date range, specific fields) before raising `MAX_MCP_OUTPUT_TOKENS`.
+- **A tool result overflows the limit and Claude works from a partial answer.** The symptom is a warning about output size, then a confident conclusion drawn from half a dataset. Narrow the request (a `LIMIT`, a date range, specific fields) before raising `MAX_MCP_OUTPUT_TOKENS`.
 
 - **You raise the output limit globally to fix one server.** Now every server may spend 50,000 tokens on a single call. Prefer narrowing the query, or ask the server's author for the per-tool annotation.
 
@@ -175,7 +175,7 @@ The discipline that replaces the old ration-your-servers advice is not "connect 
 Close to free in context terms at startup, which is where people were told to worry. Not free in latency, in selection quality, or in what a call returns. The tax was repealed; the bills that remain are just itemized somewhere else.
 
 **Can I get the old eager-loading behavior back?**
-Yes. `ENABLE_TOOL_SEARCH=false` loads every schema up front, which is what every server used to do. `ENABLE_TOOL_SEARCH=auto` loads schemas up front when they fit inside 10% of the window and defers the rest. Both are escape hatches for environments where tool search is unavailable or you need deterministic loading, not everyday settings.
+Yes. `ENABLE_TOOL_SEARCH=false` loads every schema up front, which is what every server used to do. `ENABLE_TOOL_SEARCH=auto` loads schemas up front while they total under 10% of the window and defers all of them once they cross it. Both are escape hatches for environments where tool search is unavailable or you need deterministic loading, not everyday settings.
 
 **How many servers is too many?**
 There is no per-server cap; the practical limit is your context budget, and that budget is no longer the binding constraint. The better question is how many you have used in the last month. Selection noise and startup latency scale with connections, so the answer is behavioral rather than numeric.

@@ -1,0 +1,14 @@
+The `@anthropic-ai/sandbox-runtime` package wraps an entire process in the same
+Seatbelt or bubblewrap isolation the built-in Bash sandbox uses. Launch Claude
+Code through it and every tool, hook, and MCP server in the session is inside
+the boundary.
+
+**Isolates:** the whole Claude Code process, with no Docker required.
+
+**Still outside:** nothing in the session, though the boundary is only as
+narrow as `~/.srt-settings.json` makes it.
+
+It denies network and confines writes to a few built-in paths by default, so an
+unconfigured launch starts successfully and does very little. On Linux and WSL2
+the deny list is built once at launch, so a repository the session clones later
+is not covered. Beta research preview: the configuration format may change.

@@ -1,0 +1,14 @@
+A dedicated virtual machine with its own kernel, and in cloud or microVM
+deployments its own virtualized hardware. Cloud instances, local hypervisors,
+and microVMs such as Firecracker all qualify.
+
+**Isolates:** a full operating system, which is the strongest separation
+available and the only tier that puts a kernel boundary between the agent and
+your host.
+
+**Still outside:** whatever the VM can reach on the network, and any credential
+you provisioned inside it.
+
+This is the documented answer for evaluating untrusted code, for a security
+policy that requires kernel-level separation, and for compliance requirements
+no host-level approach satisfies.

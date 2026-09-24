@@ -5,8 +5,8 @@ title: "The context window"
 type: "core"
 order: 2
 estimatedMinutes: 12
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-07-09"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-09-15"
 prerequisites: ["B2.1"]
 teaches: ["context-window", "compaction", "usage-check"]
 references: ["B1.1"]
@@ -32,7 +32,7 @@ The **context window** is the session's working memory: everything Claude can se
 
 It is not a database and it is not storage. Think of it as a desk. Everything Claude needs has to be on the desk: your instructions, the files it opened, the output of the tests it ran, the conversation so far. Claude takes in the whole desk in an instant, but the desk is a fixed size. When it fills, something comes off.
 
-That size is measured in **tokens**, each roughly three quarters of a word. The standard window holds 200,000 of them, and newer models offer a one-million-token option. Either way it is finite, and everything competes for the same surface.
+That size is measured in **tokens**, each roughly three quarters of a word. A 200,000-token window is the baseline, and newer models run up to one million, several of them by default. Either way it is finite, and everything competes for the same surface.
 
 Two consequences follow:
 
@@ -58,11 +58,11 @@ Claude does not simply stop. It **compacts**, in two stages, and the order matte
 1. It clears older **tool output** first, since it is bulky and rarely worth keeping once Claude has acted on it.
 2. If that is not enough, it **summarizes the conversation**, replacing it with a structured account of what you asked for, what was decided, and the code that mattered.
 
-Startup then reloads automatically. This is why a session recovers so much room the moment compaction fires, and it is the mechanical answer to "why did Claude forget?"
+Startup then reloads automatically, and Claude Code re-reads up to five of the files it touched most recently. This is why a session recovers so much room the moment compaction fires, and it is the mechanical answer to "why did Claude forget?"
 
-What survives: your requests, the key decisions, important code snippets, and everything in startup. What is lost: raw file contents, tool output, exact wording, and **detailed instructions you gave early in the conversation**. That last one is the trap. If a rule matters, a message from an hour ago is the wrong place to keep it. `CLAUDE.md` reloads every time; your conversation does not.
+What survives: your requests, the key decisions, important code snippets, and everything in startup. What is lost: most raw file contents, tool output, exact wording, and **detailed instructions you gave early in the conversation**. That last one is the trap. If a rule matters, a message from an hour ago is the wrong place to keep it. `CLAUDE.md` reloads every time; your conversation does not.
 
-You can steer compaction rather than just suffer it. Run `/compact focus on the API changes` to bias the summary, or add a "Compact Instructions" section to `CLAUDE.md` naming what must always be kept.
+You can steer compaction rather than just suffer it. Run `/compact focus on the API changes` to bias the summary, or put a line in `CLAUDE.md` such as "when compacting, always preserve the list of modified files and any test commands" to name what must always be kept.
 
 Here is a window partway through a real session, and the same window immediately after compaction. Click any segment to see what it holds and whether it survives.
 
@@ -117,11 +117,11 @@ The fix is rarely "start over." It is usually to finish the current milestone, w
 
 **Why does Claude "forget"?** Because the window filled and compaction ran. It cleared tool output, then replaced the conversation with a summary. Detail from early in the session, including instructions you gave, may not have survived.
 
-**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads. Lost are raw file contents, tool output, exact wording, and early instructions. One quiet exception: skill descriptions do not reload, so only skills you actually invoked are preserved.
+**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads, plus a re-read of up to five recently touched files. Lost are most raw file contents, tool output, exact wording, and early instructions. One quiet exception: skill descriptions do not reload, so only skills you actually invoked are preserved.
 
-**How do I check how full my session is?** Run `/context`. It breaks the window down by category, so you can see what is really eating it. `/mcp` shows what each MCP server costs.
+**How do I check how full my session is?** Run `/context`. It breaks the window down by category, so you can see what is really eating it, and it flags context-heavy tools and bloated memory files.
 
-**Can I just get a bigger window?** Sometimes, with a model offering the one-million-token option. It buys headroom, not a different mental model. A bigger desk still fills, and everything above still applies.
+**Can I just get a bigger window?** Often you already have one: newer models run up to a million tokens, several by default. It buys headroom, not a different mental model. A bigger desk still fills, and everything above still applies.
 
 **How do I stop a rule from being forgotten?** Put it in `CLAUDE.md`. It reloads after every compaction and at the start of every session, which conversation history does not. That is the subject of the next module.
 

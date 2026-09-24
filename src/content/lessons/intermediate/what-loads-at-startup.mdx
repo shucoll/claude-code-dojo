@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-16"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.3"]
 references: ["B2.2"]
 docsSources: ["https://code.claude.com/docs/en/context-window", "https://code.claude.com/docs/en/costs", "https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/features-overview"]
@@ -31,7 +31,7 @@ Everything in <LessonLink id="I1.3">the `.claude` directory</LessonLink> you tou
 
 Two things make this worth understanding, and neither is the one people expect.
 
-**It is smaller than you think.** A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it.
+**It is smaller than you think.** A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it. Window size depends on the model: Fable models, Sonnet 5, Opus 4.6 and later, and Sonnet 4.6 run a 1 million token window, where that same startup is under 1%. The percentages in this lesson assume 200,000, so they are the conservative reading.
 
 **It is the part you chose.** File reads are Claude's decisions, made fresh each time. Startup is your decisions, made once and repeated forever. A `CLAUDE.md` line you wrote in March is in context right now, shaping a task it has nothing to do with.
 
@@ -59,7 +59,7 @@ The eager column is the one to watch, and it is short. `CLAUDE.md` is the only e
 
 Older advice, including advice still circulating, says connecting MCP servers floods your context with tool definitions. That was true. It is not the default any more.
 
-Tool search is on by default: only tool names and server instructions load at session start. The docs state the consequence plainly, that adding more MCP servers has minimal impact on your context window. You can still get the old behavior on purpose with `ENABLE_TOOL_SEARCH=false`, which loads every schema eagerly, or `ENABLE_TOOL_SEARCH=auto`, which loads them up front when they fit inside 10% of the window and defers the rest.
+Tool search is on by default: only tool names and server instructions load at session start. The docs state the consequence plainly, that adding more MCP servers has minimal impact on your context window. You can still get the old behavior on purpose with `ENABLE_TOOL_SEARCH=false`, which loads every schema eagerly, or `ENABLE_TOOL_SEARCH=auto`, which loads them up front while their definitions stay under 10% of the window and defers all of them once they cross it.
 
 If you have been rationing your MCP connections, you were following a rule whose reason expired.
 
@@ -81,7 +81,7 @@ claude
 
 In a fresh session, before typing anything else:
 
-```text
+```prompt
 /context
 ```
 

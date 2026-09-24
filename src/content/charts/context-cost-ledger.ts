@@ -24,7 +24,7 @@ export const contextCostLedger: ChartDef = {
   rows: [
     {
       kind: 'ledger',
-      label: 'A session’s startup, broken down',
+      label: "A session's startup, broken down",
       entries: [
         {
           id: 'system-prompt',
@@ -134,7 +134,7 @@ export const contextCostLedger: ChartDef = {
         },
       ],
       caption:
-        'Startup is not expensive. Four files cost nearly as much as all of it. What makes startup worth auditing is that you pay it in every session, and it is the part you chose.',
+        'Startup is not expensive. Four files cost nearly as much as all of it. What makes startup worth auditing is that you pay it in every session, and it is the part you chose. This 200,000-token window is the conservative case; newer models run up to 1 million.',
     },
   ],
 }

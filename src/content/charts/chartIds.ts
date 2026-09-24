@@ -12,9 +12,13 @@ export const chartIds: readonly string[] = [
   'demo',
   'tool-belt-map',
   'intermediate-stack-map',
+  'advanced-stack-map',
   'permission-rule-shapes',
   'dot-claude-directory-map',
   'hook-lifecycle-clickable',
   'claude-code-system-map',
   'mechanism-decision-tree',
+  'orchestration-decision-tree',
+  'automation-spectrum',
+  'sandbox-layers',
 ]

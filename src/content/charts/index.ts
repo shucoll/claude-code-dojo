@@ -1,3 +1,4 @@
+import { advancedStackMap } from './advanced-stack-map'
 import { agenticLoopDiagram } from './agentic-loop-diagram'
 import { beginnerWorkflowMap } from './beginner-workflow-map'
 import { claudeCodeSystemMap } from './claude-code-system-map'
@@ -9,8 +10,11 @@ import { demo } from './demo'
 import { dotClaudeDirectoryMap } from './dot-claude-directory-map'
 import { hookLifecycleClickable } from './hook-lifecycle-clickable'
 import { intermediateStackMap } from './intermediate-stack-map'
+import { automationSpectrum } from './automation-spectrum'
 import { mechanismDecisionTree } from './mechanism-decision-tree'
+import { orchestrationDecisionTree } from './orchestration-decision-tree'
 import { permissionRuleShapes } from './permission-rule-shapes'
+import { sandboxLayers } from './sandbox-layers'
 import { toolBeltMap } from './tool-belt-map'
 import type { ChartDef } from './types'
 
@@ -24,11 +28,15 @@ const charts: Record<string, ChartDef> = {
   [commandBeltReference.id]: commandBeltReference,
   [toolBeltMap.id]: toolBeltMap,
   [intermediateStackMap.id]: intermediateStackMap,
+  [advancedStackMap.id]: advancedStackMap,
   [permissionRuleShapes.id]: permissionRuleShapes,
   [dotClaudeDirectoryMap.id]: dotClaudeDirectoryMap,
   [hookLifecycleClickable.id]: hookLifecycleClickable,
   [claudeCodeSystemMap.id]: claudeCodeSystemMap,
+  [automationSpectrum.id]: automationSpectrum,
   [mechanismDecisionTree.id]: mechanismDecisionTree,
+  [orchestrationDecisionTree.id]: orchestrationDecisionTree,
+  [sandboxLayers.id]: sandboxLayers,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)

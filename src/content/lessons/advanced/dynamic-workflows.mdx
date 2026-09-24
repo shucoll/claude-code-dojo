@@ -1,0 +1,252 @@
+---
+id: "A1.5"
+slug: "dynamic-workflows"
+title: "Dynamic workflows"
+type: "core"
+order: 5
+estimatedMinutes: 18
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-09-18"
+prerequisites: ["A1.1"]
+teaches: ["dynamic-workflows", "who-holds-the-plan", "scale-test", "workflow-cost-bounds"]
+references: ["I3.1", "I6.1", "A4.1"]
+docsSources: ["https://code.claude.com/docs/en/workflows", "https://code.claude.com/docs/en/sub-agents"]
+---
+
+# Dynamic workflows
+
+## The problem
+
+You want every route handler under `src/routes/` audited for missing auth checks. There are 340 of them.
+
+Delegating that to subagents means Claude spawns a few, reads their reports, spawns a few more, and after twenty turns your context window holds several hundred findings and no room to think about them. An agent team hits the same wall from a different direction: five teammates is not 340 files, and the lead still has to hold the plan in a context window that is filling with their reports.
+
+Each check is simple on its own. What makes it hard is doing it 340 times and comparing what comes back.
+
+## The concept
+
+A dynamic workflow is a JavaScript script that orchestrates many subagents at once. You describe the task, Claude writes the script, and a runtime executes it in the background while your session stays responsive.
+
+What changes is who holds the plan. With subagents, skills, and agent teams, Claude decides turn by turn what runs next, and every intermediate result lands in a context window. A workflow script holds the loop, the branching, and the results in script variables, so the only thing that reaches your context is the final answer.
+
+That buys two things. The obvious one is scale: dozens to hundreds of agents in a run rather than a handful of delegated tasks per turn. The less obvious one is that a repeatable quality pattern can live in the script. A workflow can have independent agents adversarially review each other's findings before anything is reported, or draft a plan from several angles and weigh them against each other, on every run, without you remembering to ask.
+
+Dynamic workflows are available on all paid plans, with Anthropic API access, and on Amazon Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry. On Pro, you turn them on from the Dynamic workflows row in `/config`.
+
+## How it works
+
+### Who holds the plan
+
+|  | Subagents | Skills | Agent teams | Workflows |
+|---|---|---|---|---|
+| What it is | a worker Claude spawns | instructions Claude follows | a lead supervising peer sessions | a script the runtime executes |
+| Who decides what runs next | Claude, turn by turn | Claude, following the prompt | the lead, turn by turn | the script |
+| Where intermediate results live | Claude's context window | Claude's context window | a shared task list | script variables |
+| What is repeatable | the worker definition | the instructions | the team definition | the orchestration itself |
+| Scale | a few tasks per turn | same as subagents | a handful of long-running peers | dozens to hundreds per run |
+| Interruption | restarts the turn | restarts the turn | teammates keep running | resumable in the same session |
+
+The "where intermediate results live" row is what the scale row follows from. Results held in script variables do not compete with your conversation, so the run can be as wide as the work is.
+
+### Three ways in
+
+**Run a bundled one.** `/deep-research` ships with Claude Code and investigates a question across many sources, cross-checking claims before reporting:
+
+```prompt
+/deep-research What changed in the Node.js permission model between v20 and v22?
+```
+
+**Ask for one.** Include the keyword `ultracode` in a prompt you type, or just ask in your own words:
+
+```prompt
+ultracode: audit every API endpoint under src/routes/ for missing auth checks
+```
+
+The keyword is an opt-in only from real keyboard input: the interactive prompt, an IDE extension panel, a Remote Control client, or an Agent SDK application that stamps your input as human. It does not start a workflow from a `-p` prompt, a scheduled task, a webhook payload, or a relayed pull request comment. That restriction is the reason an attacker cannot put `ultracode` in a PR comment and spend your tokens.
+
+**Let Claude decide.** `/effort ultracode` pairs `xhigh` reasoning with automatic workflow orchestration, so Claude plans a workflow for every substantive task in the session. One request can become several workflows in a row, one to understand the code, one to change it, one to verify. It lasts for the session; `/effort high` returns you to routine work.
+
+### Watching, pausing, and resuming
+
+`/workflows` lists running and completed runs. Select one to open its progress view, which shows each phase with its agent count, token total, and elapsed time.
+
+| Key | Action |
+|---|---|
+| `Enter` or `→` | drill into a phase, then into an agent's detail |
+| `Esc` or `←` | back out one level |
+| `f` | filter the phase's agents by status |
+| `p` | pause or resume the run |
+| `x` | stop the selected agent, or the whole run |
+| `r` | restart the selected running agent |
+| `s` | save the run's script as a command |
+
+Resuming replays the run in the order agents started. A completed agent returns its saved result, an agent that was still running starts over, and a failed agent runs again along with every agent that started after it. So if a script starts A, B, C, and D and B fails, relaunching returns A from cache and reruns B, C, and D.
+
+### Saving a run and passing it input
+
+When a run does what you wanted, press `s` in `/workflows` and choose a location. `.claude/workflows/` in the project is shared with everyone who clones it; `~/.claude/workflows/` is yours in every project. It then runs as `/<name>` like any other command, and a project workflow wins when both define the same name.
+
+A saved workflow takes input through a global called `args`:
+
+```prompt
+Run /triage-issues on issues 1024, 1025, and 1030
+```
+
+Claude passes that as structured data, so the script calls array and object methods on `args` without parsing it. Distributed in a plugin, a workflow is namespaced like everything else, so `release-audit` inside `acme-tools` runs as `/acme-tools:release-audit`.
+
+### What the script looks like
+
+You do not write these, but recognizing what Claude generated makes the progress view readable:
+
+```javascript
+export const meta = {
+  name: 'audit-routes',
+  description: 'Audit every route handler for missing auth checks',
+}
+
+const found = await agent('List every .ts file under src/routes/.', {
+  schema: { type: 'object', required: ['files'], properties: { files: { type: 'array', items: { type: 'string' } } } },
+})
+
+const audits = await pipeline(found.files, file =>
+  agent(`Audit ${file} for missing authentication checks.`, { label: file }),
+)
+
+return audits.filter(Boolean)
+```
+
+Claude writes a `meta` block first, then plain JavaScript with top-level `await`. `agent()` spawns one subagent, `pipeline()` runs one per item in a list, and `parallel()` runs a set at once and waits for all of them. `phase()` groups the agents that follow under a title in the progress view, and `log()` prints a message above the phases.
+
+An `agent()` call resolves to `null` when you stop it, when it hits an unrecoverable API error, or when auto mode's classifier blocks it, which is why the example ends with `.filter(Boolean)`. Passing a `schema` makes that subagent return JSON matching the shape instead of prose.
+
+### The limits that shape a run
+
+| Limit | Detail |
+|---|---|
+| No mid-run input | a run pauses only for agent permission prompts and usage-limit waits. For sign-off between stages, run each stage as its own workflow |
+| No filesystem or shell access from the script | agents read, write, and run commands; the script only coordinates them |
+| No module loading | a script containing `import()` fails before the run starts |
+| Concurrency | 16 agents by default, fewer on fewer CPUs, adjustable from 1 to 256 with `CLAUDE_CODE_WORKFLOW_MAX_CONCURRENT_AGENTS` |
+| List size | up to 4,096 items in one `parallel()` or `pipeline()` call |
+| Run size | 1,000 agents total per run |
+
+`Date.now()`, `Math.random()`, and a no-argument `new Date()` all throw inside the script, so a relaunched run makes the same `agent()` calls rather than drifting. Pass a timestamp through `args` when you need one.
+
+## Walkthrough
+
+**Environment:** your own repository, or a cloned public one with enough files that a fan-out is worth watching.
+
+### Run the bundled one first
+
+```prompt
+/deep-research How do the major Node.js test runners differ in watch-mode behavior?
+```
+
+Approve the run when Claude Code asks. Then:
+
+```prompt
+/workflows
+```
+
+Select the run, press `Enter`, and watch the phases fill in. Drill into one phase, then into a single agent, and read its prompt and result. The session stays responsive the whole time, so type something else and watch the run continue underneath it.
+
+When it finishes, the report arrives in your session with its sources cited and the claims that failed cross-checking already dropped. Claims the verifiers could not check appear as unverified rather than refuted.
+
+### Ask for one on your own repository
+
+Start narrow. The cost advice below is easier to follow when the first run is one directory:
+
+```prompt
+use a workflow to audit every route handler under src/routes/ for missing authentication checks, and adversarially verify each finding before reporting it
+```
+
+Claude writes the script and shows you the planned phases before running. `View raw script` is worth taking the first few times, since reading one generated script teaches you what to expect from the rest.
+
+### Save it
+
+Once the run does what you wanted, open `/workflows`, select it, and press `s`. Choose the project location to share it with your team. It now runs as `/audit-routes` in any session in that repository, and pointing it at a different directory is a matter of passing `args` rather than editing the script.
+
+## Use-case scenarios
+
+**The same check across hundreds of files.** One agent per file, then a collector that ranks and deduplicates. This is the shape workflows exist for.
+
+**A migration too large to hold in one context.** Discover the files, transform each in its own isolated copy, verify each result.
+
+**A loop with a stopping condition.** Run a checker, fix what failed, repeat until it passes or two rounds make no progress. The condition lives in the script rather than in Claude's judgment.
+
+**Findings you do not want to trust on one pass.** The verification lives in the script, so it runs every time rather than when you remember to ask for it.
+
+**A three-step task with a decision in the middle.** This is the near-miss. A run takes no input once it starts, so a workflow cannot stop and ask which option you prefer. Split it into one workflow per stage, with your sign-off between them.
+
+## When to use / when not to use
+
+The test is scale. A workflow is a script, but Claude wrote it and subagents execute its steps, so the same run can come out differently each time.
+
+| Use a workflow | Use something lighter |
+|---|---|
+| Dozens to hundreds of similar units of work | A handful of delegated tasks, so use <LessonLink id="I6.1">subagents</LessonLink> |
+| Orchestration you want to rerun and read | A procedure Claude should follow, so use <LessonLink id="I3.1">a skill</LessonLink> |
+| Results that must be cross-checked before you see them | Work where you want to steer between steps |
+| Intermediate results that would flood your context | A task that fits comfortably in one conversation |
+
+## Cost
+
+A single run can use meaningfully more tokens than doing the same task in conversation, and it counts against your plan's usage and rate limits. Four things bound it.
+
+- **Run a slice first.** One directory instead of the repository, or a narrow question instead of a broad one. The `/workflows` view shows each agent's token usage as the run progresses, and you can stop it there without losing completed work.
+- **Set a size guideline.** `workflowSizeGuideline` tells Claude how many agents to aim for: `small` is fewer than 5, `medium` fewer than 10, `large` fewer than 50, and `unrestricted` lets Claude size it to the task. The default is `medium`, or `small` on Pro. It is advice to Claude rather than a cap, so a prompt calling for a different scale still overrides it.
+- **Watch for the warning.** A run scheduling more than 25 agents, or projecting more than 1.5 million tokens, shows a `Large workflow` warning on its progress line. The warning is advisory and does not pause anything. Choosing a size guideline replaces the 25-agent threshold with that guideline's count, and sessions with ultracode on never see the warning, since turning it on already opted you in.
+- **Check your model first.** Workflow agents pick up your session's model when nothing else assigns one, so a large run started while you are on the strongest model is expensive by default. Ask Claude to use a smaller model for stages that do not need the strongest one.
+
+The runtime's caps on concurrent agents and agents per run are what bound a runaway script, rather than anything you configure.
+
+One cost detail connects forward to <LessonLink id="A4.1" />: agents in a fan-out share a prompt-cache prefix when they match on model, effort, agent type, tools, schema, and working directory. Claude Code holds all but the first agent until the first response begins, up to five seconds, so the rest read that cached prefix instead of each paying to process it. Workflow agents also sit outside the main conversation's cache bucket, so their cache holds five minutes rather than an hour unless `subagentPromptCacheTtl` is set to `1h`.
+
+## Pitfalls
+
+- **You start a huge run to find out what it costs.** Run one directory first, read the per-agent token figures in `/workflows`, then multiply.
+
+- **You relaunch a failed run without reading the failure.** A failure early in a 200-agent run can repeat most of it, so the reflex is expensive. Read why it failed first.
+
+- **You leave the session and lose the run.** Exiting stops a running workflow unless you choose `Move to background and exit`. The saved results stay under the session's directory, so a session you resume can replay them, but a fresh session has nothing to relaunch.
+
+- **`ultracode` stays on and every task becomes a workflow.** `/effort ultracode` applies to the whole session, so routine work starts costing workflow money. Drop back to `/effort high` when the large task is done.
+
+- **You edit a saved script and nothing changes.** Run `/reload-skills` to re-read the workflow directories, then invoke it again. Before editing, run `/workflow-authoring` to load the script-writing reference.
+
+## Try It
+
+**Environment:** a cloned public repository, or your own with everything committed first.
+
+1. Run `/deep-research` on a question you actually want answered.
+2. While it runs, open `/workflows`, drill into one phase, and read a single agent's prompt and result.
+3. Press `p` to pause the run, wait a moment, then press `p` again to resume.
+4. When it finishes, count the agents in the progress view and note the total tokens.
+5. Ask for a workflow on your own repository, scoped to one directory, and take `View raw script` when offered.
+6. Save that run with `s` to the project location, then run it again as `/<name>`.
+7. Set `workflowSizeGuideline` to `small` and ask for the same workflow again. Compare the agent count.
+
+**Success looks like:** step 4 gives you a real token figure to reason about, step 6 runs the saved command without Claude rewriting anything, and step 7 produces a visibly smaller run from the same prompt.
+
+## FAQ
+
+**Do I have to approve every run?**
+It depends on your permission mode. Auto mode prompts on first launch and records your consent; manual and accept-edits prompt every run unless you chose "don't ask again" for that workflow in that project; bypass permissions and `-p` never prompt. Under `-p` and the Agent SDK the launch goes through ordinary permission evaluation, so a `Workflow` allow rule, or `Workflow(<name>)` for one saved workflow, is how you let it start.
+
+**What tools do the agents get?**
+Your permission rules, the same as any subagent, with the permission mode chosen by the subagent rules. Adding the tools they need to your allow rules before a long run is what keeps it from stalling on prompts.
+
+**What happens if a run hits my usage limit?**
+On a claude.ai subscription in an interactive session it pauses rather than failing: the affected agents wait for the reset, no new agents start, and the run continues on its own afterwards. It waits at most twice, and only when the reset is within 24 hours. Under `-p`, in a background session, or as a teammate, the agent fails instead.
+
+**Can I read the script Claude wrote for a run I did not save?**
+Yes. Every run writes its script under your session's directory in `~/.claude/projects/`, and Claude gets the path when the run starts, so you can ask for it and then read, diff, or edit it.
+
+**How do I turn workflows off?**
+For yourself, toggle Dynamic workflows off in `/config`, set `"disableWorkflows": true` in your settings, or set `CLAUDE_CODE_DISABLE_WORKFLOWS=1`. For an organization, the same settings key in managed settings. With workflows off, the bundled commands disappear, the `ultracode` keyword stops triggering, and `ultracode` leaves the `/effort` menu.
+
+## Where next
+
+<LessonLink id="A1.6" /> resolves the four mechanisms against each other. The row that decides between them is who holds the plan, and this lesson is the only one where the answer is not Claude.
+
+<LessonLink id="A4.2" /> takes up `ultracode` from the other side, as one point on the effort scale rather than a way to start a workflow.

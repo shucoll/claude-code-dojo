@@ -6,10 +6,10 @@ type: "core"
 order: 2
 estimatedMinutes: 9
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-20"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I5.1"]
 references: ["I1.3", "I1.4"]
-docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/mcp-quickstart"]
+docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/managed-mcp"]
 ---
 
 # MCP scopes, auth, and team sharing
@@ -38,7 +38,9 @@ One naming trap: MCP's "local scope" is not the same file as the local *settings
 
 When a server name is defined at more than one scope, Claude Code connects once and takes the whole entry from the highest-precedence source. Fields are not merged.
 
-**local → project → user → plugin-provided → claude.ai connectors**
+**managed → local → project → user → plugin-provided → claude.ai connectors**
+
+A server your organization ships through the [`managedMcpServers`](https://code.claude.com/docs/en/managed-mcp) managed setting outranks every scope you control (Claude Code v2.1.259 or later).
 
 The three scopes match duplicates by name. Plugins and connectors match by endpoint, so one pointing at the same URL as a server above it counts as the same server.
 
@@ -105,6 +107,8 @@ Expansion works in `command`, `args`, `env`, `url`, and `headers`, which covers 
 The committed file now says *every developer authenticates with their own key*, and the key itself lives in each developer's environment. That closes the hygiene loop <LessonLink id="B1.3" /> opened: the secret never enters the repository, and never enters a prompt.
 
 If a referenced variable is unset with no default, the config still loads. Claude Code reports a missing-variable warning for that server in `claude mcp list` and passes the literal `${VAR}` text through, which usually surfaces as a confusing auth failure rather than an obvious one. Set the variable, or give it a `:-default`.
+
+Recognized credential names are the exception. In a remote server's `url` and `headers`, variables such as `ANTHROPIC_API_KEY`, `AWS_BEARER_TOKEN_BEDROCK`, and `NPM_TOKEN` read as empty instead of expanding, with no warning and no `:-default` fallback, so a `.mcp.json` you cloned cannot ask your shell for credentials you already hold. Copy the value into a variable you name yourself and reference that one.
 
 ## Walkthrough: authenticating a remote server
 

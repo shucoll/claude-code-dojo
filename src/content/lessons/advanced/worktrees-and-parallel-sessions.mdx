@@ -1,0 +1,287 @@
+---
+id: "A1.1"
+slug: "worktrees-and-parallel-sessions"
+title: "Worktrees and parallel sessions"
+type: "core"
+order: 1
+estimatedMinutes: 16
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-09-18"
+teaches: ["worktrees", "parallel-isolation", "subagent-worktree-isolation", "checkout-hygiene"]
+references: ["B2.5", "I6.4"]
+docsSources: ["https://code.claude.com/docs/en/worktrees", "https://code.claude.com/docs/en/common-workflows"]
+---
+
+# Worktrees and parallel sessions
+
+## The problem
+
+You have a feature half-built and a bug that has to ship today. You open a second terminal, start a second Claude session in the same repository, and hand it the bug.
+
+Ten minutes later the feature session runs `git status` and finds changes it never made. The bug session checked out a different branch underneath it, and both sessions have been editing the same copy of every file. Neither session did anything wrong. They share one working directory, so they share one branch and one copy of the tree.
+
+<LessonLink id="B2.5" /> gave you as many conversations as you want. It did not give you more than one checkout to run them in.
+
+## The concept
+
+A git worktree is a second working directory backed by the same repository: its own files, its own branch, the same history and the same remote. Claude Code can create one and start a session inside it in a single command.
+
+Two sessions in two worktrees are two directories on disk. An edit in one becomes visible to the other only by travelling the way any change travels, through a commit and a branch. Nothing about the isolation depends on either session being careful.
+
+## How it works
+
+### Starting a session in a worktree
+
+Pass `--worktree`, or `-w`, with a name:
+
+```bash
+claude --worktree feature-auth
+```
+
+Claude Code creates the worktree under `.claude/worktrees/feature-auth/` at your repository root, puts it on a new branch called `worktree-feature-auth`, and starts the session there. Run the same command with a different name in another terminal to get a second isolated session. Omit the name and Claude Code generates one, such as `bright-running-fox`.
+
+Add `.claude/worktrees/` to your `.gitignore` first, or every worktree's contents appear as untracked files in your main checkout.
+
+An interactive `--worktree` run requires workspace trust. If you have never run Claude in that directory, run `claude` there once and accept the trust dialog, otherwise `--worktree` exits with an error telling you to do exactly that. Non-interactive runs with `-p` skip the trust check, which <LessonLink id="A3.1" /> picks up as a security property rather than a convenience.
+
+You can also ask for one mid-session. Telling Claude to work in a worktree has it call the `EnterWorktree` tool.
+
+### Choosing the base branch
+
+New worktrees branch from the repository's default branch on the remote. The `worktree.baseRef` setting changes that, and it takes two values:
+
+| Value | Branches from | Use it when |
+|---|---|---|
+| `"fresh"` (default) | the remote's default branch, usually `main` | you want a clean tree matching the remote |
+| `"head"` | your current local `HEAD` | the work needs your unpushed commits and feature-branch state |
+
+```json
+{
+  "worktree": {
+    "baseRef": "head"
+  }
+}
+```
+
+`worktree.baseRef` does not accept a branch name. To start from one specific existing branch, create the worktree with `git worktree add` yourself and run `claude` inside it.
+
+### Getting your gitignored files in
+
+A worktree is a fresh checkout, so it has no `.env`. That file is gitignored, so it was never in the repository to check out, and a worktree that cannot reach your database fails every test before Claude writes a line.
+
+A `.worktreeinclude` file at your project root solves it. The file uses `.gitignore` syntax, and Claude Code copies a file into each new worktree only when it both matches a pattern and is gitignored, so tracked files are never duplicated:
+
+```text
+.env
+.env.local
+config/secrets.json
+```
+
+This applies to every worktree Claude Code creates with git, including the subagent worktrees below.
+
+### Branching from a pull request
+
+Pass the number with a `#` prefix, quoted so your shell does not read it as the start of a comment:
+
+```bash
+claude --worktree "#1234"
+```
+
+Claude Code fetches that pull request's head commit from `origin` and creates the worktree at `.claude/worktrees/pr-1234`. A GitHub pull request URL or a GitLab merge request URL works in place of the bare number.
+
+### Isolating a subagent
+
+Subagents can take worktrees too. A custom subagent whose frontmatter sets `isolation: worktree` takes its own checkout on every run:
+
+```markdown
+---
+name: refactorer
+description: Applies mechanical refactors across many files
+isolation: worktree
+---
+
+Apply the requested refactor across every affected file, then run the tests
+and report the results.
+```
+
+For a one-off, ask Claude to use worktrees for its agents instead of writing a definition.
+
+Subagent worktrees use the same base branch as `--worktree`, so they branch from the default branch unless `worktree.baseRef` is `"head"`. Set it to `"head"` when the subagent has to operate on work you have not pushed. A subagent that finishes without changes has its worktree removed right away; one that leaves changes keeps it until the sweep below can remove it without losing anything.
+
+### What isolation actually blocks
+
+Claude Code enforces the isolation. While a session is in a worktree, Claude Code applies four checks to everything that session and its subagents run:
+
+- **File edits.** An `Edit`, `Write`, or `NotebookEdit` targeting a path in the main checkout is blocked.
+- **Command working directory.** A Bash, PowerShell, or Monitor command is blocked when its working directory resolves to the main checkout, or when Claude Code cannot verify that it stays outside it.
+- **Git redirects.** A command that aims git back at the main checkout is blocked, whether through `git -C`, `--git-dir`, a `GIT_DIR` or `GIT_WORK_TREE` variable, or a `cd` before the git call.
+- **Command shape.** A command is blocked when Claude Code cannot verify from the command text that any git it runs stays inside the worktree, for example when the command name is computed at runtime or the syntax will not parse. You cannot turn this check off.
+
+Claude receives each refusal as a tool error that names the worktree and says how to proceed, which usually means splitting one clever line into plain separate commands.
+
+### Cleanup
+
+Claude Code handles your own sessions when you exit. It checks the worktree for changed files, untracked files, and new commits. A clean worktree from an unnamed session is removed along with its branch without asking; a clean worktree from a <LessonLink id="B2.5">named session</LessonLink> prompts you first, so you can keep it. A worktree holding work always prompts, and choosing to remove it deletes that work with the directory. Runs under `-p` have no exit prompt, so they clean up nothing.
+
+Subagent and background-session worktrees are handled by a periodic sweep that removes them once they are older than your `cleanupPeriodDays` setting. The sweep leaves a worktree in place while it still holds work, and it never touches a worktree you created yourself with `git worktree add`. Claude Code writes a marker into the git metadata of every worktree it creates, and the sweep keeps anything without one.
+
+By hand, it is `git worktree remove`, with `--force` when the worktree has uncommitted changes, and `git worktree unlock` first if git refuses because the worktree is locked.
+
+## Walkthrough
+
+**Environment:** any git repository with at least one commit. A cloned public repository works; so does your own, since nothing here touches your main checkout.
+
+### Two features at once
+
+In the first terminal:
+
+```bash
+claude --worktree api-pagination
+```
+
+```prompt
+Add cursor-based pagination to the items endpoint, with tests.
+```
+
+In a second terminal, at the same time:
+
+```bash
+claude --worktree fix-timezone
+```
+
+```prompt
+Fix the timezone bug in the report scheduler and add a regression test for it.
+```
+
+Two directories now exist, each a full checkout on its own branch:
+
+```text
+$ git worktree list
+/home/you/project                        a1b2c3d [main]
+/home/you/project/.claude/worktrees/api-pagination   4e5f6a7 [worktree-api-pagination]
+/home/you/project/.claude/worktrees/fix-timezone     4e5f6a7 [worktree-fix-timezone]
+```
+
+Neither session can see the other's edits, and neither can reach your main checkout.
+
+### Meeting the enforcement
+
+Ask the pagination session to look at something in the main checkout:
+
+```prompt
+Compare our new pagination code against the version on main in the original checkout.
+```
+
+Claude tries a command pointed at the main checkout and gets a refusal instead of a result:
+
+```text
+Error: this session is isolated in the worktree
+/home/you/project/.claude/worktrees/api-pagination
+The command's working directory resolves to the main checkout.
+Run it inside the worktree, or compare against the branch with plain git.
+```
+
+Claude reads the error and reaches for `git diff main` inside the worktree, which is the same comparison without leaving the isolation.
+
+### Isolating a subagent
+
+Save this as `.claude/agents/refactorer.md` in the repository:
+
+```markdown
+---
+name: refactorer
+description: Applies mechanical refactors across many files
+isolation: worktree
+---
+
+Apply the requested refactor across every affected file, then run the tests
+and report the results.
+```
+
+Then, from either session:
+
+```prompt
+Use the refactorer agent to rename the PageCursor type to Cursor everywhere it appears.
+```
+
+The subagent gets a third checkout of its own. Your session keeps working while it runs, and the rename never lands in your files until you take it from its branch.
+
+### Finishing up
+
+Commit in each worktree, push the branch, then exit the session. Claude Code finds the commits, asks whether to keep or remove the worktree, and removing it takes the directory and its branch with it. Keep it when the branch is not merged yet.
+
+## Use-case scenarios
+
+**Two unrelated tasks in one repository.** Run each in its own `--worktree` session. The isolation costs you nothing here, because the tasks were never going to touch the same files anyway and you get real concurrency instead of turn-taking.
+
+**Reviewing a pull request without disturbing your work.** `claude --worktree "#1234"` puts the branch in a separate directory. Your own half-finished tree stays exactly as you left it, with nothing to stash.
+
+**A mechanical refactor across many files while you keep working.** Give the job to a subagent with `isolation: worktree`. Without the isolation it would be editing the files you are reading.
+
+**A subagent that needs your unpushed work.** Set `worktree.baseRef` to `"head"`. The default branches from the remote, so a subagent would start from a tree that does not contain the commits you are asking it to build on.
+
+**Splitting one refactor across two sessions.** This is the near-miss. Both sessions want the same files, so worktrees give you two diverging copies and a merge to do afterwards. Worktrees isolate work; they do not combine it. Keep a single-file-set change in one session.
+
+## When to use / when not to use
+
+| Use a worktree | Stay in the main checkout |
+|---|---|
+| Two or more tasks running at the same time | One task at a time, however large |
+| Work you want kept off your current branch | A quick edit you will commit in a minute |
+| A subagent making sweeping edits | A subagent that only reads |
+| A pull request you want to check out and run | Reading a diff you can get with `git show` |
+
+The cost is real in three places. Each worktree is a full checkout, so disk use multiplies and so does environment setup: dependencies are not installed there until you or Claude install them. Concurrent sessions multiply token spend, since each one is a full session. And the prompt cache is scoped per directory, so a second worktree always starts cold, which <LessonLink id="A4.1" /> puts a number on.
+
+Below two concurrent tasks, none of that pays for itself.
+
+## Pitfalls
+
+- **The worktree cannot find `.env`.** Tests fail immediately on missing configuration, or Claude starts writing code to work around a database it cannot reach. The file was gitignored, so it was never checked out. Add a `.worktreeinclude` listing it, then recreate the worktree; the file is copied when the worktree is created, so an existing worktree will not pick it up.
+
+- **You read an enforcement refusal as a bug.** A command comes back refused with a message about the main checkout, and the obvious conclusion is that something is broken. Nothing is. The command-shape check in particular fires on one-liners whose git target cannot be parsed, and it cannot be switched off. Have Claude rewrite it as separate plain commands.
+
+- **Worktrees pile up because they hold uncommitted work.** The sweep skips anything with changed files, untracked files, or unpushed commits, so a worktree you abandoned mid-task stays forever. Check `git worktree list` occasionally and clear the dead ones with `git worktree remove --force`.
+
+- **A repository with no commits.** `--worktree` fails with `Failed to resolve base branch "HEAD": git rev-parse failed`, because a worktree is created from an existing commit. Make the initial commit first.
+
+- **You ran `-p` with `--worktree` and nothing was cleaned up.** Non-interactive runs have no exit prompt, so their worktrees and the locks taken on them stay until a later session's sweep. Remove them yourself in scripts that create them.
+
+## Try It
+
+**Environment:** a cloned public repository, or your own with everything committed first.
+
+1. Add `.claude/worktrees/` to `.gitignore` and commit it.
+2. Start two sessions in two terminals: `claude --worktree one` and `claude --worktree two`.
+3. In each, ask Claude to create a file named after the worktree and print the current branch.
+4. From the main checkout, run `git worktree list`, then look inside both directories.
+5. In session one, ask Claude to read or edit a file by its path in the main checkout, and read the refusal it gets.
+6. Exit both sessions and answer the cleanup prompts, keeping one worktree and removing the other.
+7. Run `git worktree list` again.
+
+**Success looks like:** three entries in step 4 on three different branches, each worktree containing only its own new file; a refusal in step 5 that names the worktree; and two entries in step 7, with the removed branch gone from `git branch`.
+
+## FAQ
+
+**Do my worktrees share anything with the main checkout?**
+Three things. The repository's `.git` directory, which is why `git commit` works from inside a worktree even with the sandbox on. Plugins installed at project scope, so you do not reinstall them per worktree. And permission approvals: choosing "Yes, and don't ask again" in a worktree session saves the rule to the main checkout's `.claude/settings.local.json`, so it applies everywhere and survives that worktree's removal.
+
+**What happens when I resume a session that was in a worktree?**
+Claude Code returns it there, for interactive resumes and for `--continue` and `--resume` under `-p`. It verifies first that the worktree is still a checkout genuinely separate from the main one, and declines to re-enter one that fails the check. Launching from inside the worktree is the common reason it cannot vouch for it; launch from the main checkout instead.
+
+**What if I reuse a worktree name?**
+The existing directory opens rather than a new one being created. With the default `"fresh"` base it resets to the default branch only when it is clean, still on the branch Claude Code made for it, and has no unmerged commits of its own. In every other case it reopens at its old tip.
+
+**We do not use git. Can I still isolate sessions?**
+Yes, by replacing the logic. `WorktreeCreate` and `WorktreeRemove` hooks take over creation and cleanup for SVN, Perforce, Mercurial, or anything else. The hook replaces the default git behavior entirely, so `.worktreeinclude` is not processed and your script copies local configuration itself. <LessonLink id="A5.3" /> covers the hook system at that depth.
+
+**Can Claude move between worktrees on its own?**
+Inside `.claude/worktrees/` it can switch directly, leaving the previous one on disk. Entering a path outside that directory asks your approval every time, because the move takes the session's working directory, write access, and project configuration with it. A permission rule does not suppress that prompt.
+
+## Where next
+
+<LessonLink id="A1.2" /> puts a control surface over what you just did by hand. Sessions dispatched from agent view move themselves into a worktree before they edit anything, so the isolation you configured here becomes the default for backgrounded work.
+
+<LessonLink id="A1.3" /> answers the question this lesson creates. Worktrees buy isolation by cutting sessions off from each other, and findings still have to cross back somehow.
+
+<LessonLink id="I6.4" /> asked when to delegate at all. <LessonLink id="A1.6" /> re-asks it with worktrees in hand, because whether tasks touch the same files is one of the three questions that decides which parallel mechanism you want.

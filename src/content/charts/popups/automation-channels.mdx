@@ -1,0 +1,11 @@
+The inverse of polling. A channel is an MCP server that pushes events into a
+session you already have open, so a CI result or a message from your phone
+arrives where Claude still has your files and your context.
+
+**Next turn starts when:** an external event arrives. Nothing is on a timer.
+
+**Machine on:** yes. **Session open:** yes, and events only arrive while it is.
+
+Research preview. Opt in per session with `--channels plugin:name@marketplace`,
+only from an approved plugin allowlist. Team and Enterprise organizations are
+blocked until an Owner sets `channelsEnabled`.

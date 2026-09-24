@@ -91,7 +91,7 @@ export const beginnerWorkflowMap: ChartDef = {
         },
         {
           id: 'steer',
-          title: 'Steer, don’t restart',
+          title: "Steer, don't restart",
           tone: 'neutral',
           lines: ['When verify fails, redirect', 'and only reset when steering stops working'],
           target: lesson(B4_4),

@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-15"
+verifiedAgainstDocsAt: "2026-09-14"
 teaches: ["tool-belt", "risk-tiers", "reading-transcripts"]
 references: ["B1.1", "B2.3"]
 docsSources: ["https://code.claude.com/docs/en/tools-reference", "https://code.claude.com/docs/en/permissions"]
@@ -52,10 +52,15 @@ These four gather information and change nothing. Inside your project folder the
 - **`Glob`** finds files by name pattern, like `src/**/*.ts`. Unlike Grep, it does *not* skip gitignored files.
 - **`LSP`** is code intelligence from a language server: jump to a definition, find references, surface type errors after an edit. It stays inactive until you install a code-intelligence plugin for your language.
 
+One platform split to expect. On Windows, `Grep` and `Glob` are part of the default tool set. On macOS, Linux, and WSL they are left out of it, and Claude searches with `grep` and `find` through Bash instead, so those searches reach your transcript, your permission rules, and your hook matchers as `Bash` calls. Searching is read-only in either form, so neither one prompts.
+
 In a transcript they look like this:
 
 ```text
-⏺ Grep(pattern: "useState", glob: "**/*.tsx")
+⏺ Grep(pattern: "useState", glob: "**/*.tsx")        # Windows
+  ⎿ Found 12 files
+
+⏺ Bash(grep -rl "useState" --include="*.tsx" src)    # macOS, Linux, WSL
   ⎿ Found 12 files
 
 ⏺ Read(src/components/Counter.tsx)
@@ -66,10 +71,10 @@ No prompt appeared because nothing changed. One nuance to carry forward: Read, G
 
 ### Writes files: the first gate
 
-These change files on disk, so each one asks before it acts (in the default permission mode).
+These change files on disk, so each one asks before it acts (in manual mode; in auto mode a classifier answers instead of you).
 
-- **`Edit`** does an exact find-and-replace inside one file. It is literal, not fuzzy: the text it is replacing must match character for character and appear exactly once. Claude also has to have read the file first. What it can break is the file it edits, if the replacement is wrong.
-- **`Write`** creates a new file or overwrites an existing one with entire new contents. It does not merge or append. On an existing file it must have read it first, so it cannot silently clobber something it never looked at.
+- **`Edit`** does an exact find-and-replace inside one file. It is literal, not fuzzy: the text it is replacing must match character for character and appear exactly once. Claude normally has to have read the file first, though newer models can skip that when reading it would not have prompted anyway. What it can break is the file it edits, if the replacement is wrong.
+- **`Write`** creates a new file or overwrites an existing one with entire new contents. It does not merge or append. Overwriting an existing file follows the same read-first rule as `Edit`, and for notebooks and partially read files the read is always required.
 - **`NotebookEdit`** edits one Jupyter notebook cell at a time. Its permission rules use the same path format as `Edit`.
 
 ```text
@@ -152,7 +157,7 @@ What tools do you have access to?
 
 Claude answers with a plain-language summary. For the exact names of tools added by MCP servers (<LessonLink id="I5.1">Module I5</LessonLink>), run:
 
-```text
+```prompt
 /mcp
 ```
 
@@ -173,7 +178,7 @@ These are all misreadings of a transcript, and each one sends people chasing a p
 **Environment:** any scratch directory or a small public repo you have cloned (for example a docs site or a starter template). Nothing here writes to your code, so no branch or commit is needed first.
 
 1. Start Claude and ask, `What tools do you have access to?` Read the answer and sort the names into the four tiers in your head. Anything you cannot place is probably a session-control tool from the long tail.
-2. Ask Claude to find something: `Where is the main entry point defined?` Watch the transcript. Which tool fired, `Grep` or `Glob`? Did it prompt? (It should not.)
+2. Ask Claude to find something: `Where is the main entry point defined?` Watch the transcript. Which tool fired: `Grep`, `Glob`, or a `grep`/`find` search through `Bash`? Did it prompt? (It should not.)
 3. Ask it to run a read-only command like `git status`, then something with a side effect like running the test suite. Confirm the first ran silently and the second named `Bash` in a prompt.
 4. Ask it to fetch a documentation URL. Confirm the prompt names the **domain**, not the full URL.
 

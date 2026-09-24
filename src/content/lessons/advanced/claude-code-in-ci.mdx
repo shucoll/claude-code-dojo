@@ -1,0 +1,332 @@
+---
+id: "A2.2"
+slug: "claude-code-in-ci"
+title: "Claude Code in CI"
+type: "core"
+order: 2
+estimatedMinutes: 22
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-09-19"
+prerequisites: ["A2.1"]
+teaches: ["github-actions", "ci-secrets", "ci-cost-control", "ci-trigger-discipline"]
+references: ["I8.2", "A3.1"]
+docsSources: ["https://code.claude.com/docs/en/github-actions", "https://code.claude.com/docs/en/gitlab-ci-cd", "https://code.claude.com/docs/en/github-enterprise-server", "https://code.claude.com/docs/en/github-actions-cloud-providers"]
+---
+
+# Claude Code in CI
+
+## The problem
+
+<LessonLink id="A2.1" /> gave you a script that judges a diff and exits with a status. Running it still means someone opening a terminal in a checkout of the right branch.
+
+Meanwhile the work that actually needs doing arrives somewhere else. An issue gets filed with a clear reproduction and sits for a week. A reviewer leaves a comment that describes the fix precisely enough to write it. A dependency bump breaks a test at two in the morning. All of it lands in your repository host, and the person who could act on it is somewhere else.
+
+## The concept
+
+`anthropics/claude-code-action` is a GitHub Action that runs Claude Code inside your repository's workflows. Someone mentions `@claude` in an issue or a pull request comment, a runner starts, and Claude reads the thread, works in a checkout, and replies in a comment. It can push commits and open pull requests, because the GitHub App it authenticates as has write access to contents, issues, and pull requests.
+
+It is built on the Agent SDK, so the thing running on the runner is the engine from the last lesson. `claude_args` passes CLI flags straight through to it.
+
+<LessonLink id="I8.2" /> connected Claude to GitHub from your machine, so Claude could read issues while you worked. This inverts that: Claude lives in the repository, and the issue is what starts it.
+
+## How it works
+
+### Two modes, decided by one input
+
+The action picks its mode from your workflow file.
+
+| | Interactive mode | Automation mode |
+|---|---|---|
+| **Triggered by** | the trigger phrase, `@claude` by default | any GitHub event, including `schedule` |
+| **You configure** | no `prompt` input | a `prompt` input |
+| **Claude responds to** | the comment, review, or new issue that mentioned it | the prompt you wrote |
+| **Results appear** | as a comment on the issue or pull request, updated as it works | in the workflow run log |
+
+In interactive mode the phrase can appear in an issue comment, a pull request comment, a pull request review, or the body or title of a newly opened issue.
+
+Automation mode writes to the run log by default. To have it post, the prompt has to say so and Claude needs a tool that can post, which is what the review workflow later in this lesson arranges.
+
+### Who is allowed to start a run
+
+The action runs two checks on the triggering actor before Claude starts, and the run fails when either rejects it.
+
+**Write access.** On issue and pull request events, the triggering user needs write access to the repository. To allow specific users without it, set `allowed_non_write_users` and pass your own `github_token`. Events that no user authors, such as a `schedule` trigger, skip this check.
+
+**Human actor.** On every event, a bot actor is rejected unless you list it in `allowed_bots`, which is what stops two bots triggering each other in a loop. Scheduled runs are caught by this too, because GitHub attributes them to a repository user, usually whoever last changed the `cron` line. When that account is a bot, the schedule never runs until you list it.
+
+### Authentication
+
+The action needs one Claude credential, stored as a repository secret and passed to the matching input.
+
+| Secret | Input | What it is |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `anthropic_api_key` | a Claude API key from the Claude Console |
+| `CLAUDE_CODE_OAUTH_TOKEN` | `claude_code_oauth_token` | a long-lived token for a Claude subscription, made with `claude setup-token` |
+
+Which one you pick decides who pays: an API key bills the Console account, and an OAuth token draws on the subscription of the person who generated it. That makes the OAuth token a poor fit for an organization rollout, since it is tied to one person. Store an API key as an organization-level Actions secret instead, and either add the workflow file to each repository or define the job once as a reusable workflow that each repository calls.
+
+You can also store no long-lived secret at all. With workload identity federation, the action exchanges the workflow's GitHub OIDC token for API access through a Console service account, configured with `anthropic_federation_rule_id`, `anthropic_organization_id`, and optionally `anthropic_service_account_id` and `anthropic_workspace_id`. The workflow needs the `id-token: write` permission for the exchange, even when you pass your own `github_token`.
+
+### The inputs worth knowing
+
+Each is a `with:` key on the `anthropics/claude-code-action` step.
+
+| Input | What it does |
+|---|---|
+| `prompt` | instructions as plain text or a skill invocation; its presence selects automation mode |
+| `claude_args` | CLI arguments passed to Claude Code, such as `--max-turns`, `--model`, `--allowedTools`, `--mcp-config` |
+| `settings` | Claude Code settings, as a JSON string or a path to a settings file |
+| `github_token` | the token for GitHub operations; omit it to authenticate as the Claude GitHub App |
+| `trigger_phrase` | the phrase Claude answers to, `@claude` by default |
+| `plugin_marketplaces` / `plugins` | marketplace git URLs and `plugin-name@marketplace-name` entries to install before the run |
+
+## Walkthrough
+
+### The quick path
+
+From a checkout of the repository, with admin access to it and the GitHub CLI installed and authenticated:
+
+```prompt
+/install-github-app
+```
+
+Claude Code installs the Claude GitHub App, then sets up the credential. If it already has an API key it reuses that one; otherwise it offers a choice between creating a long-lived subscription token and pasting an API key. It saves the result as a repository secret, pushes a branch containing the workflow files you selected, and opens GitHub in your browser with a pull request ready to create. Merge it and `@claude` works.
+
+Two limits to know before you run it. It only works on github.com repositories: a `gitlab.com` or `bitbucket.org` remote makes it print a notice and exit. And it checks for the GitHub CLI first, warning you if `gh` is missing.
+
+Running it again later on a repository that already has a `claude.yml` offers **Update workflow file with latest version**, which pushes fresh copies as a new pull request.
+
+### The manual path
+
+Use this when you do not run Claude Code locally, when the command fails, or when your pipeline is complicated enough that you want to own the workflow files.
+
+**1. Install the app.** Install the Claude GitHub App on the repository. The action relies on three of its permissions: contents, issues, and pull requests, each read and write.
+
+The app is shared by every Claude feature that integrates with GitHub, so installing it grants a wider set than the action uses, including actions, checks, discussions, members, metadata, repository hooks, statuses, and workflows. GitHub does not let you accept a subset. An organization that needs only the three can register a custom GitHub App with exactly those permissions, at the cost of the other features: Code Review and web auto-fix still require the official app.
+
+**2. Add the secret.** Add `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` to the repository's Actions secrets.
+
+**3. Add the workflow.** Save this as `.github/workflows/claude.yml`:
+
+```yaml
+name: Claude Code
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+jobs:
+  claude:
+    if: contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Four lines in that file are doing something other than boilerplate:
+
+- `id-token: write` is required for the action's default GitHub App authentication.
+- `actions: read` lets Claude read CI results on pull requests.
+- `actions/checkout` gives Claude a local copy of the repository to work in.
+- The `if:` condition keeps a runner from starting at all on comments that do not mention `@claude`. The action checks the trigger phrase itself as well, so this line is about not paying for the runner.
+
+With `CLAUDE_CODE_OAUTH_TOKEN` instead, change the last line to `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`.
+
+**4. Test it.** Comment on any issue:
+
+```text
+@claude how should I implement user authentication for this endpoint?
+```
+
+Claude replies in a comment on the same issue and updates it as it works.
+
+### A review workflow, in automation mode
+
+This one runs on every pull request event rather than on a mention, and it shows what `claude_args` is for:
+
+```yaml
+name: Code Review
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
+          plugins: "code-review@claude-code-plugins"
+          prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
+```
+
+The `permissions` block is read-only, because a review posts comments through the action's own MCP server rather than by writing to the repository. Two lines decide where the review lands:
+
+- `--comment` in the prompt makes Claude post its review on the pull request, as an inline comment per issue found or one summary comment when it finds none. Without it, the findings stay in the run log.
+- `claude_args` has to name the inline-comment tool even though the skill's own `allowed-tools` frontmatter already does, because the action starts that MCP server only when `--allowedTools` names it.
+
+Claude skips draft and closed pull requests, ones it judges too trivial or too automated to need review, and ones that already carry a comment from Claude.
+
+## Variants
+
+### GitLab
+
+The GitLab integration is in beta, and GitLab maintains it. There is no action to install: the job installs Claude Code and calls `claude -p` directly, which makes it the most literal application of <LessonLink id="A2.1" />.
+
+```yaml
+claude:
+  stage: ai
+  image: node:24-alpine3.21
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - apk add --no-cache git curl bash
+    - curl -fsSL https://claude.ai/install.sh | bash
+    - export PATH="$HOME/.local/bin:$PATH"
+  script:
+    - /bin/gitlab-mcp-server || true
+    - >
+      claude
+      -p "${AI_FLOW_INPUT:-'Review this MR and implement the requested changes'}"
+      --permission-mode acceptEdits
+      --allowedTools "Bash Read Edit Write mcp__gitlab"
+```
+
+Add `ANTHROPIC_API_KEY` as a masked CI/CD variable. Use `CI_JOB_TOKEN` for GitLab API operations, or a Project Access Token with `api` scope stored as `GITLAB_ACCESS_TOKEN`.
+
+Mention-driven triggering is the piece you build yourself. GitLab has no equivalent of the action's trigger-phrase handling, so you add a project webhook for comment events pointing at a listener, and have that listener call the pipeline trigger API with `AI_FLOW_INPUT` and `AI_FLOW_CONTEXT` when a comment contains `@claude`.
+
+### GitHub Enterprise Server
+
+Available on Team and Enterprise plans. Actions are supported, but `/install-github-app` is github.com only, so the workflow file is a manual job. An Owner connects the instance once from the Claude Code admin settings, which generates a GitHub App manifest for your instance, and after that developers need no per-repository configuration.
+
+The gap to plan around is that the GitHub MCP server does not work against a self-hosted instance. Use the `gh` CLI pointed at your host instead, authenticated with `gh auth login --hostname github.example.com`.
+
+### A cloud provider
+
+Teams whose model access runs through Amazon Bedrock, Google Cloud's Agent Platform, or Microsoft Foundry set one input instead of an API key: `use_bedrock: "true"`, `use_vertex: "true"`, or `use_foundry: "true"`. Authentication is OIDC federation in every case, so no static cloud credential is stored in the repository. The secrets you add are the identity pointers: `AWS_ROLE_TO_ASSUME` for Bedrock, `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` for Agent Platform, or `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` for Foundry.
+
+Two details bite. Bedrock model IDs carry a cross-region inference profile prefix, as in `us.anthropic.claude-sonnet-4-6`, and you need model access granted in every region of that group. And the examples authenticate to GitHub with a custom app rather than the official one, which means two more secrets, `APP_ID` and `APP_PRIVATE_KEY`, and a `actions/create-github-app-token@v2` step before the Claude step.
+
+## Use-case scenarios
+
+**An issue with a clear reproduction.** Comment `@claude implement this feature based on the issue description`. Claude reads the issue and the codebase, writes the change in a branch, and opens a pull request. The review is still yours.
+
+**A review comment that describes the fix.** Mention `@claude` in the thread. It has the diff, the discussion, and CI results if you granted `actions: read`, which is more context than you would paste into a terminal.
+
+**A recurring report.** Automation mode on a `schedule` trigger with a prompt. Grant only the tools the report needs through `--allowedTools` in `claude_args`, and skip the checkout step entirely if Claude reads through the GitHub MCP tools.
+
+**A repository skill you already wrote.** Run `actions/checkout` first so the skill files are on the runner, then pass `/skill-name` as the `prompt`. The procedure you taught Claude locally now runs on an event.
+
+**Mechanical checks you already have.** This is the near-miss. A formatter, a type checker, or a lint rule is deterministic, faster, and free. Reach for Claude in CI where judgment is the work, and leave the checks that a tool can already make to that tool.
+
+## When to use / when not to use
+
+| Run Claude in CI | Keep it local |
+|---|---|
+| The work arrives as an issue or a review comment | You are already in the editor with the file open |
+| The trigger is an event rather than a person | You expect to redirect it after the first attempt |
+| The output is a pull request someone reviews | The output is a judgment only you will read |
+| Several people need the same capability | The task is yours alone and runs once |
+
+## Security in CI
+
+CI is the first place in this curriculum where Claude runs on input that people outside your team control. A pull request title, its body, its comments, and its diff are all attacker-supplied on a public repository, and they all reach the run.
+
+**Fork pull requests are the main protection, and it comes from GitHub.** On public repositories GitHub withholds secrets from runs triggered by fork pull requests, so a workflow that needs `ANTHROPIC_API_KEY` cannot authenticate on one. That is why the review workflow above effectively runs only on branches pushed to the repository itself.
+
+**The actor checks happen inside the action, which is later than you might assume.** On a public repository, a comment containing the trigger phrase from any user starts the workflow. Steps that run before the `anthropics/claude-code-action` step have already executed by the time the write-access check rejects that user. With a cloud provider this is concrete: the workflow generates a GitHub App token and signs in to your cloud account for a commenter who is then turned away, leaving audit-log entries and consuming Actions minutes. Add a step that verifies the commenter's write access before the credential steps.
+
+**A checked-out branch brings its own configuration.** A workflow triggered on `pull_request` checks out the pull request's version of the repository, which includes its `.claude/` directory and its `.mcp.json`. From <LessonLink id="A2.1" />, a non-interactive Claude Code run shows no workspace trust dialog, so project hooks and MCP servers load without anyone approving them. Passing `--bare` in `claude_args` is what closes that, at a real cost: it also skips your `CLAUDE.md` and your repository's skills, which are the things guiding Claude's output. Decide per workflow, and know that a job reviewing branches pushed to your own repository is the case that stays exposed, because that is where the secrets still reach the run.
+
+**The ordinary rules still apply.** Keep credentials in secrets rather than in the workflow file. Grant the workflow the narrowest `permissions` block that works, as the review workflow's read-only block does. Review what Claude pushes before merging it, the same as any other contributor's work.
+
+<LessonLink id="A3.1" /> builds the threat model these rules come from, and treats the repository itself as an input.
+
+## Cost
+
+Each run spends two budgets. GitHub Actions minutes go on the runner, billed by GitHub. Tokens go on the work, billed by the Console when you authenticate with an API key, or drawn from the subscription behind an OAuth token.
+
+Five controls, roughly in order of how much they save:
+
+- **Trigger discipline.** The `if:` condition on the job is the cheapest control there is, because a runner that never starts costs nothing. Scope your events narrowly: `types: [opened, synchronize]` beats every pull request activity type.
+- **`--max-turns` in `claude_args`.** A hard ceiling on iterations, and the flag that turns an open-ended prompt into a bounded job.
+- **A workflow-level timeout and concurrency limits.** The timeout catches a runaway job; concurrency keeps a busy afternoon from starting fifteen runs at once.
+- **`--model` in `claude_args`.** Without it the action uses the Claude Code default. A review pass and a feature implementation do not need the same model, which <LessonLink id="A4.2" /> makes a policy out of.
+- **Context size.** Claude reads `CLAUDE.md` on every run, so a long one is a tax on every invocation. Specific requests and issue templates cut turns for the same reason.
+
+## Pitfalls
+
+- **Your CI does not run on Claude's commits.** GitHub does not trigger workflows on commits made with the default `GITHUB_TOKEN`. If you passed `github_token: ${{ secrets.GITHUB_TOKEN }}` to the action, remove it so it authenticates as the Claude GitHub App, or pass a custom app token instead.
+
+- **Nothing happens when you mention Claude.** Check the comment contains `@claude` as a complete word, since `/claude` and `@claude-bot` do not match. Then check the commenter has write access, then that the workflow file is on the default branch and workflows are enabled.
+
+- **A scheduled workflow silently never runs.** GitHub attributes the run to whoever last edited the `cron` line, and the action rejects a bot actor. List it in `allowed_bots`. Separately, GitHub runs scheduled workflows only from the default branch, and disables the schedule on a public repository after 60 days without activity.
+
+- **The review job runs and posts nothing.** Either `--comment` is missing from the prompt, so the findings went to the run log, or `claude_args` does not name `mcp__github_inline_comment__create_inline_comment`, so the server that posts them never started.
+
+- **An old workflow breaks after an upgrade.** Moving from `@beta` to `@v1` means removing the `mode` input, renaming `direct_prompt` to `prompt`, and moving `max_turns` and `model` into `claude_args`. `custom_instructions` has no same-name flag and becomes `--append-system-prompt`.
+
+- **Deleting the secret does not retire the credential.** Removing `ANTHROPIC_API_KEY` from a repository stops that repository using it. The key stays valid until you delete it in the Console, and an OAuth token stays valid until it is revoked.
+
+## Try It
+
+**Environment:** a repository you have admin access to, ideally private, with the GitHub CLI installed and authenticated.
+
+1. Run `/install-github-app` in a Claude Code session in that repository, and follow it through to the pull request.
+2. Read the generated `claude.yml` before merging. Find the `if:` condition, the `permissions` block, and the secret name.
+3. Merge it, then open an issue and comment `@claude summarize what this repository does and where its entry point is`.
+4. Watch the run in the Actions tab while Claude's comment updates.
+5. Edit the workflow to add `claude_args: "--max-turns 3"` and comment again with a request large enough to need more than three turns.
+6. Read the run log where it stops.
+
+**Success looks like:** a comment from Claude in step 3 that updates in place rather than appearing as several comments, a run in step 4 you can follow step by step, and a run in step 6 that ends at the turn limit instead of continuing, which is the control you will rely on for every scheduled job in the next lesson.
+
+## FAQ
+
+**How is this different from Code Review?**
+Code Review is a product that reviews every pull request with no workflow file to maintain. The action is infrastructure you own, so you control the prompt, the model, the triggers, and what happens with the output. <LessonLink id="A2.3" /> puts both in a layered stack and asks you to defend the choice.
+
+**Can I change the trigger phrase?**
+Yes, with the `trigger_phrase` input. Worth doing when `@claude` collides with a username in your organization, or when you want separate phrases for separate workflows.
+
+**How do I run a skill from a plugin rather than my repository?**
+Install it with `plugin_marketplaces` and `plugins`, then pass the namespaced `/plugin-name:skill-name` as the `prompt`. The `plugins` input takes `plugin-name@marketplace-name`, where the marketplace name comes from its manifest rather than its repository URL. <LessonLink id="A5.2" /> covers building the marketplace.
+
+**Can Claude see whether CI passed?**
+Yes, with `actions: read` in the workflow's `permissions` block. Without it Claude works from the diff alone and cannot tell you why a check is red.
+
+**How do I remove it later?**
+Delete the workflow files that use `anthropics/claude-code-action`, which stops it running. Then delete the secret from the repository and from organization secrets if you shared it, and delete the API key in the Console if you want it retired. Leave the GitHub App installed if another Claude feature uses it.
+
+## Where next
+
+<LessonLink id="A2.3" /> stacks review layers on top of what you just built: the Code Review product, `/security-review`, and this action running a skill, sorted by what each one structurally misses.
+
+<LessonLink id="A2.4" /> takes the `schedule` trigger seriously. A run that starts on a schedule and finishes while everyone is asleep carries requirements this lesson only gestured at.
+
+<LessonLink id="A3.1" /> is the security chapter this lesson kept pointing at. Every input Claude read here came from someone who is not you.
+
+<LessonLink id="A7.2" /> is where you build this for the capstone project and write down why you chose the triggers you chose.

@@ -32,7 +32,7 @@ export const contextWindowSimulator: ChartDef = {
           title: 'The conversation',
           percent: 16,
           tone: 'teal',
-          lines: ['Your prompts and Claude’s replies'],
+          lines: ["Your prompts and Claude's replies"],
           target: {
             kind: 'popup',
             title: 'The conversation',
@@ -105,7 +105,7 @@ export const contextWindowSimulator: ChartDef = {
         },
       ],
       caption:
-        'File reads and tool output are gone: they were the bulk of the window, and they are the first thing compaction discards.',
+        'Tool output is gone and most file reads with it: they were the bulk of the window, and they are the first thing compaction discards.',
     },
   ],
 }

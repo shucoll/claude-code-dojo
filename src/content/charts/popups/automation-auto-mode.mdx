@@ -1,0 +1,11 @@
+A permission mode. A classifier reviews each tool call in place
+of you, so a turn runs without stopping at every prompt.
+
+**Next turn starts when:** nothing. Auto mode does not start turns. It removes
+prompts inside the turn you already have.
+
+**Machine on:** yes. **Session open:** yes.
+
+Deny and explicit ask rules are evaluated before the classifier and still apply.
+Pair it with `/goal`, which removes per-turn prompts, and auto mode removes the
+per-tool ones.

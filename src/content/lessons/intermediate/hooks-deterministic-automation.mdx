@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-17"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I1.3"]
 references: ["B2.3", "I1.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks-guide", "https://code.claude.com/docs/en/hooks"]
@@ -79,7 +79,7 @@ Every hook is three levels of nesting, and once you see the shape once it repeat
 }
 ```
 
-The outer key is the **event**. Inside it, a **matcher group** filters which occurrences of that event fire the hook. Inside that, the **handler** says what runs, a shell command here (the other handler types, prompt and agent, wait for <LessonLink id="I4.4" />). The inner `hooks` array is a list, so one matcher can run several handlers in order.
+The outer key is the **event**. Inside it, a **matcher group** filters which occurrences of that event fire the hook. Inside that, the **handler** says what runs, a shell command here (the model-backed handler types, prompt and agent, wait for <LessonLink id="I4.4" />). The inner `hooks` array is a list, so one matcher can run several handlers in order.
 
 ### Matchers: firing on a subset
 
@@ -122,13 +122,13 @@ If your settings file already has a `hooks` block, add `Notification` as a sibli
 
 Now confirm it registered. In Claude Code, run:
 
-```text
+```prompt
 /hooks
 ```
 
 That opens the hooks browser: every event, with a count next to the ones that have hooks. Select `Notification` and you will see your entry, its matcher, type, source file, and command. The menu is read-only, a viewer, not an editor. You change hooks by editing the settings file (or asking Claude to), and the file watcher picks up the change without a restart.
 
-Test it: ask Claude to do something needing permission, then switch to another window. The notification should appear. You have bound a command to a lifecycle event, which is every hook you will ever write, differing only in the event and what runs.
+Test it: press `Shift+Tab` until the status bar shows `⏸ manual mode on`, ask Claude to do something needing permission, then switch to another window. The notification should appear a few seconds after the prompt goes unanswered. You have bound a command to a lifecycle event, which is every hook you will ever write, differing only in the event and what runs.
 
 ## Use-case scenarios
 
@@ -166,8 +166,8 @@ The cost of a hook is not context, it is execution. A hook adds latency to the e
 
 1. Add the `Notification` hook from the walkthrough to `~/.claude/settings.json`, using your platform's notification command.
 2. Run `/hooks`, select `Notification`, and confirm your entry appears with its command.
-3. Back at the prompt, ask Claude to run a command that needs approval, then switch away from the terminal. Confirm the notification fires.
-4. Change the matcher from `""` to `idle_prompt` and reload. Now it should fire when Claude finishes and waits, but not on a permission prompt. Trigger each case to feel the difference a matcher makes.
+3. Back at the prompt, press `Shift+Tab` until the status bar shows `⏸ manual mode on`, ask Claude to run a command that needs approval, then switch away from the terminal. Confirm the notification fires.
+4. Change the matcher from `""` to `idle_prompt` and reload. Now it should fire when Claude finishes and waits, about a minute after it stops rather than instantly, and not on a permission prompt. Trigger each case to feel the difference a matcher makes.
 
 **Success looks like:** a notification you did not have to ask Claude for, firing on the event you scoped it to and not on the ones you did not. You have placed a hook on the lifecycle and controlled which occurrences trigger it.
 

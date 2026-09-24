@@ -13,9 +13,9 @@ you do the enumeration, batching, regeneration, validation, and reporting.
 ## Prerequisite
 
 This skill dispatches `subagent_type: lesson-freshness`. If that agent is not in
-the available-agents list, it was added after this session started — tell the
-user to restart Claude Code so `.claude/agents/lesson-freshness.md` registers,
-then stop. Do not substitute a general-purpose agent silently.
+the available-agents list, it was added after this session started — tell the user
+to restart Claude Code so `.claude/agents/` registers, then stop. Do not
+substitute a general-purpose agent silently.
 
 ## Step 1 — parse the category
 
@@ -35,6 +35,14 @@ It prints a JSON array of `{ id, slug, title, file, volatility,
 verifiedAgainstDocsAt }`. If the array is empty, report that no lessons carry
 that volatility and stop. Otherwise announce the total and the batch count
 (`ceil(total / 10)`), e.g. "32 evolving lessons — 4 batches of 10."
+
+**Skip unauthored scaffolds.** A lesson whose body still contains `@@TODO@@`
+placeholders has no prose to verify against docs, and dispatching at it wastes a
+full agent run. Check the window's files before dispatching
+(`grep -l '@@TODO@@' <files>`) and record each hit with Status
+`SKIPPED (unauthored)` instead. Say so in the announcement when it changes the
+batch count, e.g. "23 volatile lessons, but 17 are unauthored scaffolds — 6 to
+check, 1 batch."
 
 ## Step 3 — create the report file
 
@@ -66,6 +74,8 @@ For each lesson in the window:
 - **If its `verifiedAgainstDocsAt` equals today's date**, it was already checked
   today. Do not dispatch. Record its row now with Status `SKIPPED (fresh)` and
   `Changes made` = `—`.
+- **If its body still contains `@@TODO@@`**, it is an unauthored scaffold. Do not
+  dispatch. Record its row with Status `SKIPPED (unauthored)`.
 - **Otherwise dispatch the `lesson-freshness` agent** for it. Issue all
   non-skipped dispatches in the window **in a single message** (multiple Agent
   calls) so they run concurrently in the background. Use this prompt, filling in
@@ -93,25 +103,31 @@ npm run gen:curriculum && npm run check-snippets
 
 Capture the check result (PASS, or FAIL with the errors).
 
-### 4c. Append rows
+### 4c. Handle a failed check
+
+If `check-snippets` **FAILED**, do not continue — not to the style check, not to
+the next batch. Report the errors, name the batch lesson(s) most likely
+responsible, and ask the user how to proceed (fix by hand, dispatch a corrective
+`lesson-freshness` run at the named lesson, or revert that lesson). Only continue
+once the check passes.
+
+### 4d. Append rows
 
 Append one table row per lesson in the window (skipped ones already recorded in
 4a). Populate each column from that lesson's agent report — see **Row format**
 below. Put the batch's `check-snippets` result in the `Check` column of every
 non-skipped row.
 
-### 4d. Handle a failed check
-
-If `check-snippets` **FAILED**, do not continue to the next batch. Report the
-errors, name the batch lesson(s) most likely responsible, and ask the user how to
-proceed (fix by hand, dispatch a corrective `lesson-freshness` run at the named
-lesson, or revert that lesson). Only continue once the check passes.
-
 ### 4e. Pause between batches
 
 After a clean batch, report a one-line tally
-("Batch k/N: X stale, Y current, Z skipped — check PASS") and **ask the user
+("Batch k/N: X stale, Y current, Z skipped — check PASS"), then **ask the user
 whether to run the next batch.** Wait for their answer. Stop if they decline.
+
+Do not style-check the rewritten prose. `lesson-freshness` carries its own
+four-line paraphrase of the style rules, and that is the only gate this sweep
+applies. The user runs the `lesson-style` agent by hand when they want it, so do
+not dispatch it here and do not offer to.
 
 ## Step 5 — finish
 
@@ -129,8 +145,8 @@ Each cell is Markdown; use `<br>` to separate multiple items within a cell so th
 table stays intact.
 
 - **Lesson** — `<id> — <title>`.
-- **Status** — `STALE` \| `CURRENT` \| `SKIPPED (fresh)` \| `ERROR` (agent failed
-  or the lesson did not resolve).
+- **Status** — `STALE` \| `CURRENT` \| `SKIPPED (fresh)` \| `SKIPPED (unauthored)`
+  \| `ERROR` (agent failed or the lesson did not resolve).
 - **Changes made** — the agent's `Changes:` entries verbatim, one per line via
   `<br>`, each keeping its `"<old>" → "<new>"` quotes so the edit is readable
   from the table alone. `—` when nothing changed beyond the date.

@@ -88,7 +88,7 @@ export const claudeCodeSystemMap: ChartDef = {
         {
           id: 'mcp-tools',
           title: 'MCP tool definitions',
-          lines: ['Full schemas for every connected server', 'Usually the largest single item'],
+          lines: ['Tool names and server instructions', 'Full schemas load when a tool is needed'],
           tone: 'amber',
           target: lesson(MCP),
         },

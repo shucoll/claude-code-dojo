@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-17"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I3.2"]
 references: ["I2.1"]
 docsSources: ["https://code.claude.com/docs/en/skills"]
@@ -22,11 +22,12 @@ Each pattern is a problem, the shape that solves it, and a worked example. Take 
 
 **Problem.** A skill that reasons about your repository is only as good as the state it can see. Tell Claude "summarize my changes" and it works from whatever files happen to be open, not your actual diff. You want the skill to run against real, current state every time, without you pasting it in.
 
-**Pattern.** A `` !`<command>` `` line runs a shell command before the skill is sent to Claude, and its output replaces the line. Claude never sees the command, only the data it produced. This is preprocessing, not a tool call: it happens before Claude reads anything, so it sits outside the permission system that `allowed-tools` governs. You met it in passing in <LessonLink id="I3.2" />; here are the rules that make it reliable.
+**Pattern.** A `` !`<command>` `` line runs a shell command before the skill is sent to Claude, and its output replaces the line. Claude never sees the command, only the data it produced. This is preprocessing, not a tool call: it happens before Claude reads anything. It still runs through your permission rules, but it never prompts you: a command the rules do not already allow aborts the whole invocation instead. You met it in passing in <LessonLink id="I3.2" />; here are the rules that make it reliable.
 
 - The inline form is recognized only when `!` starts a line or follows whitespace. `KEY=!`cmd`` is left as literal text, so the command does not run.
 - For multiple commands, open a fenced block with ` ```! ` instead of one inline call per line.
 - Substitution runs once over the file. Command output is inserted as plain text and not re-scanned, so a command cannot emit another placeholder for a later pass.
+- A non-zero exit aborts the whole invocation, not just its own line. Append `|| true` where a non-zero exit is a normal result, and pre-approve anything your permission rules would not already allow with `allowed-tools`.
 
 **Example.** A standup skill that reports what you did, built entirely from live git state:
 
@@ -57,7 +58,7 @@ By the time Claude reads the task, the branch name, yesterday's commits, and the
 
 **Problem.** Some skills are heavy. A skill that researches a question across the codebase reads twenty files to answer it. Run that on the main thread and all twenty file reads land in your window, burying the conversation you actually care about under research you needed only once. This is the cost <LessonLink id="I2.1" /> measured: everything a procedure reads is rent on the main context.
 
-**Pattern.** Add `context: fork` to the frontmatter and the skill runs in its own isolated context. The `SKILL.md` body becomes the prompt that drives a subagent, which does the work in a separate window and returns only its final answer. The twenty file reads happen over there and never touch your thread. Pick the worker with the `agent` field: `Explore` and `Plan` for read-only investigation, `general-purpose` (the default) or a custom subagent otherwise.
+**Pattern.** Add `context: fork` to the frontmatter and the skill runs in its own isolated context. The `SKILL.md` body becomes the prompt that drives a subagent, which does the work in a separate window and returns only its final answer. The twenty file reads happen over there and never touch your thread. The fork runs in the background by default and its result arrives when it finishes; add `background: false` to wait for it in the turn that invoked the skill. Pick the worker with the `agent` field: `Explore` and `Plan` for read-only investigation, `general-purpose` (the default) or a custom subagent otherwise.
 
 One constraint. A forked skill must contain an actual task, not just guidelines. `context: fork` on a skill that only says "use these API conventions" sends the subagent guidance with nothing to do, and it returns empty.
 
@@ -94,7 +95,7 @@ Research $ARGUMENTS thoroughly:
 
 `disable-model-invocation: true` is the one for anything with side effects, the deploy case. `user-invocable: false` is the one for background knowledge, the legacy-system case: Claude reads it when relevant, but it never clutters your `/` menu.
 
-When the `SKILL.md` is not yours to edit, the `skillOverrides` setting controls visibility from your own `.claude/settings.local.json` instead. Each skill maps to `"on"`, `"name-only"` (list the name, drop the description to save budget), `"user-invocable-only"` (hidden from Claude, still typable), or `"off"` (hidden entirely). The `/skills` menu writes it for you: highlight a skill, press `Space` to cycle, `Enter` to save.
+When the `SKILL.md` is not yours to edit, the `skillOverrides` setting controls visibility from your own `.claude/settings.local.json` instead. Each skill maps to `"on"`, `"name-only"` (list the name, drop the description to save budget), `"user-invocable-only"` (hidden from Claude, still typable), or `"off"` (hidden entirely). The `/skills` menu writes it for you: highlight a skill, press `Space` to cycle, `Esc` to save.
 
 **Example.** Mute a noisy project skill and trim another to its name, without editing either:
 
@@ -119,7 +120,7 @@ You ask for the thing the skill does, in plain words, and nothing happens. Typin
 
 1. **It lacks the words you actually say.** A description reading "Handles version control operations" will not match "write me a commit message." Put the phrases a real user would type into the description. Lead with the primary use case.
 2. **It collides with another skill.** Two skills whose descriptions overlap leave Claude unable to tell which you meant, so it picks neither. Make each distinctive: name the situation only this skill handles.
-3. **It got cut short.** Claude Code fits every skill's name and description into a listing budget of about 1% of the context window. With many skills, descriptions are trimmed to fit, dropping the keywords at the end first. Run `/doctor` for an estimate of the listing's cost and its biggest contributors. The fixes: put the key use case first (each entry is capped at 1,536 characters regardless of budget), set low-priority skills to `"name-only"` in `skillOverrides` to free room, or raise the budget with `skillListingBudgetFraction`.
+3. **It got cut short.** Claude Code fits every skill's name and description into a listing budget of about 1% of the context window. With many skills, descriptions are shortened to fit, starting with the skills you invoke least, so the ones you use most keep their full text. Run `/doctor` for an estimate of the listing's cost and its biggest contributors. The fixes: put the key use case first (each entry is capped at 1,536 characters regardless of budget), set low-priority skills to `"name-only"` in `skillOverrides` to free room, or raise the budget with `skillListingBudgetFraction`.
 4. **The YAML is malformed.** A broken frontmatter block loads the body with empty metadata, so `/name` still works but there is no description to match against. Run with `--debug` to see the parse error.
 
 ### It triggers too often

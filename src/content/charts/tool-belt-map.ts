@@ -27,7 +27,7 @@ export const toolBeltMap: ChartDef = {
         { id: 'lsp', title: 'LSP', tone: 'teal', lines: ['Definitions, references, type errors'] },
       ],
       caption:
-        'These still prompt when a path is outside your project folder: the read boundary from B1.3, now enforced tool by tool.',
+        'These still prompt when a path is outside your project folder: the read boundary from B1.3, now enforced tool by tool. Grep and Glob are Windows defaults; on macOS, Linux, and WSL Claude searches with grep and find through Bash instead.',
     },
     {
       kind: 'grid',

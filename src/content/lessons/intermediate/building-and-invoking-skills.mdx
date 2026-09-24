@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-17"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I3.1"]
 references: ["I1.2"]
 docsSources: ["https://code.claude.com/docs/en/skills"]
@@ -42,7 +42,7 @@ Bulk that does not belong in the body goes in **supporting files** beside `SKILL
 |---|---|
 | `description` | the trigger surface Claude matches against; still the one that matters most |
 | `argument-hint` | text shown in autocomplete, like `[scope]`, so you remember what to pass |
-| `arguments` | names for positional arguments, so `$scope` works instead of `$1` |
+| `arguments` | names for positional arguments, so `$scope` works instead of `$0` |
 | `allowed-tools` | tools the skill may use this turn without prompting you |
 | `disable-model-invocation` | `true` means only you can start it, never Claude on its own |
 | `user-invocable` | `false` hides it from the `/` menu, for knowledge Claude reads but you never type |
@@ -54,7 +54,7 @@ Anything you type after the command name is available inside the body through a 
 | Placeholder | Expands to |
 |---|---|
 | `$ARGUMENTS` | everything you typed after the command name |
-| `$1`, `$2`, … | the first, second, … argument by position (0-based `$0` is the first) |
+| `$0`, `$1`, … | arguments by position, 0-based, so `$0` is the first (long form: `$ARGUMENTS[0]`) |
 | `$scope` | a named argument, when you declare `arguments: [scope]` in frontmatter |
 
 Wrap multi-word arguments in quotes to keep them together: `/migrate "search bar" React Vue` makes `$0` the phrase `search bar`. A placeholder with no matching argument is left as-is for a positional one, or becomes empty for a named one, so an optional argument degrades quietly.
@@ -102,12 +102,12 @@ argument-hint: "[scope]"
 Write one Conventional Commits message for the staged changes above.
 
 - Pick a type from the list in [reference.md](reference.md).
-- If a scope was given, use it: `$1`. If not, omit the scope.
+- If a scope was given, use it: `$0`. If not, omit the scope.
 - Match the style of the recent messages.
 - If nothing is staged, say so instead of inventing a message.
 ```
 
-Three things are doing work here. The `` !`git diff --cached` `` and `` !`git log …` `` lines run before Claude sees the skill and paste their output in, so the message is written against your real staged tree, not a guess. `$1` is the optional scope you can pass. And `[reference.md](reference.md)` points at a supporting file we have not written yet.
+Three things are doing work here. The `` !`git diff --cached` `` and `` !`git log …` `` lines run before Claude sees the skill and paste their output in, so the message is written against your real staged tree, not a guess. `$0` is the optional scope you can pass. And `[reference.md](reference.md)` points at a supporting file we have not written yet.
 
 Create it now, `~/.claude/skills/conventional-commit/reference.md`:
 
@@ -149,11 +149,11 @@ Use the conventional-commit skill.
 
 Or type the command, with a scope:
 
-```text
+```prompt
 /conventional-commit auth
 ```
 
-All three render the same body, run the same injected commands, and produce a message. The command form passed `auth`, which lands in `$1` and becomes the scope.
+All three render the same body, run the same injected commands, and produce a message. The command form passed `auth`, which lands in `$0` and becomes the scope.
 
 ### Stage two: letting it commit
 
@@ -175,7 +175,7 @@ disable-model-invocation: true
 ## Use-case scenarios
 
 - **A release checklist you run by hand.** Build it, add `disable-model-invocation: true`, invoke it with `/release`. You never want Claude deciding it is release time.
-- **A changelog entry from an issue number.** Take the number as an argument (`/changelog 412`), inject the issue with `` !`gh issue view $1` ``, and write the entry against real data.
+- **A changelog entry from an issue number.** Take the number as an argument (`/changelog 412`), inject the issue with `` !`gh issue view $0` ``, and write the entry against real data.
 - **A test-writing helper with a house style.** The style rules are long, so they go in a supporting `conventions.md` the skill links to, keeping `SKILL.md` short.
 - **Near miss: a script that scaffolds a component.** If the real work is a shell or Python script, the skill should not reimplement it in prose. It should run it: reference the script with `${CLAUDE_SKILL_DIR}/scripts/scaffold.sh` so the path resolves wherever the skill is installed, and let the script do the work while the skill orchestrates.
 
@@ -197,6 +197,8 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 **Over-granting `allowed-tools`.** The symptom is a skill that can do far more than its job. `allowed-tools: Bash(git *)` to run one `git commit` hands the skill every `git` subcommand, including destructive ones. List the commands the skill actually calls. Note also that `allowed-tools` only *pre-approves*, it does not restrict: to take a tool away, use `disallowed-tools` or a deny rule from <LessonLink id="I1.2" />.
 
+**An injected command your rules do not allow.** The symptom is a skill that aborts with `Shell command permission check failed for pattern "..."` and a body Claude never sees. Injected commands never prompt you: if the permission check on a line like `` !`git diff --cached` `` returns anything other than allow, Claude Code drops the whole invocation. Pre-approve the injected commands with `allowed-tools` when your rules are restrictive, and note that a matching ask or deny rule aborts the run regardless of that list.
+
 **A side-effecting skill left auto-invocable.** The symptom is a commit or a deploy you did not ask for, because your request read as ready. Add `disable-model-invocation: true` to anything that changes state.
 
 **A description that will not trigger.** The symptom is a skill that works when you type the command but never fires on its own. That is a description problem, and tuning it is the clinic in <LessonLink id="I3.3" />.
@@ -214,7 +216,7 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 ## FAQ
 
-**Named arguments or positional?** Positional (`$1`, `$2`) is fine for one or two. Declare `arguments: [issue, branch]` in frontmatter when there are several and `$issue` reads clearer than `$2`. Both draw from the same typed arguments.
+**Named arguments or positional?** Positional (`$0`, `$1`) is fine for one or two. Declare `arguments: [issue, branch]` in frontmatter when there are several and `$issue` reads clearer than `$0`. Both draw from the same typed arguments.
 
 **How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: they are executed, not read into context, so a bundled script does its work without ever costing tokens.
 
@@ -222,7 +224,7 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 **What if I pass arguments to a skill that has no `$ARGUMENTS`?** Claude Code appends `ARGUMENTS: <what you typed>` to the end of the skill so Claude still sees the input. Placeholders are how you *place* it precisely; without them the input still arrives, just at the bottom.
 
-**Can I run more than one skill at once?** Yes. Typing `/code-review /conventional-commit` at the start of a message loads both and passes any trailing text to each. Expansion stops at the first token that is not an inline skill.
+**Can I run more than one skill at once?** Yes. Typing `/write-tests /conventional-commit` at the start of a message loads both and passes any trailing text to each, up to six skills in all. Expansion stops at the first token that is not an inline user-invocable skill, and a skill that forks a subagent, such as `/code-review`, ends the run there too.
 
 ## Where next
 

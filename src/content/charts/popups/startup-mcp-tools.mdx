@@ -7,7 +7,7 @@ direct about it: adding more MCP servers has minimal impact on your context
 window.
 
 The behavior is configurable. `ENABLE_TOOL_SEARCH=auto` loads schemas up front
-when they fit within 10% of the window and defers the rest; `ENABLE_TOOL_SEARCH=false`
-loads everything eagerly, which is what every server used to do by default. If
-you have read older advice about MCP servers flooding your context, that setting
-is the world it was written for.
+while they stay under 10% of the window and defers all of them once they cross
+it; `ENABLE_TOOL_SEARCH=false` loads everything eagerly, which is what every
+server used to do by default. Older advice about MCP servers flooding your context was written for that
+eager-loading behavior.

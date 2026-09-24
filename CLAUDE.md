@@ -61,10 +61,14 @@ wrapped by skills:
   frontmatter or coverage error fails; non-default pack gaps and leftover `@@TODO@@` stubs warn.
 
 ## Lesson quality & freshness
-- **Style guide:** `docs/lesson-style-guide.md` holds the enforced prose/content rules
-  (em-dashes, self-referential emphasis, flourish clauses, fence discipline, etc.). The
-  `new-lesson` skill auto-runs the style check on each finished lesson; the `lesson-style`
-  subagent (`.claude/agents/lesson-style.md`) audits one lesson on demand.
+- **Style guide:** `docs/lesson-style-guide.md` holds the enforced prose/content rules.
+  It absorbs the `humanizer` skill's signs-of-AI-writing patterns, retuned for technical
+  teaching prose: five prose families (emphasis/significance, sentence shapes, word
+  choice, structure/framing, formatting), the content mechanics (fence discipline, bare
+  dotted ids, inline URLs in `docsSources`), and a binding "what not to flag" list. Every
+  rule has a slug the checker cites. The `new-lesson` skill auto-runs the style check on
+  each finished lesson; the `lesson-style` subagent (`.claude/agents/lesson-style.md`)
+  audits one lesson on demand.
 - **Freshness:** the `lesson-freshness` subagent (`.claude/agents/lesson-freshness.md`)
   verifies a lesson against current Claude Code docs and repairs staleness. The
   `refresh-lessons` skill batches this across a volatility category

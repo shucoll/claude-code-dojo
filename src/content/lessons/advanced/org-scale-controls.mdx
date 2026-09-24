@@ -1,0 +1,298 @@
+---
+id: "A3.3"
+slug: "org-scale-controls"
+title: "Org-scale controls"
+type: "core"
+order: 3
+estimatedMinutes: 20
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-09-24"
+prerequisites: ["A3.1"]
+teaches: ["managed-settings-channels", "managed-precedence", "org-enforcement-keys", "client-side-limits"]
+references: ["I1.3", "I1.4", "I5.2", "I7.1", "A5.2"]
+docsSources: ["https://code.claude.com/docs/en/server-managed-settings", "https://code.claude.com/docs/en/managed-settings", "https://code.claude.com/docs/en/managed-mcp", "https://code.claude.com/docs/en/admin-setup", "https://code.claude.com/docs/en/memory"]
+---
+
+# Org-scale controls
+
+## The problem
+
+The deny rules in <LessonLink id="A3.1" /> and the `sandbox` block in <LessonLink id="A3.2" /> are both settings in a file you own. A teammate who never read either lesson has neither, and a teammate who read both can delete them on a bad afternoon. Governance is written for the least cautious person who will ever run the tool.
+
+Managed settings are the tier above everything <LessonLink id="I1.3" /> covered. They sit at the top of the hierarchy, above user settings, above project settings, above command-line arguments. There are two ways to deliver them, and picking between them is the first decision an administrator makes.
+
+## The concept
+
+**Server-managed settings** are configured in the claude.ai admin console at Admin Settings > Claude Code > Managed settings. Claude Code fetches them at startup and polls hourly. They require Claude for Teams or Enterprise and the Owner or Primary Owner role, and they reach cloud sessions.
+
+**Endpoint-managed settings** are deployed to the device: a macOS configuration profile, a Windows registry policy, or a `managed-settings.json` file on disk. They provide stronger guarantees on managed devices, because the operating system can protect the file from the user who runs Claude Code.
+
+| | Server-managed | Endpoint-managed |
+|---|---|---|
+| Configured in | The claude.ai admin console, or a self-hosted gateway | MDM profile, `HKLM` registry, or a file in a system directory |
+| Read | At startup, then polled hourly | At startup; MDM every 30 minutes, files on change |
+| Requires | Teams or Enterprise, Owner role | Device management, or the ability to write a system directory |
+| Reaches cloud sessions | Yes | No |
+| Reaches Bedrock, Vertex, Foundry | Through a Claude apps gateway | Yes |
+
+Most organizations need both. Cloud sessions in Anthropic-hosted environments never read a device's file or profile, so a fleet whose developers use cloud sessions needs server-managed settings for those. Deployments on a third-party model provider skip the server fetch entirely unless a Claude apps gateway supplies it, so they need the endpoint channel.
+
+## How it works
+
+### Where each mechanism stores the policy
+
+The keys are identical across all four mechanisms; the shape and the location differ.
+
+| Mechanism | Where it lives | Priority |
+|---|---|---|
+| Server-managed | Anthropic's servers or your gateway, with a local cache | Highest |
+| macOS profile / Windows `HKLM` | The `com.anthropic.claudecode` preferences domain, or `HKLM\SOFTWARE\Policies\ClaudeCode` | High |
+| File-based | `/Library/Application Support/ClaudeCode/` on macOS, `/etc/claude-code/` on Linux and WSL, `C:\Program Files\ClaudeCode\` on Windows | Medium |
+| Windows `HKCU` | `HKCU\SOFTWARE\Policies\ClaudeCode` | Lowest |
+
+`HKCU` is writable without elevation, so it works as a convenience default and carries no enforcement weight. The plist and `HKLM` locations resist tampering because writing them needs administrator rights.
+
+When several teams own parts of one file-based policy, put each part in its own file in a `managed-settings.d/` directory beside `managed-settings.json`. Claude Code merges the main file first, then every `*.json` in alphabetical order, so numeric prefixes such as `10-telemetry.json` and `20-security.json` control the order. Single values are replaced by the later file, lists combine with duplicates removed, and nested blocks such as `env` merge key by key.
+
+### One source wins, by default
+
+This is the rule that governance documents get wrong. Within the managed tier, Claude Code uses the **first source that delivers at least one policy key** and ignores the rest. It checks server-managed settings first, then MDM, then the file, then `HKCU`. A source carrying only the two control keys does not count, and Claude Code moves to the next one.
+
+So an organization that configures a deny list in the admin console and a sandbox block in `managed-settings.json` gets the deny list and no sandbox block. Nothing warns about it; `/status` names the selected source and lists the skipped ones.
+
+Setting `managedSourcesBehavior` to `"merge"` applies every admin source instead, combining them by kind of key: higher-ranked values win on most keys, lists union, and locks take the strictest value. Claude Code reads that key only from the highest-ranked source carrying a policy key, so a lower source cannot opt itself into merging. Turn it on only when every source below your highest one is under an administrator's control, because under `"merge"` a lower source's `permissions.allow` rules and hooks join the policy.
+
+### The keys read from every admin source
+
+A short list of keys escapes the first-wins rule and is read from every admin source, with the user-writable `HKCU` tier excluded.
+
+Some of them are locks that can only tighten. `sandbox.network.allowManagedDomainsOnly`, `sandbox.filesystem.allowManagedReadPathsOnly`, and `allowManagedMcpServersOnly` turn on when any admin source sets them to `true`, and `maxEffortLevel` takes the lowest cap in any source, with a developer's own lower cap winning over all of them.
+
+Some are denials. `deniedMcpServers` entries and `disableClaudeAiConnectors` apply from any source, while `syncClaudeAiSkills`, `syncClaudeAiPlugins`, and `enableArtifact` can only ever be turned off, including from the developer's own settings.
+
+The rest govern startup and environment. `forceRemoteSettingsRefresh` is honored from any admin source, which is what lets an MDM profile enforce fail-closed startup on a machine that has never fetched a server payload, and the `env` block merges per variable so a lower source fills in what the higher one leaves unset.
+
+Gateway sign-in keys go the other way: Claude Code never reads `forceLoginGatewayUrl`, `gatewayInternalNetworks`, or the `"gateway"` value of `forceLoginMethod` from server-managed settings at all.
+
+### The approval dialog on a developer's desk
+
+Some delivered settings wait for the developer to accept them. The dialog covers settings that execute shell commands (`apiKeyHelper`, `statusLine`, `otelHeadersHelper`), the sandbox binary paths, the sandbox settings that weaken isolation or let the proxy read traffic, certain `env` variables, and any hook definition at all. The developer sees a dialog describing what is being configured. Rejecting it exits Claude Code.
+
+Two details change how a rollout feels. A `claudeMd` value needs no approval, because it is instruction text for Claude rather than a command Claude Code runs. And a non-interactive `-p` run cannot show the dialog, so it applies the settings for that run alone, records nothing, and fetches again next time until a human approves in an interactive session.
+
+A `sandbox.credentials` block containing only `deny` rules skips the dialog too, since it restricts the sandbox without handing the proxy a credential.
+
+## The enforcement vocabulary
+
+The keys an administrator reaches for, grouped by what they are trying to stop.
+
+| Goal | Keys |
+|---|---|
+| Allow, ask, or deny specific tools and commands | `permissions.allow`, `permissions.deny` |
+| Make managed settings the only source of permission rules | `allowManagedPermissionRulesOnly` |
+| Close the bypass hole | `permissions.disableBypassPermissionsMode` |
+| Choose the starting permission mode, or remove auto mode | `permissions.defaultMode`, `permissions.disableAutoMode` |
+| Require sandboxing, with a locked domain allowlist | `sandbox.enabled`, `sandbox.network.allowedDomains`, `allowManagedDomainsOnly` |
+| Restrict which hooks run | `allowManagedHooksOnly`, `allowedHttpHookUrls` |
+| Block skills, agents, hooks, and MCP servers from user and project sources | `strictPluginOnlyCustomization` |
+| Reject the sideload flags | `disableSideloadFlags` |
+| Fail closed when the policy cannot be fetched | `forceRemoteSettingsRefresh` |
+| Refuse to start outside an approved version range | `requiredMinimumVersion`, `requiredMaximumVersion` |
+| Restrict login to a method or organization | `forceLoginMethod`, `forceLoginOrgUUID` |
+
+Marketplace enforcement and plugin version pinning belong to <LessonLink id="A5.2" />, which covers `strictKnownMarketplaces`, `blockedMarketplaces`, and `extraKnownMarketplaces` as the distribution half of the same problem.
+
+### Managed MCP
+
+<LessonLink id="I5.2" /> left every developer free to connect any server they like. Eight patterns cover the range from that to nothing:
+
+| Pattern | What it does | Configure |
+|---|---|---|
+| Disable MCP | No servers load | `managed-mcp.json` with an empty server map |
+| Fixed deployment | Everyone gets the same servers and can add none | `managed-mcp.json` with the servers you want |
+| Provided servers | Everyone gets your remote servers and keeps their own | `managedMcpServers` in managed settings |
+| Approved catalog | Users add from a published list, everything else blocked | `allowedMcpServers` plus `allowManagedMcpServersOnly: true` |
+| Plugin servers only | No servers from `~/.claude.json` or `.mcp.json`; plugin servers still load | `strictPluginOnlyCustomization` with `mcp` in the list |
+| Soft allowlist | An allowlist users can broaden themselves | `allowedMcpServers` alone |
+| Denylist only | Block known-bad servers, allow the rest | `deniedMcpServers` |
+| No restrictions | Users add anything | Deploy no managed MCP configuration |
+
+The file and the settings key differ in kind. A deployed `managed-mcp.json` takes exclusive control, and it cannot be distributed through server-managed settings; deploy it alongside the endpoint channel. `managedMcpServers` accepts `http` and `sse` servers only and provides servers without locking anything down.
+
+### An org-wide CLAUDE.md
+
+Behavioral guidance has its own delivery. A `CLAUDE.md` at the managed policy path (`/Library/Application Support/ClaudeCode/CLAUDE.md`, `/etc/claude-code/CLAUDE.md`, or `C:\Program Files\ClaudeCode\CLAUDE.md`) loads in every session on that machine and cannot be excluded by an individual's settings. It loads before user and project `CLAUDE.md` files.
+
+The `claudeMd` key carries the same content inside managed settings, which is how you deliver it through the server channel:
+
+```json
+{
+  "claudeMd": "Always run `make lint` before committing.\nNever push directly to main."
+}
+```
+
+Keep the division of labor clean. Settings enforce; `CLAUDE.md` instructs. A rule Claude must never break is `permissions.deny`, because <LessonLink id="I1.4" />'s distinction holds at org scale: prose is context Claude interprets, and config is policy the harness obeys.
+
+## Walkthrough
+
+A policy for a twenty-developer organization on Teams, built in the order an administrator would reason about it.
+
+Start with what must never happen, and take permission rules away from lower scopes:
+
+```json
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(curl *)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "allowManagedPermissionRulesOnly": true
+}
+```
+
+That `Bash(curl *)` rule matches `curl` as Claude writes it and misses `/usr/bin/curl`, exactly as <LessonLink id="A3.1" /> showed. So add the enforcement that ignores command text, and lock the allowlist so a repository cannot widen it:
+
+```json
+{
+  "sandbox": {
+    "enabled": true,
+    "network": {
+      "allowedDomains": ["registry.npmjs.org", "api.github.com"],
+      "allowManagedDomainsOnly": true
+    },
+    "credentials": {
+      "files": [{ "path": "~/.ssh", "mode": "deny" }]
+    }
+  }
+}
+```
+
+Then decide what the fleet may install and what happens when the policy cannot be reached:
+
+```json
+{
+  "allowManagedHooksOnly": true,
+  "disableSideloadFlags": true,
+  "allowedMcpServers": ["github", "sentry"],
+  "allowManagedMcpServersOnly": true,
+  "forceRemoteSettingsRefresh": true,
+  "claudeMd": "Run `make lint` before committing. Never push to main directly."
+}
+```
+
+Before rolling that to twenty machines, validate it on one. `claude doctor` reports the fetch outcome on the `Managed settings (remote)` line, and names the entries Claude Code dropped when part of a payload fails validation, since it applies every remaining valid setting rather than rejecting the whole thing.
+
+Then confirm on a developer's machine:
+
+```prompt
+/status
+```
+
+The `Setting sources` line reads `Enterprise managed settings` with the selected source in parentheses: `(remote)`, `(plist)`, `(HKLM)`, `(file)`, `(drop-ins)`, or a list ending in `, merged`. A second line, `Skipped sources`, names any managed source Claude Code found and did not select, which distinguishes a policy that never reached the machine from one that reached it and lost to a higher source.
+
+## When to use / when not to use
+
+Reach for managed settings when a rule has to hold for someone who did not choose it: a compliance requirement, a credential that must stay unread, a marketplace the organization has not reviewed. Start with the three that cost nothing in developer friction and close the largest holes: a `permissions.deny` list, `disableBypassPermissionsMode`, and `sandbox.enabled`.
+
+Hold off on the locks (`allowManagedPermissionRulesOnly`, `allowManagedHooksOnly`, `strictPluginOnlyCustomization`) until you know what your developers currently rely on, because each one silently stops a lower scope from contributing and the symptom is a workflow that quietly stopped working. A small team where everyone reviews the same repository is better served by a committed project settings file and <LessonLink id="I7.1" />'s plugin, which people can read.
+
+## What managed settings cannot do
+
+Managed settings enforce policy on the client, and the docs state the limits directly.
+
+| Scenario | What happens |
+|---|---|
+| A user edits the cached settings file | The tampered file applies at startup, apart from the values withheld until the server confirms the payload. The next successful fetch restores the real policy, except for keys that apply only at the next launch |
+| A user runs an older Claude Code version | Versions predating server-managed settings never fetch them |
+| A user runs a modified binary | Anyone who can run a modified client can bypass any client-side control |
+| A user configures a third-party provider | Exporting `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_VERTEX`, or a non-default `ANTHROPIC_BASE_URL` makes Claude Code skip the fetch entirely, and a server-managed `env` block cannot clear the export because it arrives through the fetch the export prevented |
+| A user is a local administrator | They can edit the managed source itself, which is why MDM tooling redeploys on a schedule |
+| A user calls the API from another tool | Managed settings bind Claude Code alone |
+
+Three things narrow the gap. `forceRemoteSettingsRefresh` makes startup fail rather than proceed on a cached or absent policy. `requiredMinimumVersion` refuses to start an out-of-range binary. And the endpoint channel on an MDM-enrolled device is the strongest of the two, because the OS protects the file from the person typing at it.
+
+None of them survive a user who owns the machine. Managed settings raise the cost of non-compliance and produce an audit trail. The enforcement that holds against a determined user lives in device management and in what your credentials can reach.
+
+## Pitfalls
+
+- **Splitting a policy across two channels and losing half.** Symptom: the sandbox block in `managed-settings.json` never applies because the admin console delivers one key. Fix: put the whole policy in one source, or set `managedSourcesBehavior` to `"merge"` in the highest-ranked source you deploy.
+- **Enabling `"merge"` with an unprotected lower source.** Symptom: a `permissions.allow` rule you did not write joins the policy. Under `"merge"`, lower sources contribute list entries and hooks. Only turn it on when every source below your highest is administrator-controlled.
+- **Shipping a hook without warning developers.** Symptom: everyone's next session opens with a security dialog, and rejecting it exits Claude Code. Any hook definition triggers it. Tell people before the rollout lands.
+- **Turning on `forceRemoteSettingsRefresh` before checking network reachability.** Symptom: every developer is blocked at startup. If `api.anthropic.com` is unreachable, the CLI exits at startup. `claude auth` subcommands are exempt, so re-authentication still works.
+- **Expecting a managed `model` to be a lock.** Symptom: a developer runs `--model` and gets something else. A managed `model` is a default. `availableModels` with `enforceAvailableModels` is the restriction.
+- **Deploying `managed-mcp.json` through the admin console.** Symptom: nothing happens. The file cannot be distributed that way. Use `allowedMcpServers` and `deniedMcpServers` in server-managed settings, or `managedMcpServers` for remote servers.
+
+## Try It
+
+Write a policy and prove which source is in force, in about ten minutes. No admin console access required: the file-based channel works on your own machine.
+
+1. Create a managed settings file at the system path for your OS, with one rule you will recognize:
+
+```bash
+sudo mkdir -p /etc/claude-code
+sudo tee /etc/claude-code/managed-settings.json > /dev/null <<'JSON'
+{
+  "permissions": {
+    "deny": ["Read(./.env)"]
+  }
+}
+JSON
+```
+
+On macOS the directory is `/Library/Application Support/ClaudeCode/` instead.
+
+2. Add a contradicting rule to your own user settings at `~/.claude/settings.json`, allowing what the managed file denies.
+
+3. Start a session and check which one is in force:
+
+```prompt
+/permissions
+```
+
+The deny rule holds. A lower scope cannot remove a managed denial.
+
+4. Read the source:
+
+```prompt
+/status
+```
+
+The `Setting sources` line names `Enterprise managed settings (file)`.
+
+5. Add `"allowManagedPermissionRulesOnly": true` to the managed file, restart, and run `/permissions` again. Your own rules are gone from the list entirely.
+
+**Success looks like:** you can state which source `/status` selected, name one rule your user settings contributed and one they could not, and say what would change if a server-managed payload also existed on this machine.
+
+Remove the file when you are done.
+
+## FAQ
+
+**Which channel should I deploy?**
+Both, in most organizations. Endpoint-managed settings on MDM-enrolled devices give the stronger guarantee; server-managed settings are the only channel that reaches cloud sessions and the only one that changes policy without touching a machine. If you deploy both, decide the `managedSourcesBehavior` question deliberately rather than discovering it.
+
+**Can I give different teams different policies?**
+Through the file or MDM channel, yes: deploy a different profile or file to each group. The claude.ai console applies one policy to the whole organization and cannot target a group yet. A self-hosted Claude apps gateway delivers managed settings per IdP group.
+
+**What happens to a developer's own settings?**
+Array settings such as `permissions.allow` and `permissions.deny` merge entries from every source, so a developer can extend a managed list without removing from it. `fallbackModel`, `availableModels`, and `modelPicker` are replaced rather than merged. The `allowManaged*Only` keys are how you stop lower scopes contributing at all.
+
+**Does a policy reach a running session?**
+Most changes do, on the schedule for that mechanism. `forceRemoteSettingsRefresh`, `requiredMinimumVersion`, and some user-editable keys wait for the next start. A session left open for weeks can lag a rollout, and `requiredMinimumVersion` blocks an outdated binary from starting without ending a session already running.
+
+**Can I audit settings changes?**
+`ConfigChange` hooks log edits to local settings files including `managed-settings.json`. They do not fire when server-managed settings arrive or refresh, or when an MDM profile changes, and a hook cannot block a `policy_settings` change. Audit log events for admin-console settings changes are available through the compliance API or audit log export.
+
+**Which keys are managed-only?**
+Most locks: `allowManagedPermissionRulesOnly`, `allowManagedHooksOnly`, `allowManagedMcpServersOnly`, `strictPluginOnlyCustomization`, `strictKnownMarketplaces`, `blockedMarketplaces`, `disableSideloadFlags`, `forceRemoteSettingsRefresh`, `policyHelper`, and `claudeMd` among them. Placing any of these in user or project settings has no effect at all, silently. The Scope column of the settings reference is authoritative.
+
+## Where next
+
+<LessonLink id="A3.4" /> closes the module with what leaves the machine: retention and training defaults per plan, what a zero-data-retention agreement changes operationally, and the features it removes.
+
+<LessonLink id="A5.2" /> is the other half of the governance surface, where a marketplace becomes required and a plugin gets a pinned version and a release channel. The keys live in the same managed settings file this lesson just wrote.
+
+Looking back: <LessonLink id="I1.3" />'s scope ladder now has its top rung, and the `sandbox` block from <LessonLink id="A3.2" /> is the clearest example of a policy that only does its job once a developer cannot turn it off.

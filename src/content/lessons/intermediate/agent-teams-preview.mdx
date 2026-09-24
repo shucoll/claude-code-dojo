@@ -6,10 +6,10 @@ type: "core"
 order: 4
 estimatedMinutes: 6
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-07-21"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I6.3"]
 references: ["I6.1", "I2.1"]
-docsSources: ["https://code.claude.com/docs/en/agent-teams"]
+docsSources: ["https://code.claude.com/docs/en/agent-teams", "https://code.claude.com/docs/en/sub-agents"]
 ---
 
 # Agent teams: preview
@@ -22,7 +22,7 @@ This is a preview, not a how-to. It gives you enough to answer "should I care ab
 
 An agent team is several Claude Code sessions working as peers, sharing a task list and messaging each other directly.
 
-One session is the lead. It spawns the others, but it does not sit between them: teammates claim tasks off a shared list, talk to each other, and challenge each other's findings without routing through the lead. Compare that to a subagent, which is an isolated delegate that can only report back to whoever spawned it and never sees another subagent.
+One session is the lead. It spawns the others, but it does not sit between them: teammates claim tasks off a shared list, talk to each other, and challenge each other's findings without routing through the lead. Compare that to a subagent, which is an isolated delegate that returns its result to whoever spawned it. A subagent Claude named can be messaged by name afterwards, but there is no shared list to claim work from.
 
 The difference is a topology. Subagents are spokes around a hub. A team is a mesh.
 
@@ -31,16 +31,16 @@ The difference is a topology. Subagents are spokes around a hub. A team is a mes
 | | Subagents | Agent teams |
 |---|---|---|
 | **Context** | own window; result returns to the caller | own window; fully independent |
-| **Communication** | reports back to the caller only | teammates message each other directly |
+| **Communication** | returns a result to the caller; named subagents can also message each other | teammates message each other directly |
 | **Coordination** | the caller manages all work | shared task list, teammates self-claim |
 | **Best for** | focused work where only the result matters | work that needs discussion between the workers |
 | **Token cost** | lower; the result is summarized back | higher; each teammate is a full Claude instance |
 
-The deciding row is communication. If your parallel workers never need to hear from each other, subagents already do the job, more cheaply. The moment the workers need to share findings and disagree, the mesh is what subagents cannot give you.
+The deciding row is coordination. If your parallel workers never need to hear from each other, subagents already do the job, more cheaply. The moment the workers need to claim work off a shared list and challenge each other without the caller in the loop, that is the mesh.
 
 ## Why it costs more
 
-A subagent spends tokens, then hands you a summary and disappears. That summary is the compression <LessonLink id="I2.1" /> credited delegation for.
+A subagent spends tokens, then hands you a summary and stops. That summary is the compression <LessonLink id="I2.1" /> credited delegation for.
 
 A team removes that compression. Every teammate is a separate, full Claude session with its own context window, running for as long as the team does, and messages between them are more tokens on top. Cost scales with the number of active teammates, roughly linearly. Five teammates is close to five sessions' worth of spend, not one.
 
@@ -56,7 +56,7 @@ The tasks that justify the cost share a shape: independent enough to parallelize
 
 Reach for a single session or subagents instead when the work is sequential, edits the same files, or carries many dependencies. Coordination overhead is real, and three focused teammates beat five scattered ones.
 
-Two things to know before you go looking for the feature. It is **experimental and off by default**; you turn it on with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings or the environment, and it carries live limitations around resuming sessions and shutting teammates down. And the honest default answer to "should I use this today?" is usually no: the work has to genuinely need workers that talk to each other before the token bill and the coordination are worth it.
+Two things to know before you go looking for the feature. It is **experimental and off by default**; you turn it on with `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1` in settings or the environment, and it carries live limitations around resuming sessions and shutting teammates down. Flipping it on also changes plain delegation: a subagent Claude names then launches as a teammate, so a team can form when you never asked for one. And the honest default answer to "should I use this today?" is usually no: the work has to genuinely need workers that talk to each other before the token bill and the coordination are worth it.
 
 ## Where next
 

@@ -1,0 +1,12 @@
+Not a schedule. `/goal` sets a completion condition, and after every turn a small
+fast model reads the conversation and judges whether it holds.
+
+**Next turn starts when:** the previous turn finishes and the evaluator says the
+condition is not yet met. The verdict's reason becomes guidance for the next
+turn.
+
+**Machine on:** yes. **Session open:** yes.
+
+It stops on three verdicts: met, impossible, or an error you have to fix. Under
+the surface it is a session-scoped prompt-based `Stop` hook, which is why it is
+unavailable when `disableAllHooks` is set.

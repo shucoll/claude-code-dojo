@@ -5,8 +5,8 @@ title: "Permission modes and plan mode"
 type: "core"
 order: 3
 estimatedMinutes: 13
-volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-09"
+volatility: "volatile"
+verifiedAgainstDocsAt: "2026-09-17"
 prerequisites: ["B2.1"]
 teaches: ["permission-modes", "plan-mode", "accept-edits"]
 references: ["B1.3"]
@@ -45,7 +45,7 @@ The third one is different in kind from the other two. Manual and accept-edits a
 |---|---|---|
 | **Manual** (`default`) | Reads only | Starting out, or the work is sensitive |
 | **Accept edits** (`acceptEdits`) | Reads, file edits, common filesystem commands | You are reviewing the diff afterwards anyway |
-| **Plan** (`plan`) | Reads only, and Claude may not edit your source | Exploring, or the change is risky or unfamiliar |
+| **Plan** (`plan`) | Reads, plus classifier-approved commands where auto mode is available, and Claude may not edit your source | Exploring, or the change is risky or unfamiliar |
 | **Auto** (`auto`) | Everything, screened by a safety classifier | Long tasks, once you trust the direction |
 | **Don't ask** (`dontAsk`) | Only what you pre-approved; everything else is denied | CI and scripts, never interactive work |
 | **Bypass** (`bypassPermissions`) | Everything, with no checks | Only inside a throwaway container or VM |
@@ -54,7 +54,7 @@ Note the name: the mode that asks about everything is called **Manual** in the i
 
 ### Switching
 
-`Shift+Tab` cycles the three you care about:
+Which mode a session starts in depends on your plan. On Pro, Max, and Team plans new terminal sessions start in **auto**; everywhere else they start in Manual. From auto, the first `Shift+Tab` drops you to Manual, and from there the cycle runs:
 
 ```text
 Manual  →  Accept edits  →  Plan  →  (back to Manual)
@@ -72,7 +72,7 @@ Or make it a project default in `.claude/settings.json`:
 { "permissions": { "defaultMode": "plan" } }
 ```
 
-The remaining three modes are not in the cycle by default, which is itself a design statement about who they are for.
+`dontAsk` and `bypassPermissions` are not in the cycle by default, which is itself a design statement about who they are for. `auto` is, whenever it is available to your account, slotting in after plan.
 
 ### What accept-edits actually approves
 
@@ -82,7 +82,7 @@ More than its name suggests. Alongside file edits it auto-approves the ordinary 
 
 Claude reads files, runs commands to explore, and writes you a plan. **It does not edit your source.** That is the guarantee, and it is a real one.
 
-Two qualifications. Permission prompts still apply as in Manual mode, so plan mode is not a silent free-for-all; Claude asking to fetch a URL will still ask. And it is a mode, not a sandbox: it constrains what Claude does, and it is not a security boundary against a hostile prompt. For that you want deny rules or sandboxing, both later material.
+Three qualifications. The exploring is still screened, so plan mode is not a silent free-for-all: where auto mode is available the classifier reviews the commands Claude runs while planning, and otherwise anything outside the read-only set stops and asks you. It is a mode, not a sandbox: it constrains what Claude does, and it is not a security boundary against a hostile prompt. For that you want deny rules or sandboxing, both later material. And the block has one hole: in an interactive terminal session where bypass permissions are already available, plan mode stops enforcing. Claude is still told to plan rather than edit, but an edit it attempts while planning goes through. You reach that state only by starting Claude with permission checks deliberately switched off, which is the one thing this lesson tells you not to do.
 
 ### Protected paths
 
@@ -92,7 +92,7 @@ In every mode except bypass, writes to a small set of paths are **never** auto-a
 
 The cycle is explore, plan, review, approve, execute. Do it once end to end and it becomes muscle memory.
 
-**1. Enter plan mode.** Press `Shift+Tab` twice from Manual. The status bar confirms it.
+**1. Enter plan mode.** Press `Shift+Tab` until the status bar shows `⏸ plan mode on`. Prefixing a single prompt with `/plan` does the same thing for one turn.
 
 **2. Explore.** Ask for understanding, not for changes:
 
@@ -118,12 +118,11 @@ that touches the password reset flow, which is out of scope. plan again without 
 
 **5. Approve.** Claude offers you a choice of how to proceed, and the choice *is* a permission mode:
 
-- Approve and review each edit manually
-- Approve and accept edits
-- Approve and start in auto mode
-- Keep planning with feedback
+- **Yes, and use auto mode**, which reads **Yes, auto-accept edits** where auto mode is unavailable
+- **Yes, manually approve edits**
+- **No, keep planning**
 
-Approving exits plan mode and drops you into the mode you picked. For anything you care about, "review each edit manually" is the right answer the first several times.
+Approving exits plan mode and drops you into the mode you picked. For anything you care about, "manually approve edits" is the right answer the first several times.
 
 **6. Execute.** Claude implements the plan you read. Two nice touches: accepting a plan also names the session from the plan's content, so it is findable later via <LessonLink id="B2.5" />, and you can always cycle back into plan mode for the next chunk of work.
 
@@ -139,7 +138,7 @@ Approving exits plan mode and drops you into the mode you picked. For anything y
 
 **Anything touching payments, migrations, auth, or deletion.** Manual, and read every prompt. This is what the prompts are for.
 
-**You want Claude to work for twenty minutes while you get coffee.** Auto mode, if you have it, and only if you trust the direction. It is a research preview: a classifier screens each action and blocks the alarming ones. It reduces prompts; it does not guarantee safety.
+**You want Claude to work for twenty minutes while you get coffee.** Auto mode, and only if you trust the direction. A classifier screens each action and blocks the alarming ones. It reduces prompts; it does not guarantee safety.
 
 ## When to use it, and when not to
 
@@ -152,13 +151,13 @@ Two modes a beginner should simply not enable:
 - **`bypassPermissions`** skips every prompt and every safety check. It offers no protection against prompt injection or a confidently wrong model. It exists for isolated containers and VMs. It is not "accept edits, but more convenient." Claude Code will not even let you switch into it mid-session; you have to restart with an explicit flag, which is a hint.
 - **`dontAsk`** silently *denies* everything you have not pre-approved rather than asking. In an interactive session that just looks like Claude mysteriously failing. It is built for CI.
 
-**Auto mode** sits between: legitimate, useful, and still a research preview. It is a reasonable thing to grow into, not a reasonable thing to start with.
+**Auto mode** sits between, and on Pro, Max, and Team plans it is already where your sessions start. The habit to build is cycling down to Manual or plan mode when the work turns risky.
 
 ## Pitfalls
 
 - **Approval fatigue.** The real danger of Manual mode. Ten prompts in, you are clicking through. If you notice you are not reading them, that is a signal to switch to accept-edits deliberately and review the diff at the end, which is a better review than the one you were pretending to do.
 - **Assuming accept-edits only edits.** It also runs `rm`, `mv`, and friends without asking, inside your working directory. Usually fine. Worth knowing before you find out.
-- **Treating plan mode as a sandbox.** It stops Claude from editing your source. It is not a security boundary, and permission prompts still apply within it.
+- **Treating plan mode as a sandbox.** It stops Claude from editing your source. It is not a security boundary, and the commands it runs while exploring are still screened.
 - **Approving a plan you skimmed.** The entire value of plan mode is the review step. Approving a plan unread is strictly worse than not planning, because you paid the cost and skipped the benefit.
 - **Planning everything.** Ceremony is not rigor. A plan for a typo fix teaches you nothing and costs context.
 - **Forgetting which mode you are in.** After approving a plan you are no longer in plan mode; you are in whichever mode the approve option named. Glance at the status bar.
@@ -167,26 +166,26 @@ Two modes a beginner should simply not enable:
 
 **Environment:** the public repo you cloned in <LessonLink id="B2.1" />. Claude will propose edits, and it is a throwaway clone, so accept them freely.
 
-1. Start Claude. Press `Shift+Tab` twice and confirm the status bar shows plan mode.
+1. Start Claude. Press `Shift+Tab` until the status bar shows plan mode.
 2. Ask a question that requires reading several files, for example "how is this project's public API structured, and where is it exported?"
 3. Now ask for a plan: *"add input validation to the main exported function. Create a plan."*
 4. Read the plan. Find one thing to change, in scope or approach, and say so rather than approving. Watch it re-plan.
-5. Approve with **"review each edit manually."** Approve the first edit, then press `Esc` to interrupt.
+5. Approve with **"Yes, manually approve edits."** Approve the first edit, then press `Esc` to interrupt.
 6. Check the status bar. Note that you are no longer in plan mode.
 
 **Success criteria:** you can state what plan mode prevented Claude from doing during steps 2 and 3, you caused a re-plan without editing anything, and you can say which mode you ended up in after approving.
 
 ## FAQ
 
-**What are the permission modes, and how do I switch?** Manual (`default`), accept edits, plan, auto, don't ask, and bypass. `Shift+Tab` cycles the first three. Start in any with `claude --permission-mode <mode>`, or set `defaultMode` in `.claude/settings.json`.
+**What are the permission modes, and how do I switch?** Manual (`default`), accept edits, plan, auto, don't ask, and bypass. `Shift+Tab` cycles the first three, plus auto where it is available. Start in any with `claude --permission-mode <mode>`, or set `defaultMode` in `.claude/settings.json`.
 
-**What exactly does plan mode prevent?** Editing your source. Claude can read files and run exploratory commands, and it writes a plan instead of changes. Permission prompts still apply as usual, and it is not a security sandbox.
+**What exactly does plan mode prevent?** Editing your source. Claude can read files and run exploratory commands, and it writes a plan instead of changes. The commands it runs while exploring are screened, by the auto-mode classifier where that is available and by a permission prompt otherwise, and it is not a security sandbox.
 
 **When should accept-edits be on?** When you are going to review the result anyway, with `git diff` or your editor, and the per-edit prompts are adding nothing but fatigue. Not when the work touches anything you would hate to have changed silently.
 
 **What should a beginner never enable?** `bypassPermissions`. It disables prompts *and* safety checks and offers no protection against prompt injection. Reserve it for throwaway containers. Also skip `dontAsk`, which denies rather than asks and is meant for CI.
 
-**Is auto mode safe?** Safer than bypass, and explicitly a research preview. A classifier screens each action and blocks risky categories, and it pauses back to prompting if it blocks repeatedly. Use it where you trust the direction of the task, not as a substitute for review on sensitive operations.
+**Is auto mode safe?** Safer than bypass, and on Pro, Max, and Team plans it is the mode sessions start in. A classifier screens each action and blocks risky categories, and it pauses back to prompting if it blocks repeatedly. Use it where you trust the direction of the task, not as a substitute for review on sensitive operations.
 
 **Can Claude change its own permission mode?** No. Modes are set by you, through `Shift+Tab`, a flag, or settings. Asking Claude in chat to change modes does not do it.
 

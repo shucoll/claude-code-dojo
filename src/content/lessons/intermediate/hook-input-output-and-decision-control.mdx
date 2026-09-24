@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 15
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-17"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I4.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
@@ -97,9 +97,9 @@ The real control lives under `hookSpecificOutput`, keyed by the event. For `PreT
 | `"allow"` | the call proceeds with no permission prompt |
 | `"deny"` | the call is blocked |
 | `"ask"` | the user gets the normal permission dialog |
-| `"defer"` | fall back to the model's normal decision |
+| `"defer"` | the call is paused so a `claude -p` integration can collect input and resume it later; ignored in interactive sessions |
 
-`permissionDecisionReason` is the sentence Claude reads when you deny, which is the difference that matters: an exit-`2` block tells Claude only that something stopped it, while a JSON deny with a reason tells it *why*, so it can adjust its approach instead of retrying blindly. Two more fields sharpen it further: `additionalContext` injects a note into the conversation regardless of the decision, and `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path), turning the hook from a gate into an editor.
+`permissionDecisionReason` is the sentence Claude reads when you deny, which is the difference that matters: an exit-`2` block tells Claude only that something stopped it, while a JSON deny with a reason tells it *why*, so it can adjust its approach instead of retrying blindly. Two more fields sharpen it further: `additionalContext` injects a note into the conversation alongside any decision except `defer`, and `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path), turning the hook from a gate into an editor. `updatedInput` replaces the entire input object rather than patching it, so echo back every field you are not changing alongside the ones you are, or the omitted fields are dropped. Claude Code then evaluates permission rules and a Bash command's auto-background eligibility against the input your hook returned, not the one Claude sent.
 
 Other events expose their own `hookSpecificOutput`. `PermissionRequest` (the dialog itself) takes a `decision.behavior` of `allow` or `deny`, which is how a hook answers a permission prompt for you. `SessionStart` takes `additionalContext` to load state. The pattern is constant: name the event in `hookEventName`, then set that event's decision fields.
 
@@ -220,7 +220,7 @@ Register it on `PermissionRequest`, with an `if` clause so it is only consulted 
 
 - **You want every prompt to start with the current branch and open PR.** A `UserPromptSubmit` hook that prints those as `additionalContext`. The turn begins already knowing the state you would otherwise have to paste.
 
-- **You want a tool call to always carry a flag.** A `PreToolUse` hook that returns `permissionDecision: "allow"` with `updatedInput` rewriting the command to add `--dry-run`. The hook is an editor here, not a gate.
+- **You want a tool call to always carry a flag.** A `PreToolUse` hook that returns `permissionDecision: "allow"` with `updatedInput` carrying the whole `tool_input` back, command included, with `--dry-run` appended. The hook is an editor here, not a gate.
 
 - **You want "done" to require passing tests.** A `Stop` hook that runs the suite and, on failure, blocks (exit `2` with the failures on stderr, or a JSON `decision: "block"`). Claude cannot end the turn until it is green. This is armed in full in <LessonLink id="I4.3" />.
 
@@ -265,7 +265,7 @@ The cost is the same as any hook: execution time on the event, and now the added
 
 **What do exit codes 0 and 2 mean?** `0` is success, and any stdout is parsed as JSON output. `2` is a blocking error: stderr is fed to Claude and the event is blocked, where "blocked" depends on the event (deny the tool on `PreToolUse`, keep working on `Stop`, drop the prompt on `UserPromptSubmit`). Other codes are non-blocking errors that let execution continue.
 
-**How does JSON output block, approve, or inject?** Under `hookSpecificOutput`, keyed by `hookEventName`. Block with `permissionDecision: "deny"` and a `permissionDecisionReason`; approve a dialog with `PermissionRequest` and `decision.behavior: "allow"`; inject with `additionalContext`; rewrite arguments with `updatedInput`.
+**How does JSON output block, approve, or inject?** Under `hookSpecificOutput`, keyed by `hookEventName`. Block with `permissionDecision: "deny"` and a `permissionDecisionReason`; approve a dialog with `PermissionRequest` and `decision.behavior: "allow"`; inject with `additionalContext`; rewrite arguments by returning the whole input object in `updatedInput`.
 
 **How do multiple hooks on one event combine?** They run in parallel, identical handlers deduplicated. All `additionalContext` is accumulated; for decisions the most restrictive wins, so any `deny` or exit `2` blocks regardless of what the others say.
 

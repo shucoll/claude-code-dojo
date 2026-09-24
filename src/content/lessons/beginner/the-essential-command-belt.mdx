@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-07-09"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["B2.1"]
 teaches: ["slash-commands", "command-belt"]
 references: ["B2.2"]
@@ -32,7 +32,7 @@ The distinction is simpler than it looks, and it explains why the list is short.
 
 **Typing normally** sends a message to Claude. Claude reads it, decides what to do, and uses tools. "Fix the failing test," "explain this function," "commit my changes." Anything you want *done to your code* is a sentence, not a command.
 
-**A slash command** does not go to Claude at all. It tells the Claude Code harness to do something to your session: wipe it, summarize it, resume it, show you what it costs. Claude is not asked and cannot refuse. `/clear` is not a request to forget; it is the conversation being replaced.
+**A built-in slash command** does not go to Claude at all. It tells the Claude Code harness to do something to your session: wipe it, summarize it, resume it, show you what it costs. Claude is not asked and cannot refuse. `/clear` is not a request to forget; it is the conversation being replaced. Custom commands you add later are the other kind: they expand into a prompt Claude reads.
 
 So the rule is: **if it acts on your code, say it. If it acts on your session, command it.**
 
@@ -73,7 +73,7 @@ Two pairs are worth pulling apart now, because they are the ones beginners confl
 
 **Which commands do I actually need daily?** The seven marked in the grid: `/help`, `/context`, `/compact`, `/clear`, `/resume`, `/rewind`, `/model`. Realistically you will use `Esc`, `@`, and `!` even more, and those are not commands at all.
 
-**What is the difference between a slash command and just typing?** Typing sends a message to Claude, which then decides what to do. A slash command instructs the harness directly and never reaches Claude. Act on your code by asking; act on your session by commanding.
+**What is the difference between a slash command and just typing?** Typing sends a message to Claude, which then decides what to do. A built-in slash command instructs the harness directly and never reaches Claude. Act on your code by asking; act on your session by commanding.
 
 **Do I have to memorize the rest?** No. Type `/` and the menu filters as you type. The grid above exists so you know what *exists*, not so you can recite it.
 

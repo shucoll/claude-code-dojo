@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-07-21"
+verifiedAgainstDocsAt: "2026-09-14"
 prerequisites: ["I3.1", "I4.1", "I5.1"]
 references: ["I1.3", "I2.1"]
 docsSources: ["https://code.claude.com/docs/en/discover-plugins", "https://code.claude.com/docs/en/plugins", "https://claude.com/plugins"]
@@ -46,7 +46,7 @@ At the plugin's root:
 | `.lsp.json` | language server configuration |
 | `monitors/monitors.json` | background watchers that notify Claude as events arrive |
 | `bin/` | executables added to the Bash tool's `PATH` while the plugin is enabled |
-| `settings.json` | default settings applied when enabled |
+| `settings.json` | default settings applied when enabled, limited to the `agent` and `subagentStatusLine` keys |
 
 Only `plugin.json` goes inside `.claude-plugin/`. Every other directory sits at the plugin root, which is the most common structural mistake.
 
@@ -56,7 +56,7 @@ Plugin skills are namespaced by the plugin name. A `commit` skill inside `commit
 
 The official Anthropic marketplace, `claude-plugins-official`, is registered the first time you start Claude Code interactively. Everything else you add yourself:
 
-```bash
+```prompt
 /plugin marketplace add anthropics/claude-code
 /plugin marketplace add https://gitlab.com/company/plugins.git
 /plugin marketplace add ./my-marketplace
@@ -90,17 +90,17 @@ The plugin details pane shows a **Context cost** estimate before you install, an
 
 Add Anthropic's demo marketplace:
 
-```bash
+```prompt
 /plugin marketplace add anthropics/claude-code
 ```
 
 Open the manager:
 
-```bash
+```prompt
 /plugin
 ```
 
-Four tabs, cycled with **Tab** and **Shift+Tab**:
+Five tabs, cycled with **Tab** and **Shift+Tab**:
 
 | Tab | Shows |
 |---|---|
@@ -108,24 +108,21 @@ Four tabs, cycled with **Tab** and **Shift+Tab**:
 | **Installed** | what you have, grouped by scope |
 | **Marketplaces** | your catalogs, with add, update, and remove |
 | **Errors** | plugins that failed to load, and why |
+| **Stats** | what each skill costs in context and how often it is used, where `/skill-doctor` is available |
 
 In **Discover**, select `commit-commands` and read its detail pane before pressing Enter. Then install, choosing user scope:
 
-```bash
+```prompt
 /plugin install commit-commands@claude-code-plugins
 ```
 
 The marketplace name is `claude-code-plugins` even though you added it as `anthropics/claude-code`. Catalogs name themselves, so take the identifier from the Discover listing rather than from what you typed.
 
-Activate it without restarting:
-
-```bash
-/reload-plugins
-```
+The install summary says whether the plugin is active. If it reports `Run /reload-plugins to activate.`, Claude Code runs that reload for you; if the reload warns that your next message would re-read the conversation, run `/reload-plugins --force`.
 
 Then use it:
 
-```bash
+```prompt
 /commit-commands:commit
 ```
 
@@ -133,20 +130,20 @@ Your changes get staged, a message written, and the commit made.
 
 ### Managing what you installed
 
-```bash
+```prompt
 /plugin list --enabled
 /plugin disable commit-commands@claude-code-plugins
 /plugin enable commit-commands@claude-code-plugins
 /plugin uninstall commit-commands@claude-code-plugins
 ```
 
-Disabling keeps the plugin on disk and stops it loading, which is the right move when you are diagnosing a conflict or trimming context. Uninstalling removes it.
+Disabling keeps the plugin on disk and stops it loading, which is the right move when you are diagnosing a conflict or trimming context. Uninstalling removes it. `disable`, `enable`, and `uninstall` open the plugin panel to make the change and leave it open; press **Esc** to close it, which is when Claude Code reloads and the change reaches the running session. The `claude plugin` shell commands do the same work without the panel.
 
 The **Installed** tab groups plugins you have not used in two weeks across at least ten sessions under **Not used recently**, with a **Last used** line in each detail view. That list is where startup and context cost accumulates unnoticed.
 
 Marketplaces are updated separately from plugins:
 
-```bash
+```prompt
 /plugin marketplace update claude-plugins-official
 ```
 
@@ -168,7 +165,7 @@ Browse the full catalog at [claude.com/plugins](https://claude.com/plugins). The
 
 The community marketplace is separate and added by hand:
 
-```bash
+```prompt
 /plugin marketplace add anthropics/claude-plugins-community
 /plugin install <name>@claude-community
 ```
@@ -206,7 +203,7 @@ Organizations can restrict which marketplaces users may add through managed sett
 
 ## Pitfalls
 
-- **You install a plugin and its skill does not appear.** Installing does not activate. Run `/reload-plugins`, or restart. If it is still missing, check the **Errors** tab first, then clear the cache with `rm -rf ~/.claude/plugins/cache` and reinstall.
+- **You install a plugin and its skill does not appear.** Most installs activate on the spot. When one does not, the summary reports `Run /reload-plugins to activate.` and Claude Code runs that reload for you; a reload held back by the prompt cache needs `/reload-plugins --force`. If it is still missing, check the **Errors** tab first, then clear the cache with `rm -rf ~/.claude/plugins/cache` and reinstall.
 
 - **You invoke the skill by its bare name and get nothing.** Plugin skills are namespaced. It is `/commit-commands:commit`, not `/commit`. `/help` lists them under the plugin's namespace.
 
@@ -227,7 +224,7 @@ Organizations can restrict which marketplaces users may add through managed sett
 1. Run `/context` and record the total.
 2. Run `/plugin marketplace add anthropics/claude-code`, then `/plugin` and browse **Discover**.
 3. Open the detail pane for a plugin with an MCP server and one without. Compare their **Context cost** estimates and read both **Will install** lists.
-4. Install `commit-commands` at user scope, run `/reload-plugins`, then `/context` again. Note what moved.
+4. Install `commit-commands` at user scope, then run `/context` again. Note what moved.
 5. Make a trivial edit and run `/commit-commands:commit`.
 6. Run `/plugin disable commit-commands@claude-code-plugins`, then `/context` a third time.
 
