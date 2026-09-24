@@ -4,52 +4,163 @@ slug: "data-handling"
 title: "Data handling"
 type: "core"
 order: 4
-estimatedMinutes: 8
+estimatedMinutes: 10
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["retention", "zero-data-retention", "session-hygiene"]
-references: ["B1.3", "A2.3"]
-docsSources: ["https://code.claude.com/docs/en/data-usage", "https://code.claude.com/docs/en/zero-data-retention"]
+verifiedAgainstDocsAt: "2026-09-24"
+teaches: ["retention", "training-policy", "zero-data-retention", "session-hygiene"]
+references: ["B1.3", "A2.3", "A3.3"]
+docsSources: ["https://code.claude.com/docs/en/data-usage", "https://code.claude.com/docs/en/zero-data-retention", "https://code.claude.com/docs/en/code-review", "https://code.claude.com/docs/en/ultrareview"]
 ---
 
 # Data handling
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+Somebody in procurement is going to ask what happens to the code. The answer has three parts that get confused with each other: what Anthropic retains, what Anthropic trains on, and what stays on the developer's disk. They have different answers, different durations, and different switches.
 
-## The concept
+Every fact below comes from the official policy pages listed under Official docs, which are the version that governs.
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+## What leaves the machine
 
-## How it works
+Claude Code runs locally and sends data over the network to reach the model. That traffic is every prompt and every model output, encrypted in transit with TLS 1.2 or better. Encryption at rest depends on the provider: AES-256 infrastructure disk encryption on the Anthropic API, AWS-managed or KMS customer-managed keys on Bedrock, Google-managed or CMEK on Google Cloud's Agent Platform, and on Microsoft Foundry it depends on the hosting option, where a Hosted on Azure deployment keeps prompts and completions inside Azure.
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+Four other channels exist, and each has its own switch:
 
-## Walkthrough
+| Channel | What it carries | Turn it off with |
+|---|---|---|
+| Usage metrics | Latency, reliability, usage patterns. Never your code, prompts, or file paths | `DISABLE_TELEMETRY=1` |
+| Error reports | Error messages and stack traces from Claude Code's internals, with known secret, path, and email patterns redacted first | `DISABLE_ERROR_REPORTING=1` |
+| `/feedback`, `/bug`, `/share` | A copy of your conversation history including code | `DISABLE_FEEDBACK_COMMAND=1` |
+| Session quality survey | The rating alone; the transcript follow-up is a separate opt-in | `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY=1` |
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` turns off all of them at once. One channel it does not cover: before fetching a URL, WebFetch sends the hostname (and nothing else, no path, no page contents) to `api.anthropic.com` to check it against a safety blocklist. That check runs on every provider and has its own opt-out, `skipWebFetchPreflight` in settings.
 
-## Use-case scenarios
+On Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry, and Claude Platform on AWS, metrics, error reporting, and feedback are off by default. Session quality surveys and the WebFetch check still run.
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+The survey has two steps that are easy to conflate. Answering the rating, including choosing Dismiss, records the rating and nothing else. A separate follow-up then asks whether Anthropic may look at your transcript; choosing **Yes** uploads the conversation, any subagent transcripts, and the raw session log from disk. Known API key and token patterns are redacted, and source code and file contents go as-is. Shared transcripts are kept up to six months and are never used to train models.
 
-## When to use / when not to use
+## Retention and training
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Two questions, four answers, and the split is between consumer and commercial accounts.
 
-## Pitfalls
+| Account | Trained on | Retained |
+|---|---|---|
+| Free, Pro, Max with data use for model improvement on | Yes | 5 years |
+| Free, Pro, Max with it off | No | 30 days |
+| Team, Enterprise, API, third-party platforms, Claude Gov | No | 30 days |
+| Enterprise with zero data retention | No | Not stored after the response returns |
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+Commercial terms say Anthropic does not train generative models on code or prompts sent to Claude Code, and the exception is an opt-in an admin makes deliberately: the Development Partner Program, which is available on the Anthropic first-party API alone. Consumer privacy settings change at any time in claude.ai settings.
+
+Two retention numbers sit outside that table. Transcripts shared through `/feedback`, `/bug`, or `/share` are kept for five years, whatever your plan. And transcripts uploaded through the session-survey follow-up are kept up to six months.
+
+### What stays on your disk
+
+Claude Code writes session transcripts to `~/.claude/projects/` in plaintext, kept 30 days by default so sessions can be resumed. `cleanupPeriodDays` changes the window. Transcripts from sessions started or most recently continued in the desktop app or Cowork are exempt from that limit by default.
+
+A local plaintext transcript is a file on a laptop with the same backup, sync, and disk-encryption story as every other file on it. For a regulated environment, that is a line item, and it is the one on this page that no server-side agreement touches.
+
+## Zero data retention
+
+With ZDR enabled, prompts and model responses from Claude Code sessions are processed in real time and not stored by Anthropic after the response returns, except where needed to comply with law or combat misuse.
+
+It is available to qualified accounts on Claude for Enterprise. It sits outside the standard Enterprise plan, cannot be switched on from admin settings, and is enabled per organization by your account team after an eligibility review. A new organization under the same account needs its own enablement.
+
+### What it does not cover
+
+ZDR applies to Claude Code inference on Claude for Enterprise. Outside that boundary, standard retention applies: chat on claude.ai, Cowork sessions, analytics (which stores no prompts or responses but does collect account emails and usage statistics, and drops contribution metrics for ZDR organizations), user and seat management, and anything processed by third-party tools or MCP servers. That last row is the one <LessonLink id="A3.1" /> already argued from a different direction: a connected server is somebody else's infrastructure, and your retention agreement does not reach it.
+
+Even under ZDR, a session flagged for a Usage Policy violation may have its inputs and outputs retained for up to two years.
+
+### Routing traffic into the ZDR organization
+
+ZDR covers requests that authenticate into a ZDR-enabled organization. A developer who signs in with a personal account, or with an API key belonging to a different organization, is outside it, and nothing about their terminal looks different.
+
+The fix is the managed settings from <LessonLink id="A3.3" />: deploy `forceLoginMethod` and `forceLoginOrgUUID` so a claude.ai login has to belong to your organization. Without it, an organization can hold a ZDR agreement while its developers' sessions route around it.
+
+### The features it removes
+
+This is the part that makes ZDR an engineering decision rather than a legal one. Features that need to store prompts or completions are disabled at the backend, regardless of what the client shows:
+
+| Disabled | Why |
+|---|---|
+| Cloud sessions, including from the desktop app | Server-side storage of session data |
+| Claude Tag | Retains channel memory and session transcripts |
+| Artifacts | Stores published page content on Anthropic infrastructure |
+| `/feedback`, `/bug`, `/share` | Submission sends conversation data to Anthropic |
+| Remote Control | Stores the transcript on Anthropic servers to sync across devices |
+| Code Review | The managed PR product runs on Anthropic infrastructure |
+| Ultrareview | Runs as a cloud session |
+
+The last two are the reason <LessonLink id="A2.3" /> and this lesson cross-link. Turning ZDR on deletes two of the five rows in that lesson's review stack, and the remaining path is local `/code-review`, including the `--comment` form run from a CI step. The two degrade differently: `/code-review ultra` falls back to a local review in your session when ultrareview is unavailable, while Code Review has no in-product fallback at all.
+
+The ZDR page's table is the canonical list, and it does not name Code Review or ultrareview. Those two state their own ZDR exclusion on their own pages. When you are answering a procurement question about a specific feature, read that feature's page rather than the summary table.
+
+### Models under ZDR
+
+Claude Fable 5.1 and Fable 5 are Covered Models that require data retention by default, and whether a ZDR organization can use them is decided by the Covered Models policies. Where it cannot, the models are absent from the `/model` picker or shown as disabled, and the server rejects requests for them whatever the client asks for. Other models stay available. Fable is not a default, and the `best` alias resolves to Opus for organizations where Fable is unavailable.
+
+## Hygiene that holds regardless of policy
+
+<LessonLink id="B1.3" /> started this arc by drawing the boundary of what Claude can see. The end of it is a short list that holds under every plan, every provider, and every agreement, because the cheapest data to protect is the data that never entered a session.
+
+**Credentials stay out.** No pasted API keys, no `.env` contents in a prompt, no "here is the connection string so you can check it." Scope a credential down rather than trusting a transcript to stay private, and back the intention with mechanism: a `permissions.deny` rule on `Read(./.env)` and `Read(./secrets/**)`, plus the `sandbox.credentials` block from <LessonLink id="A3.2" /> that stops a sandboxed command reading `~/.ssh` and unsets the token in its environment.
+
+**Regulated and customer data stays out.** PII, PHI, cardholder data, and anything under a contractual handling requirement belong in a redacted fixture rather than in a prompt. A model that needs realistic input can have realistic shapes without real people in them.
+
+**Decide about the local transcripts deliberately.** Set `cleanupPeriodDays` to something your policy can defend, and know that the default is 30 days of plaintext.
+
+**Decide about the survey once, for the fleet.** The transcript follow-up is opt-in per session and a developer under deadline pressure is the wrong place for that decision. ZDR organizations and organizations blocking nonessential traffic never see it; everyone else should set `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` or a deliberate `feedbackSurveyRate`.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Audit your own machine in five minutes and produce two numbers you can put in a document.
+
+Find out how much plaintext history you are holding, and how old the oldest of it is:
+
+```bash
+du -sh ~/.claude/projects/
+find ~/.claude/projects/ -name '*.jsonl' -mtime +30 | wc -l
+```
+
+The second number should be `0` on default settings. Anything above it means a longer `cleanupPeriodDays`, a desktop or Cowork session exempt from the limit, or a setting somebody changed.
+
+Then confirm which outbound channels are live in your configuration:
+
+```prompt
+Read my settings files and report which of these are set anywhere, and in
+which file: DISABLE_TELEMETRY, DISABLE_ERROR_REPORTING,
+DISABLE_FEEDBACK_COMMAND, CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY,
+CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, cleanupPeriodDays,
+and skipWebFetchPreflight.
+```
+
+**Success looks like:** you can state your local retention window, your plan's server-side retention window, whether your account is trained on, and which of the four outbound channels is currently on.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Is my code used to train models?**
+On Team, Enterprise, API, third-party platforms, and Claude Gov, no, unless an admin opted the organization into the Development Partner Program. On Free, Pro, and Max it follows your data-use setting, which you control in claude.ai privacy settings.
+
+**Does ZDR mean nothing is ever stored?**
+It means prompts and model responses from Claude Code inference are not retained after the response returns. Account emails, usage statistics, and seat data are retained under standard policies, a session flagged for a policy violation can be retained up to two years, and the local plaintext transcripts on the developer's disk are untouched by any of it.
+
+**We use Bedrock. Does ZDR apply?**
+ZDR for Claude Code on Claude for Enterprise applies to Anthropic's direct platform. For Bedrock, Google Cloud's Agent Platform, and Microsoft Foundry, those platforms' retention policies govern, and the encryption-at-rest row for your provider is the one that matters.
+
+**What does `/feedback` actually send?**
+A copy of your conversation history including code, and you choose how much: the current session by default, or also other sessions from the same project over the last 24 hours or 7 days. It is kept for five years. On a third-party provider or with no Anthropic credentials configured, it writes to a local archive under `~/.claude/feedback-bundles/` instead, with known key and token patterns redacted, and nothing leaves the machine until you send that file yourself.
+
+**Can I turn off everything outbound except inference?**
+Close: `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` covers metrics, error reports, feedback, and surveys. The WebFetch hostname check is separate and needs `skipWebFetchPreflight`; turning it off means WebFetch consults no blocklist, so pair it with `WebFetch` permission rules.
+
+**Who decides this for the organization?**
+The retention posture comes with the plan and the provider. The switches are managed settings, so <LessonLink id="A3.3" />'s delivery channels are how a decision here becomes a fact on twenty machines rather than a paragraph in a wiki.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+That closes module A3. You have the threat model from <LessonLink id="A3.1" />, the containment from <LessonLink id="A3.2" />, the enforcement from <LessonLink id="A3.3" />, and the data posture here.
+
+<LessonLink id="A4.1" /> opens the next module on a different axis entirely: what all of this costs, starting with prompt caching and why session hygiene turns into money.
+
+<LessonLink id="A7.4" /> is where module A3 comes due. The governance pack asks for managed settings and managed MCP configured as if rolling out to a twenty-developer organization, and the ZDR feature table above is part of what the written justification has to account for.
