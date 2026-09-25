@@ -1,0 +1,10 @@
+Each model has its own cache, so a switch reads the entire conversation history
+with no cache hits even though the content is identical.
+
+`/model` is the obvious case, and Claude Code asks you to confirm while the
+cache is still warm and the new model is not the one that produced the last
+response. Three more count as model switches. The `opusplan` setting makes
+every plan-mode toggle one. Automatic model fallback re-runs a request on another
+model after a safety classifier flags it, and the session continues there. And
+a skill or command whose frontmatter names a different `model` switches for
+that turn, with the session model resuming on your next prompt.

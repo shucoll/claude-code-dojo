@@ -4,52 +4,182 @@ slug: "prompt-caching-and-session-hygiene"
 title: "Prompt caching: why session hygiene is money"
 type: "core"
 order: 1
-estimatedMinutes: 13
+estimatedMinutes: 15
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["prompt-caching", "cache-invalidation", "session-hygiene"]
-references: ["B2.2", "I2.1", "A1.1", "A1.5"]
+verifiedAgainstDocsAt: "2026-09-25"
+teaches: ["prompt-caching", "cache-invalidation", "cache-ttl", "session-hygiene"]
+references: ["B2.2", "I2.1", "A1.1", "A1.5", "A4.2", "A4.3"]
 docsSources: ["https://code.claude.com/docs/en/prompt-caching", "https://code.claude.com/docs/en/costs"]
+interactive:
+  - kind: "diagram"
+    spec: "cache-invalidation-board"
 ---
 
 # Prompt caching: why session hygiene is money
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+A session that has been open since morning answers a one-line question, and the answer takes eight seconds instead of two. Nothing about the question was hard. What changed is that you switched models an hour ago, and the request behind that one-line question reprocessed every token of the morning's work from scratch.
+
+Claude Code re-sends your whole conversation on every turn. <LessonLink id="B2.2" /> covered that as memory and <LessonLink id="I2.1" /> covered what it costs to load. Underneath both sits an economic layer: repeated context is cheap only while the cache holds it, and a handful of ordinary actions decide whether it does.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Each message you send is a new API request. The model remembers nothing between requests, so Claude Code re-sends everything: the system prompt, your project context, every prior message and tool result, and your new message. New content goes at the end, which means most of each request is identical to the one before it.
+
+The API caches by matching the beginning of each request, called the prefix, against content it processed recently. On a normal turn the prefix is the entire previous request and only the latest exchange is new. That match is exact, and there is no per-file or per-segment caching. A change anywhere in the prefix means everything after it is recomputed, because all of that content now sits behind a different prefix.
+
+Tokens read from cache are billed at the cached rate, below the standard input rate. Rebuilding them is billed at the cache write rate, and the turn is slower while it happens. So every mid-session action reduces to one question: does it touch the prefix?
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The layers, ordered by how often they change
 
-## Walkthrough
+To get the most out of prefix matching, Claude Code puts the content that rarely changes first.
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+| Layer | Content | Changes when |
+|---|---|---|
+| System prompt | Core instructions, tool definitions | The set of loaded tool definitions changes |
+| Project context | CLAUDE.md, auto memory, unscoped rules | Session starts, or after `/clear` or `/compact` |
+| Conversation | Your messages, Claude's responses, tool results | Every turn |
 
-## Use-case scenarios
+A change in the conversation layer leaves the two layers above it cached, which is the ordinary case for a normal turn. A change in the system prompt invalidates everything, because the project context and the whole conversation now sit behind a different prefix. That asymmetry accounts for most of the behavior in this lesson.
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+Two settings sit outside the table and still decide what stays cached. Each model has its own cache, so switching recomputes the entire request even when the content is identical. Effort level behaves the same way on most models, with one exemption covered further down.
 
-## When to use / when not to use
+### Where the cache lives, and how far it reaches
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Caching happens server-side, in whichever infrastructure serves your model: Anthropic's for an API key, a Claude subscription, or Claude Platform on AWS; your cloud provider's on Amazon Bedrock and Google Cloud's Agent Platform; and wherever your requests land behind an LLM gateway or a custom `ANTHROPIC_BASE_URL`.
 
-## Pitfalls
+Inside Claude Code the reach is narrower than the API's. Each conversation carries the working directory, platform, shell, and OS version, and the system prompt names your auto memory paths, so the cache is effectively scoped to one machine and one directory. Two sessions in different directories build different prefixes and miss each other's cache entirely.
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+That includes two worktrees of the same repository, because each worktree has its own working directory. The parallelism <LessonLink id="A1.1" /> sets up therefore carries a cost that nothing else about worktrees suggests: every worktree warms its own prefix from cold.
+
+Sessions running in parallel in the same directory do build matching prefixes and read each other's cache. Sequential sessions in that directory share it only when the git status snapshot taken at startup matches, since each conversation also carries the branch and recent commits from that snapshot.
+
+### How long it survives
+
+A cached prefix expires after a period of inactivity, and every request that hits it resets the timer. The API offers two lifetimes: five minutes, and one hour, which bills cache writes at a higher rate in exchange for surviving longer breaks.
+
+Claude Code chooses per request, and every request falls into one of two buckets. The main conversation covers your interactive turns, non-interactive `-p` runs, Agent SDK turns, and the helpers Claude Code runs inline with them. Everything else covers the requests made outside that conversation: subagents, workflows, in-process teammates, forks, compaction, and session titles.
+
+| Request bucket | Claude subscription, within plan usage | Usage credits, API key, or cloud provider |
+|---|---|---|
+| Main conversation | One hour | Five minutes |
+| Everything else | Five minutes, apart from server-controlled helper requests | Five minutes |
+
+Once you pass your plan's usage limit and start drawing on usage credits, you are billed for that usage, so Claude Code drops the main conversation to the cheaper five-minute lifetime. To keep the hour there, or to get it on an API key at all, set `promptCacheTtl` to `1h`. The second bucket takes `subagentPromptCacheTtl`. Both accept `5m` or `1h`, both have matching environment variables (`CLAUDE_CODE_PROMPT_CACHE_TTL` and `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`), and both require Claude Code v2.1.242 or later.
+
+The second setting is the one automation touches. A fan-out of workflow agents or a long-running subagent gets five minutes by default even on a subscription, and that is the bucket most likely to sit idle between turns. In a fan-out of same-prefix agents, Claude Code holds all but the first for up to five seconds so their opening requests can read the prefix the first agent cached, which is the runtime doing for you what the TTL setting does across a longer gap. <LessonLink id="A1.5" /> is where that bill lands.
+
+## What keeps the cache and what rebuilds it
+
+<ChartEmbed id="cache-invalidation-board" />
+
+### Three rules that depend on tool search
+
+Three actions commonly listed as cache killers cost nothing in the default configuration, for the same reason.
+
+Tool definitions sit in the system prompt layer, so what matters is whether a given set of definitions is in the prefix at all. Tool search defers MCP tool definitions by default on supported models, which keeps them out of it. With them out:
+
+- Connecting or disconnecting an MCP server appends new content and disturbs nothing already cached.
+- Enabling or disabling a plugin keeps the cache for skills, commands, agents, hooks, monitors, and themes. Only a plugin that provides MCP servers can cost anything, under the same rule.
+- Denying a whole tool by bare name leaves the request's tool definitions unchanged, so the prefix survives. Claude Code enforces the rule when Claude attempts the call.
+
+Tools load into the prefix when tool search is unavailable or disabled, for a server or tool marked `alwaysLoad`, and for definitions kept upfront by threshold-based loading. In those configurations all three actions above rebuild the cache, and a server that drops and reconnects on its own does it without you touching anything.
+
+Effort is the fourth conditional entry on the board, for an unrelated reason. Changing it mid-session rebuilds the cache on most models and keeps it on Opus 5.5 and Fable 5.1 with an API key or a Claude subscription. <LessonLink id="A4.2" /> carries the rest of that decision.
+
+### Two ways to abandon a path
+
+`/rewind` and `/compact` both discard work you no longer want, at different prices. Compaction replaces the message history with a summary, so the conversation layer rebuilds from a prefix that shares nothing with the old one. `/rewind` truncates back to an earlier turn, and what remains is the same content the cache was built from at that point. Every turn since then read through that prefix, which kept it warm even when the original turn is older than the TTL.
+
+Compaction is still cheaper than it sounds while the cache is warm. To produce the summary, Claude Code sends a separate request carrying the same system prompt, tools, and history plus a summarization instruction, and that request reads your prefix from cache, so most of what a mid-session `/compact` costs is generating the summary. The expensive case is compacting a session you resumed after a long break, where the prefix has expired and the summarization reprocesses the full history as uncached input.
+
+## Reading your own cache performance
+
+Two token counts come back on every API response. `cache_read_input_tokens` is what was served from cache on that turn. `cache_creation_input_tokens` is what was written to it. A high read-to-creation ratio means caching is working. Creation staying high turn after turn means something in your prefix keeps changing.
+
+For a per-session summary, run:
+
+```prompt
+/usage
+```
+
+After the main conversation's first response, the Session block carries a `Prompt cache (main)` line:
+
+```text
+Prompt cache (main):   14 requests · 91% of input tokens from cache · 2 misses (last 6m 10s ago, 310.2k tokens re-cached) · 1 expected rebuild (compaction or tool-result clearing) · warm (1h TTL, last activity 40s ago)
+```
+
+The line has three parts to read separately. Misses are requests that reprocessed content the cache already held, counted when a request reprocessed more than 5% and at least 2,000 tokens of what it could have read. Expected rebuilds are the same event when Claude Code caused it itself, through compaction or by clearing old tool results, broken out so they do not read as your doing. The warm or cold reading reports whether the prefix is still inside its lifetime and names the TTL in effect, which is the quickest confirmation of which bucket you are getting.
+
+Since v2.1.260 the line also names a likely cause for the last miss where Claude Code can identify one, such as `likely cause: tool definitions changed`. The line itself requires v2.1.251 or later, covers the main conversation only, and resets with the rest of the Session block on `/clear`. A status line script reads the same numbers from the `prompt_cache` object, and the OpenTelemetry exporter reports cache read and creation tokens per user and session, which is how <LessonLink id="A4.3" /> takes this across a team.
+
+## Habits that follow
+
+Set model and effort at the top of a session. Choosing either before the conversation has any length to lose costs nothing.
+
+Run `/compact` at task boundaries. Waiting for auto-compaction to fire means it happens mid-task, at whatever size the context has reached by then.
+
+Reach for `/rewind` when you are abandoning a path rather than summarizing one. It lands on a prefix that is already cached.
+
+Turn fast mode on at the start of a session if you are going to turn it on at all. The header costs one uncached read of the whole history, billed at fast mode rates, once per conversation. Deep into a long session is the most expensive moment to pay it.
+
+Expect the first turn back from a break to be slow. After a gap longer than the TTL there is no prefix left to read. On a subscription within plan usage that gap is an hour; everywhere else it is five minutes until you set `promptCacheTtl`.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Read your own cache numbers, then cause a miss on purpose and have Claude Code name it.
+
+Open a session in a repository and work normally for a few turns, asking two or three questions that make Claude read files. Then check the baseline:
+
+```prompt
+/usage
+```
+
+Read the `Prompt cache (main)` line and note the hit percentage and the miss count. If the line is absent, check your version:
+
+```bash
+claude --version
+```
+
+It needs v2.1.251 or later, and v2.1.260 or later for the likely-cause text.
+
+Now cause a miss you control. Switch models and confirm the switch:
+
+```prompt
+/model
+```
+
+Ask one more ordinary question so a request goes out under the new model, then check again:
+
+```prompt
+/usage
+```
+
+Success looks like this: the miss count went up by one, the hit percentage dropped, and the tokens re-cached figure is roughly the size of your conversation. On a recent enough version the line names the cause.
+
+Then run the control. If you have an MCP server configured, disable it mid-session from `/mcp`, ask another question, and check `/usage` once more. In the default configuration, with tool search deferring that server's tools, the miss count does not move.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Does editing a file Claude already read invalidate the cache?** No. File contents enter context only when Claude reads them, and a later edit does not change the earlier read sitting in the history. Claude Code appends a `<system-reminder>` noting that the file changed, and Claude re-reads it if it needs to.
+
+**Why does a CLAUDE.md edit do nothing until I restart?** Same mechanism, seen from the other side. Your project-root and user-level files are read once at session start and held in memory, which is why editing them leaves the cache intact and also why the edit does not reach the running session. The new content loads on the next `/clear`, `/compact`, or restart. Nested files in subdirectories and rules with `paths:` frontmatter load when Claude first reads a matching file, so an edit before that load does apply. <LessonLink id="I2.2" /> has the loading order.
+
+**What happens to the cache when I resume a session?** Claude Code sends the whole conversation again and reads whatever part of its prefix is unchanged and still within its lifetime. By default a resumed conversation keeps the system prompt it started with, so a Claude Code upgrade in between does not force a rebuild until that conversation is compacted or you start a new one.
+
+**Do subagents share my cache?** No. A subagent starts its own conversation with its own system prompt and tool set, so its first request cannot read your prefix, and it warms one of its own. Your prefix is untouched, since the call and its result simply append to your conversation. A fork is the exception: it inherits your system prompt, tools, and history exactly, so its first request reads your cache.
+
+**Can I turn caching off?** Yes, though the reason to is debugging behavior on a specific model or provider. `DISABLE_PROMPT_CACHING` turns it off everywhere, with per-family variables for Haiku, Sonnet, Opus, and Fable. `FORCE_PROMPT_CACHING_5M=1` is the softer instrument: it forces five minutes for both buckets, which is what you want when comparing the two lifetimes or overriding a longer TTL that arrived through managed settings.
+
+**Does an LLM gateway change any of this?** It can. Claude Code sends `cache_control` markers, and the outcome depends on how the gateway treats them. Forwarded unchanged, caching behaves as it does at the provider's own endpoint. Rejected with a `400` naming `cache_control`, Claude Code moves the marker onto your last conversation message and keeps it there, so your conversation stays cached. Removed while the gateway still returns success, your entire conversation history bills as uncached input on every turn. A gateway that converts block-form system content to a plain string drops the marker the same way.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+Context was memory in <LessonLink id="B2.2" /> and a budget in <LessonLink id="I2.1" />. This lesson priced it.
+
+<LessonLink id="A4.2" /> takes the two settings that sit outside the layer table, model and effort, and turns them into an assignment strategy. <LessonLink id="A4.3" /> exports the numbers you just read into somewhere you can watch them across a team.
+
+<LessonLink id="A1.1" /> and <LessonLink id="A1.5" /> both read differently now: one parallelizes across directories, the other is where `subagentPromptCacheTtl` earns a line in a settings file.

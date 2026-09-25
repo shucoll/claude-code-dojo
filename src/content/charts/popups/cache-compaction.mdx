@@ -1,0 +1,13 @@
+Compaction replaces your message history with a summary, so the conversation
+layer has to rebuild: the next request carries a new, shorter history that
+shares no prefix with the old one. The system prompt layer is reused, and
+project context reloads from disk, which cache-hits only while CLAUDE.md and
+memory are unchanged since the session started.
+
+The summary comes from a separate request carrying the same system prompt,
+tools, and history plus a summarization instruction. While the cache is warm
+that request reads your prefix, so a mid-session `/compact` costs a fraction of
+what the context size suggests and spends most of its time generating the
+summary. After a break longer than the cache lifetime there is nothing left to
+read, and the summarization reprocesses the full history as uncached input.
+That is why `/compact` costs the most on a session you resume after a long gap.

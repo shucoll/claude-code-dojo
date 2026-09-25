@@ -1,0 +1,11 @@
+A subagent opens its own conversation with its own system prompt and tool set.
+Its first request cannot read the parent's cache, because the two prefixes
+differ, and it warms a cache of its own across its turns. From the parent's
+side the call and its result append to the conversation, so the parent's prefix
+survives intact.
+
+Subagents sit outside the main-conversation TTL bucket, so they get five
+minutes even on a subscription until you set `subagentPromptCacheTtl`.
+
+A fork is the exception. It inherits the parent's system prompt, tools, and
+history exactly, so its first request reads the parent's cache.

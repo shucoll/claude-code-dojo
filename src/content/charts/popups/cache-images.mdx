@@ -1,0 +1,10 @@
+The API limits how many images and PDFs each request can carry, and Claude Code
+caps their total size as well, so large screenshots reach the limit with fewer
+images than small ones.
+
+When the next request would pass either limit, Claude Code drops a batch of the
+oldest images and PDFs from what it sends. Removing them changes the messages
+that held them, so the request reprocesses the conversation from the earliest of
+those messages onward. Because it clears a batch at a time, you get one slower
+turn per batch rather than one with every new screenshot. Claude can no longer
+see what was removed, so share it again if it is still needed.

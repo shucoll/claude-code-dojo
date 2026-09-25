@@ -1,0 +1,10 @@
+Your project-root and user-level CLAUDE.md files are read once at session start
+and held in memory. Editing one mid-session leaves the cached prefix alone, and
+for the same reason the edit does not reach the running session. Claude keeps
+working from the version loaded at startup, and the new content arrives on the
+next `/clear`, `/compact`, or restart.
+
+Nested CLAUDE.md files in subdirectories and rules with `paths:` frontmatter
+load later, when Claude first reads a matching file. An edit made before that
+load does take effect. Once loaded, the content sits in the conversation
+history, where a later edit cannot reach it either.

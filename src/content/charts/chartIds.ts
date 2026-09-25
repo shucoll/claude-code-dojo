@@ -21,4 +21,5 @@ export const chartIds: readonly string[] = [
   'orchestration-decision-tree',
   'automation-spectrum',
   'sandbox-layers',
+  'cache-invalidation-board',
 ]

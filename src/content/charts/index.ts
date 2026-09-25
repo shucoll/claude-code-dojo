@@ -14,6 +14,7 @@ import { automationSpectrum } from './automation-spectrum'
 import { mechanismDecisionTree } from './mechanism-decision-tree'
 import { orchestrationDecisionTree } from './orchestration-decision-tree'
 import { permissionRuleShapes } from './permission-rule-shapes'
+import { cacheInvalidationBoard } from './cache-invalidation-board'
 import { sandboxLayers } from './sandbox-layers'
 import { toolBeltMap } from './tool-belt-map'
 import type { ChartDef } from './types'
@@ -37,6 +38,7 @@ const charts: Record<string, ChartDef> = {
   [mechanismDecisionTree.id]: mechanismDecisionTree,
   [orchestrationDecisionTree.id]: orchestrationDecisionTree,
   [sandboxLayers.id]: sandboxLayers,
+  [cacheInvalidationBoard.id]: cacheInvalidationBoard,
 }
 
 export const registeredChartIds: string[] = Object.keys(charts)

@@ -1,0 +1,11 @@
+On most models, changing effort mid-session means the next request reads the
+whole conversation history with no cache hits. While the cache is warm, Claude
+Code asks you to confirm the change first.
+
+On Opus 5.5 and Fable 5.1 with an API key or a Claude subscription, changing
+effort keeps the cache and Claude Code applies the new level without asking.
+That exemption drops away on Amazon Bedrock, Google Cloud's Agent Platform, and
+a Claude apps gateway, with `CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS` set, and
+under a HIPAA configuration.
+
+Before v2.1.260, changing effort on Fable 5.1 invalidated the cache there too.
