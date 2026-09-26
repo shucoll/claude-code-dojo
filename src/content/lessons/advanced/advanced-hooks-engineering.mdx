@@ -4,52 +4,362 @@ slug: "advanced-hooks-engineering"
 title: "Advanced hooks engineering"
 type: "core"
 order: 3
-estimatedMinutes: 16
+estimatedMinutes: 22
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["async-hooks", "http-hooks", "hook-event-catalog", "hook-security"]
-references: ["I4.2", "I4.4", "A1.4"]
+verifiedAgainstDocsAt: "2026-09-25"
+teaches: ["hook-handler-types", "async-hooks", "hook-event-catalog", "hook-scoping", "hook-security"]
+references: ["I4.2", "I4.4", "A1.1", "A1.4", "A3.3", "A6.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
 ---
 
 # Advanced hooks engineering
 
-## The problem
+## Choosing a handler for an event
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+<LessonLink id="I4.4" /> introduced all five handler types and the ladder between them: shell when you can, a prompt when you need judgment, an agent when the judgment needs tools, with `http` and `mcp_tool` dispatching to something you already run. The choice is also constrained by the event, because not every event accepts every handler.
 
-## The concept
+| Handlers accepted | Events |
+|---|---|
+| All five | `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PostToolBatch`, `PermissionDenied`, `UserPromptSubmit`, `UserPromptExpansion`, `Stop`, `SubagentStop`, `TaskCreated`, `TaskCompleted`, `TeammateIdle` |
+| All except `agent` | `PermissionRequest` |
+| `command`, `http`, `mcp_tool` | `ConfigChange`, `CwdChanged`, `DirectoryAdded`, `Elicitation`, `ElicitationResult`, `FileChanged`, `InstructionsLoaded`, `MessageDisplay`, `Notification`, `PreCompact`, `PostCompact`, `PreModelSwitch`, `PostModelSwitch`, `SessionEnd`, `StopFailure`, `SubagentStart`, `WorktreeCreate`, `WorktreeRemove` |
+| `command`, `mcp_tool` | `SessionStart`, `Setup` |
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Accepted and useful are different things in three places. A prompt or agent hook on `PermissionDenied` runs and its output is discarded, because the only field that event reads is `retry`, which a model-backed hook cannot set. A prompt hook on `PermissionRequest` that returns `ok: false` has no effect; denying from that event takes a command or HTTP hook returning `decision.behavior: "deny"`. And because an `mcp_tool` hook on `SessionStart` is skipped at launch, anything the session needs from its first turn belongs in a command hook.
 
-## How it works
+Timeouts depend on both the handler and the event. The defaults are 600 seconds for `command`, `http`, and `mcp_tool`, 30 for `prompt`, and 60 for `agent`. On `UserPromptSubmit`, `PreModelSwitch`, and `PostModelSwitch` the first three drop to 30, on `MessageDisplay` to 10, and every `SessionEnd` hook shares a single 1.5-second budget, so cleanup that needs longer than that belongs somewhere other than `SessionEnd`.
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+## Command hooks: exec form and shell form
 
-## Walkthrough
+A command hook runs in one of two forms, and the presence of `args` is the only switch.
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+**Exec form** runs when `args` is set, including an empty `[]`. Claude Code resolves `command` as an executable and spawns it directly with `args` as the argument vector. No shell is involved, so each element is exactly one argument, path placeholders are substituted as plain strings, and `$`, backticks, and apostrophes pass through untouched.
 
-## Use-case scenarios
+```json
+{
+  "type": "command",
+  "command": "node",
+  "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/format.js", "--fix"]
+}
+```
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**Shell form** runs when `args` is absent. The string goes to `sh -c` on macOS and Linux, to Git Bash on Windows, or to PowerShell when Git Bash is not installed, and the `shell` field picks explicitly. Pipes, `&&`, redirects, and globs work, and path placeholders need quoting to survive spaces.
 
-## When to use / when not to use
+```json
+{
+  "type": "command",
+  "command": "node \"${CLAUDE_PLUGIN_ROOT}\"/scripts/format.js --fix"
+}
+```
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+Set `args` whenever a hook references a path placeholder, and leave it out only when you need shell features. A script invoked by path with `"args": []` is exec form with nothing to quote. Both forms export `CLAUDE_PROJECT_DIR`, `CLAUDE_PLUGIN_ROOT`, and `CLAUDE_PLUGIN_DATA` into the process environment, so a script can read them whichever way it was launched.
 
-## Pitfalls
+Plugin hooks add one constraint. `${user_config.*}` values are substituted in exec form only, and a shell-form plugin hook whose `command` references one fails with an error instead of running. From shell form, read the `$CLAUDE_PLUGIN_OPTION_<KEY>` environment variable instead.
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+On Windows, exec form needs `command` to resolve to a real executable. The `.cmd` and `.bat` shims that npm installs in `node_modules/.bin` cannot be spawned without a shell, so call `node` with the script's path, which works on every platform.
+
+## HTTP hooks as integration points
+
+An HTTP hook POSTs the event's JSON input to a URL as the request body, and the response body uses the same JSON output format as a command hook's stdout. One endpoint can therefore serve every session on a team, which a script installed on each laptop cannot.
+
+The response contract has no equivalent of exit code 2:
+
+| Response | Outcome |
+|---|---|
+| 2xx, empty body | Success, the same as exit 0 with no output |
+| 2xx, JSON object body | Parsed with the command-hook output schema; a body that fails validation is a non-blocking error |
+| 2xx, any other body | Non-blocking error, and the text is not added to Claude's context |
+| Non-2xx status | Non-blocking error, execution continues |
+| Connection failure | Non-blocking error, execution continues |
+| Timeout | The hook is canceled |
+
+To block a tool call or deny a permission, the endpoint has to answer 2xx with a JSON decision. A `403` does not block, and neither does a `500`, a refused connection, or a service that is down. The service's uptime is therefore part of whatever policy it enforces.
+
+## Running a hook in the background
+
+By default a hook blocks Claude until it finishes. Two command-hook fields change that, and they behave differently enough to choose between deliberately.
+
+| | `async: true` | `asyncRewake: true` |
+|---|---|---|
+| Blocks Claude | No | No |
+| `timeout` enforced | No | Yes |
+| How results reach Claude | `additionalContext` and `systemMessage` from its JSON output, on the next turn | stderr, or stdout when stderr is empty, as a system reminder when it exits 2 |
+| When the session is idle | Waits for your next message | Wakes Claude immediately |
+
+Neither can block or steer: `decision`, `permissionDecision`, and `continue` have no effect, because the action they would have controlled has already happened. `asyncRewake` is the shape for a slow check that should not hold up the turn but should still be heard when it fails. This one type-checks after every edit and stays silent when the check passes:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/typecheck.sh",
+            "args": [],
+            "asyncRewake": true,
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+```bash
+#!/bin/bash
+if ! output=$(npx tsc --noEmit 2>&1); then
+  echo "Type check failed after your last edit:" >&2
+  echo "$output" | head -20 >&2
+  exit 2
+fi
+exit 0
+```
+
+Three behaviors catch people out. Each firing starts its own process with no deduplication, so a hook on every edit runs once per edit, concurrently if edits come quickly. Under `claude -p`, an async hook still running at teardown is killed and finalized as `cancelled`, so work that has to outlive the run needs a fully detached process. And async completion notifications are hidden unless you turn on verbose mode with `Ctrl+O`.
+
+## The event catalog
+
+Thirty-three events, grouped by where they sit in the lifecycle. The matcher column is what the `matcher` field filters on, and "no matcher" means one set on that event is silently ignored. The exit 2 column is what a blocking exit does there.
+
+### Session
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `Setup` | On `--init-only`, or `--init` or `--maintenance` in `-p` mode | `init`, `maintenance` | Ignored |
+| `SessionStart` | When a session begins or resumes | `startup`, `resume`, `clear`, `compact`, `fork` | Shows stderr to you only |
+| `SessionEnd` | When a session terminates | `clear`, `resume`, `logout`, `prompt_input_exit`, `other` | Shows stderr to you only |
+
+### Turn
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `UserPromptSubmit` | When you submit a prompt, before Claude processes it | No matcher | Blocks and erases the prompt |
+| `UserPromptExpansion` | When a typed command expands into a prompt | Command name | Blocks the expansion |
+| `MessageDisplay` | While assistant text is displayed | No matcher | The original text displays |
+| `Stop` | When Claude finishes responding | No matcher | Claude keeps working |
+| `StopFailure` | When the turn ends on an API error | Error type, such as `rate_limit` or `overloaded` | Ignored, except `terminalSequence` |
+
+### Tool execution
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `PreToolUse` | Before a tool call executes | Tool name | Blocks the call |
+| `PermissionRequest` | When a call needs a permission decision | Tool name | Not honored; use the `decision` object |
+| `PermissionDenied` | When auto mode denies a call | Tool name | Ignored; `retry: true` in JSON lets Claude retry |
+| `PostToolUse` | After a call succeeds | Tool name | Shows stderr to Claude |
+| `PostToolUseFailure` | After a call fails | Tool name | Shows stderr to Claude |
+| `PostToolBatch` | After a batch of parallel calls resolves, before the next model call | No matcher | Stops the agentic loop |
+
+### Agents and tasks
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `SubagentStart` | When a subagent is spawned | Agent type | Shows stderr to you only |
+| `SubagentStop` | When a subagent finishes | Agent type | The subagent keeps working |
+| `TaskCreated` | When a task is being created | No matcher | Rolls back the creation |
+| `TaskCompleted` | When a task is being marked complete | No matcher | The task stays open |
+| `TeammateIdle` | When a teammate is about to go idle | No matcher | The teammate keeps working |
+
+The last three are the quality gates from <LessonLink id="A1.4" />.
+
+### Context and configuration
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `InstructionsLoaded` | When a CLAUDE.md or rules file loads, at start or lazily | `session_start`, `nested_traversal`, `path_glob_match`, `include`, `compact` | Ignored |
+| `ConfigChange` | When a configuration file changes mid-session | `user_settings`, `project_settings`, `local_settings`, `policy_settings`, `skills` | Blocks the change, except for `policy_settings` |
+| `CwdChanged` | When the working directory changes | No matcher | Shows stderr to you only |
+| `DirectoryAdded` | When a directory is added through `/add-dir` or the SDK | `slash_command`, `register_repo_root` | Stderr goes to the debug log |
+| `FileChanged` | When a watched file changes on disk | Literal filenames to watch | Shows stderr to you only |
+
+### Model and compaction
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `PreModelSwitch` | Before a requested model switch applies | Canonical model name | Blocks the switch |
+| `PostModelSwitch` | After the model changes, including changes Claude Code makes itself | Canonical model name | Shows stderr to you only |
+| `PreCompact` | Before compaction | `manual`, `auto` | Blocks compaction |
+| `PostCompact` | After compaction completes | `manual`, `auto` | Shows stderr to you only |
+
+### MCP elicitation and notifications
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `Elicitation` | When an MCP server asks for user input during a tool call | MCP server name | Denies the elicitation |
+| `ElicitationResult` | After you respond, before the answer reaches the server | MCP server name | The response becomes a decline |
+| `Notification` | When Claude Code sends a notification | Notification type, such as `permission_prompt` or `idle_prompt` | Ignored |
+
+### Worktrees
+
+| Event | Fires | Matcher filters | Exit 2 |
+|---|---|---|---|
+| `WorktreeCreate` | When a worktree is created for `--worktree`, `isolation: "worktree"`, or a background session | No matcher | Any non-zero exit fails creation |
+| `WorktreeRemove` | When a worktree is removed | No matcher | Any non-zero exit fails removal if the directory remains |
+
+`WorktreeCreate` replaces the default git behavior, which is the escape hatch <LessonLink id="A1.1" /> pointed at for repositories that are not git. The worktree events are also the two where exit 1 matters, since any non-zero code counts.
+
+## Scoping a hook to exactly the calls you mean
+
+Two filters narrow a hook: `matcher` on the group decides whether the group activates, and `if` on an individual handler decides whether that handler spawns.
+
+### How a matcher is read
+
+The characters in a matcher decide how it is evaluated.
+
+| Matcher | Evaluated as |
+|---|---|
+| `"*"`, `""`, or omitted | Matches every occurrence |
+| Only letters, digits, `_`, `-`, spaces, `,`, and `\|` | An exact string, or a list of them separated by `\|` or `,` |
+| Anything else | A JavaScript regular expression, unanchored |
+
+Unanchored means a match anywhere in the value, so `Edit.*` fires for `NotebookEdit` as well; write `^Edit$` for a whole-string match. The exact-match path catches MCP matchers in the other direction. `mcp__memory` contains only exact-match characters, so it is compared as a literal string and matches no tool at all; every tool from that server is `mcp__memory__.*`. A server bundled in a plugin carries the plugin in its name, `mcp__plugin_<plugin>_<server>__<tool>`, and a matcher on the bare server key never fires. `FileChanged` and `StopFailure` use a narrower exact set without hyphens, spaces, or commas, where only `|` separates alternatives.
+
+### The `if` field
+
+`if` takes one permission rule, such as `"Bash(git *)"` or `"Edit(*.ts)"`, and checks the tool name and arguments together. It has no `&&`, `||`, or list form, so two conditions mean two handlers. It is evaluated only on the five tool events, `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `PermissionRequest`, and `PermissionDenied`. On any other event, a handler with `if` set never runs.
+
+For Bash, each subcommand is checked, including those inside `$()` and backticks, after leading `VAR=value` assignments are stripped:
+
+| `if` pattern | Bash command | Hook runs? |
+|---|---|---|
+| `Bash(git *)` | `npm test && git push` | Yes, `git push` matches |
+| `Bash(rm *)` | `echo $(rm -rf /)` | Yes, the substitution is checked |
+| `Bash(rm *)` | `echo $(date)` | No subcommand matches |
+| `Bash(git *)` | `$TOOL git push` | Yes, because the command name cannot be resolved |
+
+That last row is the rule: when Claude Code cannot tell what a Bash command runs, it runs the hook regardless. `if` saves process spawns on the calls it can rule out and errs toward running on the ones it cannot, which is why the docs direct a hard allow or deny to permission rules instead.
+
+For file tools, a single-segment pattern like `"Edit(src/**)"` matches only the `src` directory at the top of the working directory. A directory named `src` at any depth is `"Edit(**/src/**)"`.
+
+## Where hooks live, and how long they stay registered
+
+| Location | Active |
+|---|---|
+| `~/.claude/settings.json` | In all your projects |
+| `.claude/settings.json` | In this project, and shareable through the repository |
+| `.claude/settings.local.json` | In this project, for you |
+| Managed policy settings | Organization-wide |
+| A plugin's `hooks/hooks.json` | While the plugin is enabled |
+| Skill frontmatter | From the skill's first invocation to the end of the session |
+| Subagent frontmatter | While that subagent runs |
+
+Hooks from the first five also fire inside subagents. When a subagent calls a tool, `PreToolUse` and `PostToolUse` fire the same configured hooks, and the input carries `agent_id` and `agent_type` so a script can tell the calls apart.
+
+Frontmatter hooks have their own lifetimes. A skill's hooks keep running on later turns after the skill's own turn, and `once: true` removes one after its first successful run; a run that fails, blocks, or times out leaves it registered. `once` is honored only in skill frontmatter. A subagent's hooks are removed when it finishes, and a `Stop` hook declared there is converted to `SubagentStop`.
+
+`/hooks` opens a read-only browser of every configured hook with its type and source, labeled `User Settings`, `Project Settings`, `Local Settings`, `Plugin Hooks`, or `Session Hooks`. It is the fastest way to answer "why did that run" before you start reading settings files.
+
+## Security
+
+A command hook runs with your full user permissions and can read, change, or delete anything your account can.
+
+### Where hooks fail open
+
+Most failures in a hook let the action through, which is the right default for a convenience hook and a trap for a policy one.
+
+- Exit code 1 is a non-blocking error. Only exit 2, or a JSON decision, blocks.
+- A script path that does not exist or is not executable makes the shell exit with a code like 127, which is non-blocking, so a mistyped path in `settings.json` leaves the gate silently disabled. Watch for `Failed with non-blocking status code` the first time a policy hook should fire.
+- A `command`, `http`, or `mcp_tool` hook on `PreToolUse` that hits its timeout does not block, and the call continues through normal permissions. `PreModelSwitch` is the exception, where a timed-out hook blocks the switch.
+- Every HTTP failure short of a 2xx decision lets the action proceed.
+- `if` runs the hook whenever it cannot resolve the command, so it narrows cost without narrowing enforcement.
+
+Hooks are the right layer for behavior you want nearly always. A rule that must hold every time belongs in permissions, where a deny is evaluated by Claude Code itself.
+
+### Workspace trust
+
+Claude Code checks workspace trust before it runs any hook from a settings file, and what counts as trusted depends on the kind of session.
+
+In an interactive session, hooks from every settings file are held back until you accept the trust dialog for the folder, including hooks in your own `~/.claude/settings.json`. In a `-p` or SDK session no dialog is shown and the folder is treated as trusted, so hooks committed in a repository's `.claude/settings.json` run in a folder you have never trusted. Before scripting `claude -p` over a repository you did not write, review its `.claude/` settings, start with `--bare`, or turn hooks off for that run with `--settings '{"disableAllHooks": true}'`.
+
+Frontmatter hooks split along the same line. A project skill's hooks follow the settings-file rule and register when the skill is invoked, including in a `-p` run in an untrusted folder. A project subagent's hooks are stricter: they run only after the trust dialog has been accepted for the folder the agent file came from, and a `-p` session does not count.
+
+### What an administrator can enforce
+
+Hook entries merge across settings levels. User, project, and local settings add their own hooks and cannot remove managed ones. The organization-level controls, which <LessonLink id="A3.3" /> sets up in managed settings, are these:
+
+| Setting | Effect |
+|---|---|
+| `allowManagedHooksOnly` | Blocks user, project, local, and plugin hooks. Plugins force-enabled in managed `enabledPlugins` are exempt. Also narrows `statusLine`, `fileSuggestion`, and `subagentStatusLine` to managed settings, and disables `command`-source plugins and marketplace `headersHelper` commands unless `disableCommandPluginSources` is explicitly `false` |
+| `disableAllHooks` | Resolved through normal settings precedence, so a project's `false` overrides a user's `true`, and `--settings '{"disableAllHooks": true}'` beats both. Set anywhere below managed settings, it cannot disable managed hooks |
+| `allowedHttpHookUrls` | When defined at any level, an HTTP hook runs only if its URL matches the merged allowlist |
+| `httpHookAllowedEnvVars` | When defined, only the listed variables interpolate into HTTP hook headers |
+
+The two HTTP allowlists apply to hooks from every source, managed ones included.
+
+### Practices for hooks other people install
+
+The docs list five practices for any hook: validate and sanitize input, quote shell variables as `"$VAR"`, reject paths containing `..`, use absolute paths, and skip sensitive files such as `.env`, `.git/`, and keys. Hooks you ship in a plugin add two of their own. Use exec form with `${CLAUDE_PLUGIN_ROOT}` so installation paths with spaces cannot split an argument, and scope every matcher and `if` as tightly as the job allows, because each installer pays the spawn cost on every event the hook matches.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Twenty minutes in an empty scratch directory, ending with a hook that wakes Claude on its own.
+
+Create the directory, run `git init`, and write `.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(rm *)",
+            "command": "cat >> \"$CLAUDE_PROJECT_DIR/rm-audit.jsonl\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(*)",
+            "command": "echo stop >> \"$CLAUDE_PROJECT_DIR/stop.log\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "asyncRewake": true,
+            "command": "sleep 5; echo 'Background check failed for the file you just wrote' >&2; exit 2"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Start `claude` in the directory. The trust dialog appears, and until you accept it none of these hooks will run, which is the trust rule in action. Accept it, then run `/hooks` and confirm three hooks listed under `Project Settings`.
+
+Ask Claude to run `ls`, then `touch a.txt && rm a.txt`, then `echo $(rm -f b.txt)`. Afterwards `rm-audit.jsonl` should hold entries for the two commands containing `rm` and none for `ls`, including the one where `rm` only appeared inside `$()`.
+
+Look for `stop.log`. It should not exist, however many turns have ended, because `if` on a non-tool event means the handler never runs.
+
+Finally, ask Claude to write a short `notes.txt`, then type nothing. Within a few seconds Claude should respond on its own to the background failure message, with no prompt from you. For the stretch, change `asyncRewake` to `async`, repeat, and confirm the message now waits for your next prompt.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Can I disable one hook and keep the others?** No. `disableAllHooks` is all or nothing, and there is no per-hook switch. Delete the entry to remove one.
+
+**If the same handler is in two settings files, does it run twice?** No, identical handlers across settings files run once. A plugin's or a skill's copy of the same handler stays separate and runs in addition.
+
+**Does a hook see which subagent triggered it?** Yes. Tool events fired inside a subagent carry `agent_id` and `agent_type`, and `SubagentStart` and `SubagentStop` matchers accept agent names, including plugin-scoped ones such as `^my-plugin:reviewer$`.
+
+**Where does a command hook run if its working directory has been deleted?** From the first of these that still exists: the directory the session started in, the project root, your home directory, or the system temp directory. The debug log records which one it used.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+That closes module A5. <LessonLink id="A6.1" /> opens the Agent SDK, where the engine behind every hook, plugin, and marketplace in this module becomes a library you call from your own code, and a hook becomes a callback in your process with a timeout contract of its own.
