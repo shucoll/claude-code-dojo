@@ -4,53 +4,299 @@ slug: "marketplaces-and-distribution"
 title: "Marketplaces and distribution"
 type: "core"
 order: 2
-estimatedMinutes: 16
+estimatedMinutes: 18
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-25"
 prerequisites: ["A5.1"]
-teaches: ["marketplace-schema", "versioning", "release-channels"]
-references: ["I7.1", "A3.3", "A4.4"]
-docsSources: ["https://code.claude.com/docs/en/plugin-marketplaces", "https://code.claude.com/docs/en/plugin-dependencies", "https://code.claude.com/docs/en/plugin-hints", "https://code.claude.com/docs/en/plugin-relevance"]
+teaches: ["marketplace-schema", "plugin-sources", "versioning", "release-channels", "private-hosting"]
+references: ["I7.1", "A3.3", "A4.4", "A5.3", "A7.4"]
+docsSources: ["https://code.claude.com/docs/en/plugins/create-marketplace", "https://code.claude.com/docs/en/plugins/marketplace-reference", "https://code.claude.com/docs/en/plugins/host-marketplace", "https://code.claude.com/docs/en/plugins/publish", "https://code.claude.com/docs/en/plugins/dependencies"]
 ---
 
 # Marketplaces and distribution
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+The plugin from <LessonLink id="A5.1" /> works on your machine. Getting it onto anyone else's raises a different class of question, and most of them are about time rather than files.
+
+You push a fix and nobody receives it. You rename the plugin and every existing install breaks. You want a small group on an early-access build while everyone else stays on stable. Your repository is private, so the install works for you and fails for the teammate whose git credentials are stored differently. Each one is a release-engineering problem, and a marketplace is where you solve it.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+A marketplace is a catalog. It is one JSON file, `.claude-plugin/marketplace.json`, that says what plugins exist and where each one is fetched from. Nothing is uploaded and nothing is hosted for you. Put the file in a repository people can read, and it is published.
+
+Two identifiers do the work. The marketplace's `name` is what users type after `@`, and each entry's `name` is what they type before it, which makes `code-formatter@your-marketplace` the address of a plugin anywhere in the world. Each user registers one marketplace per `name`, so those names are the namespace you are operating in.
+
+## Choosing a route
+
+| Route | Who can install | What you need | Do users get updates? |
+|---|---|---|---|
+| No marketplace | The people you send the folder or a `.zip` to | The plugin's folder | No. They load the copy you sent |
+| Your own marketplace | Anyone who can reach the repository, including a private one | A host with a `.claude-plugin/marketplace.json` listing your plugin | Off by default, and a user or admin turns it on |
+| Anthropic's directory | People who add it on claude.ai or in Cowork, and in their Claude Code sessions through account sync | A GitHub repository and a paid claude.ai plan to submit from | Yes, once the version you push is published |
+
+This lesson is about the middle row, which is where internal distribution lives.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The catalog file
+
+`marketplace.json` requires three keys: `name`, `owner`, and `plugins`. The directory containing `.claude-plugin/` is the marketplace root, and every relative plugin source resolves from there.
+
+```json
+{
+  "name": "my-marketplace",
+  "description": "Plugins for my team",
+  "owner": { "name": "Your Name" },
+  "plugins": [
+    {
+      "name": "my-first-plugin",
+      "source": "./plugins/my-first-plugin",
+      "description": "A greeting plugin to learn the basics"
+    }
+  ]
+}
+```
+
+Claude Code ignores an unknown top-level key or entry key instead of rejecting it, so a typo loads silently and costs you nothing but the feature you thought you had configured. `claude plugin validate` reports each one as a warning, which is the reason to run it after every edit.
+
+A set of marketplace names is reserved, including `claude-plugins-official`, `claude-community`, and `claude-code-plugins`, along with names that merely imitate one. Those names are accepted only for marketplaces sourced from `github.com/anthropics/` repositories. Validation passes a reserved name and the add command is what refuses it, so this is a failure you find on someone else's machine rather than in CI.
+
+### Where a plugin comes from
+
+An entry's `source` is either a relative path string or an object whose own `source` key names the type. Seven types exist.
+
+| Type | Fields | Use it when |
+|---|---|---|
+| Relative path | the string itself | The plugin's files live inside the marketplace directory |
+| `github` | `repo`, `ref`, `sha` | The plugin is a GitHub repository of its own |
+| `url` | `url`, `ref`, `sha` | The plugin is a git repository on any other host |
+| `git-subdir` | `url`, `path`, `ref`, `sha` | The plugin is one subdirectory of some other repository |
+| `npm` | `package`, `version`, `registry` | The plugin ships as an npm package |
+| `archive` | `url`, `sha256` | The plugin is a zip served over HTTPS |
+| `command` | `command`, `timeout`, `mode` | A tool on the user's machine produces the plugin directory |
+
+Use a relative path for a plugin in the marketplace repository itself and `git-subdir` for a subdirectory of some other repository.
+
+Exact pinning differs by type. `github`, `url`, and `git-subdir` share `ref`, a branch or tag, and `sha`, a full 40-character lowercase commit SHA. Set both and Claude Code checks out the `sha`, which means the install still succeeds after the branch that `ref` names is deleted, as long as the commit stays reachable. Archives pin with `sha256`, a 64-character digest, and a download that does not match is refused.
+
+The `npm` and `command` sources each do something at install time the others do not. An `npm` source is fetched with the user's npm client and unpacked without running install scripts. A `command` source runs a shell command on the user's machine that prints the plugin directory's path, which Claude Code shows the user for review before running, and reruns once per session so a tool's changed output reaches them without a reinstall.
+
+### Where the version comes from
+
+Users receive a new copy only when the plugin's computed version differs from the one they hold. That version comes from `plugin.json` first, and from the marketplace entry second.
+
+
+That leaves two workable release habits, and no third:
+
+- **Bump `version` on every release.** Users stay on their cached copy until the string changes. Push commits without changing it and they receive nothing.
+- **Omit `version` entirely.** Leave it out of both `plugin.json` and the entry, and users track your commits instead.
+
+One case escapes the field. A plugin users load in place, from a marketplace added as a local directory, reads your current files at every session start whatever its version says.
+
+### What an entry may declare, and when it wins
+
+An entry accepts every `plugin.json` field, and which one applies depends on whether the fetched plugin has a manifest of its own.
+
+With no `plugin.json`, the entry is the manifest and everything in it applies. With a `plugin.json` present, that file is the manifest, and the entry's `mcpServers`, `lspServers`, `userConfig`, and `channels` stop applying at all.
+
+The six component fields `commands`, `agents`, `skills`, `hooks`, `outputStyles`, and `themes` are governed by `strict`, which defaults to `true`. Under the default, the entry's component fields are appended to the manifest, except `hooks`, whose matchers replace the manifest's per event. Set `"strict": false` and an entry declaring any component field is a conflict that fails the plugin's load outright.
+
+Display fields work on a simpler rule: a field you set on the entry is what users see, and a field you leave unset falls through to `plugin.json`. Before install, Claude Code can read `plugin.json` only for relative-path entries, so for every other source type users see the entry's fields alone until they install.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+Publish a marketplace, pin a version, and install from it.
 
-## Use-case scenarios
+Create the marketplace directory, copy the plugin in, and check the plugin is still valid where it now sits, so any later error is about the catalog:
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+```bash
+mkdir -p my-marketplace/.claude-plugin my-marketplace/plugins
+cp -r my-first-plugin my-marketplace/plugins/
+claude plugin validate ./my-marketplace/plugins/my-first-plugin
+```
 
-## When to use / when not to use
+Write the catalog file at `my-marketplace/.claude-plugin/marketplace.json` using the JSON above, then validate the marketplace itself and register it:
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+```bash
+claude plugin validate ./my-marketplace
+claude plugin marketplace add ./my-marketplace
+```
+
+```text
+✔ Successfully added marketplace: my-marketplace (declared in user settings)
+```
+
+Install by the entry's `name`, an `@`, and the marketplace `name`, then confirm what loaded:
+
+```bash
+claude plugin install my-first-plugin@my-marketplace
+claude plugin list
+claude plugin details my-first-plugin
+```
+
+`claude plugin list` shows `my-first-plugin@my-marketplace` with `Status: ✔ enabled`, and the `Component inventory` section of the details reads `Skills (1)  hello`.
+
+Now pin it. Move the plugin to its own GitHub repository, tag a release, and change the entry to a pinned `github` source:
+
+```json
+{
+  "name": "my-first-plugin",
+  "source": {
+    "source": "github",
+    "repo": "your-org/my-first-plugin",
+    "ref": "v2.0.0",
+    "sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0"
+  }
+}
+```
+
+Push the marketplace repository, and your users add it by shorthand and install the same way:
+
+```bash
+claude plugin marketplace add your-org/my-marketplace
+claude plugin install my-first-plugin@my-marketplace
+```
+
+From inside a session, one command does both:
+
+```prompt
+/plugin install my-first-plugin --marketplace your-org/my-marketplace
+```
+
+To tear the local experiment down, `claude plugin marketplace remove my-marketplace` removes the marketplace and uninstalls its plugins.
+
+## Release engineering
+
+### Two marketplaces make two channels
+
+Claude Code has no release-channel concept, and one marketplace serves one version of each plugin at a time. Stable and early-access tracks are therefore two marketplace files whose entries point at different refs of the same plugin.
+
+```json
+{
+  "name": "stable-tools",
+  "owner": { "name": "Your Org" },
+  "plugins": [
+    { "name": "code-formatter", "source": { "source": "github", "repo": "your-org/code-formatter", "ref": "stable" } }
+  ]
+}
+```
+
+The second catalog is the same file with `latest-tools` as its `name` and `latest` as the `ref`. Two constraints make or break this. The two files need different `name` values, because a user cannot have two marketplaces registered under one name. And the two refs need different `plugin.json` versions, or no version at all so the commit SHA distinguishes them, because updates are detected by comparing versions and a ref that moves without a version change leaves users on the cached copy.
+
+Users choose a channel by adding one marketplace or the other. To assign channels to groups instead, an administrator gives each group the matching `extraKnownMarketplaces` entry through managed settings, which is the same mechanism <LessonLink id="A3.3" /> uses for the rest of org policy.
+
+### Version ranges resolve against git tags
+
+A plugin can declare that it needs another plugin, with a semver range it has been tested against:
+
+```json
+{
+  "name": "deploy-kit",
+  "version": "3.1.0",
+  "dependencies": [
+    "audit-logger",
+    { "name": "secrets-vault", "version": "~2.1.0" }
+  ]
+}
+```
+
+A bare string tracks whatever version that plugin's marketplace provides. A range resolves against git tags named `<plugin-name>--v<version>`, so the dependency's maintainer has to create them or no constraint can resolve. `claude plugin tag --push` builds the tag from the manifest after validating the plugin, checking that `plugin.json` and the marketplace entry agree on the version, and requiring a clean working tree.
+
+Tag resolution is git-only. For an `npm`, `archive`, or `command` source the constraint does not control what gets fetched; it is checked when the plugin loads, against the `version` in the dependency's `plugin.json`, and a dependency with no version there satisfies no constraint at all.
+
+A dependency from a different marketplace is refused by default, which stops one marketplace quietly installing from a source the user never reviewed. Listing the target marketplace in `allowCrossMarketplaceDependenciesOn` permits it, and only the root marketplace's allowlist applies for the whole chain.
+
+A manifest needs only a `name`, so a plugin that is nothing but a `dependencies` array is valid. That is how a platform team ships a role bundle: one `claude plugin install backend-standard` pulls in the whole set.
+
+### Renaming and retiring
+
+A plugin's `name` is recorded in every user's `enabledPlugins` and `pluginConfigs`, so changing it makes their install point at something that no longer exists. To change the label users see, set `displayName` and leave `name` alone.
+
+When a rename is unavoidable, a top-level `renames` map migrates existing users instead of failing them:
+
+```json
+{
+  "name": "your-marketplace",
+  "owner": { "name": "Your Org" },
+  "plugins": [
+    { "name": "code-formatter", "source": "./plugins/code-formatter" }
+  ],
+  "renames": {
+    "formatter": "code-formatter",
+    "legacy-linter": null
+  }
+}
+```
+
+A mapped name loads under the new one and Claude Code rewrites the key in the user, project, and local scopes. A `null` mapping drops the key and tells the user the plugin was removed from the marketplace. Managed settings are the exception, since Claude Code cannot rewrite them, so the notice recurs until an admin updates `enabledPlugins` there.
+
+Treat the map as append-only history. Keep old entries after everyone has migrated, and when you rename a second time add a second entry rather than editing the first, because Claude Code follows the chain from the oldest name. `claude plugin validate` rejects a chain that cycles or ends anywhere other than `null` or a listed name.
+
+Removing an entry leaves the plugin installed on users' machines unless you set `"forceRemoveDeletedPlugins": true`, which uninstalls it at session start from the user, project, and local scopes and lists it under a **Flagged** heading in `/plugin`.
+
+## Private hosting and credentials
+
+Claude Code holds no git token of its own, and `marketplace.json` has no field for one. When a user adds, installs from, or updates your marketplace, Claude Code runs `git` on their machine with interactive prompts turned off and relies on the credentials that machine already has.
+
+The form of the add command you send decides the protocol. A GitHub `owner/repo` shorthand makes Claude Code probe `ssh -T git@github.com` and clone over SSH when the probe succeeds, falling back to HTTPS otherwise; a user with no GitHub SSH key sets `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` to skip the probe. A `git@host:path.git` URL is always SSH and an `https://` URL is always HTTPS. SSH needs a key that works without a passphrase prompt and a host already in `known_hosts`. HTTPS needs a credential the user's helper already stores, because Claude Code leaves the helper enabled and forbids it from prompting.
+
+Background auto-update inherits all of that and fails more quietly. A helper that would have to prompt cannot answer in the background, so the update fails and the existing checkout stays in place, which means the user keeps working from the last synced state. Setting `GITHUB_TOKEN` in the environment does not authenticate the check on its own; a token takes effect through a credential helper such as the `gh` CLI's.
+
+Users with no git-host account at all are reachable through two entry sources. An `archive` source is a zip over HTTPS needing neither git nor an account, and `headers` or a `headersHelper` command on the entry authenticates the download against a private registry. A public git repository also clones without credentials over an `https://` URL.
+
+## Distributing through an organization
+
+On a Team or Enterprise plan you can distribute the marketplace through organization settings on claude.ai instead of having users add it themselves. Organization sync reads the repository through your organization's GitHub or GitLab connection, so your users' git credentials are never involved.
+
+It is stricter than `/plugin marketplace add` about what it accepts. On github.com and gitlab.com the marketplace repository must be private or internal, only some source types are accepted, and a plugin with a top-level `bin/` directory is rejected while the rest of the marketplace syncs.
+
+The other half of org-scale rollout belongs to the administrator rather than to you. `extraKnownMarketplaces` registers the marketplace and `enabledPlugins` turns specific plugins on for everyone receiving those settings, and `autoUpdate` on the marketplace entry is how a fleet stays current without each person opting in. A repository can require the same thing for everyone who clones it: run `claude plugin marketplace add your-org/your-marketplace --scope project` once and commit the `.claude/settings.json` it writes.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+**Relative-path entries in a marketplace users add by URL.** Adding a bare `marketplace.json` URL downloads only that file, so a `source` of `./plugins/formatter` has nothing to resolve against and the install fails. Give every entry a source that can be fetched on its own, or host the catalog in a git repository so the whole tree is cloned.
+
+**An entry name that differs from the manifest name.** The entry name is the install id and the settings key; the manifest name is the prefix on the plugin's skills. When they differ and someone installs by the manifest name, they get `Plugin "<name>" not found in marketplace`. Keep them the same.
+
+**Setting `version` in both `plugin.json` and the entry.** The `plugin.json` value wins with no runtime warning. `claude plugin validate` is what reports it, as `Entry declares version "<a>" but <path>/plugin.json says "<b>"`.
+
+**Plugin files tracked in Git LFS.** Claude Code clones the marketplace or plugin repository onto each user's machine and that clone never fetches LFS content, so LFS-tracked files arrive as pointer files and whatever reads them fails in a way that has nothing to do with plugins.
+
+**Expecting a deprecation state.** There is no such field. Removing the entry, mapping its name to `null` in `renames`, and setting `forceRemoveDeletedPlugins` is the nearest equivalent.
+
+**Assuming you can turn auto-update on for your users.** `marketplace.json` has no field for it. Each user enables it under **Marketplaces** in `/plugin`, or an admin sets `autoUpdate` in managed settings.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Twenty minutes, ending with a rename that migrates cleanly.
+
+Take the plugin you built in the previous lesson and stand a marketplace up around it: `mkdir -p my-marketplace/.claude-plugin my-marketplace/plugins`, copy the plugin under `plugins/`, and write a catalog with one relative-path entry. Validate, add it with `claude plugin marketplace add ./my-marketplace`, and install from it.
+
+Prove the version rule to yourself. Edit a skill in the installed plugin, run `claude plugin update`, and observe that nothing changes because the version string did not. Bump `version` in `plugin.json`, update again, and watch the new copy arrive.
+
+Then break the name on purpose. Change the entry's `name` to something the plugin's own `plugin.json` does not use, run `claude plugin validate` and note that it passes, then try to install by the manifest name and read the error. Put the names back in sync.
+
+Finish with the migration. Rename the plugin properly: change both names, and add a `renames` map pointing the old name at the new one. Run `claude plugin validate` to confirm the chain resolves, then start a session and check that the plugin loads under its new name with a notice about the rename rather than a not-found error. For the stretch, add a second `renames` entry for a name that maps to `null` and confirm validation still passes.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Can one repository hold both the plugin and its marketplace?** Yes. Save `marketplace.json` beside `plugin.json` in `.claude-plugin/` with one entry whose `source` is `"./"`, the repository root, and give the entry the same `name` as the manifest.
+
+**How do I pin users to an exact commit?** Set `sha` to a full 40-character lowercase SHA on a `github`, `url`, or `git-subdir` source. With both `ref` and `sha` set, the `sha` is what gets checked out, so the install survives the branch being deleted as long as the commit stays reachable. Some servers, such as AWS CodeCommit, cannot fetch a commit by SHA, and there the `ref` has to still exist.
+
+**Can I show different plugins to different users?** No. Entries carry no audience field and everyone who adds the marketplace sees the whole catalog. Host separate marketplaces for separate audiences, which is the same mechanism release channels use.
+
+**Why do my edits appear immediately during testing but not for my users?** A marketplace added as a local directory with relative-path sources is read in place, so your edits land at the next session start or `/reload-plugins` with no version change. Everyone installing from a hosted marketplace gets a copy in the plugin cache, and that copy is replaced only when the version changes.
+
+**What happens if a user's private marketplace becomes unreachable?** The background check fails and Claude Code re-clones; if that fails too, the existing checkout stays and their plugins keep working. A user who would rather skip the re-clone attempt entirely sets `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE=1`.
+
+**How do I submit to Anthropic's directory?** Through the developer portal at claude.ai, which requires a paid plan. Run `claude plugin validate --strict` locally first, though the portal applies additional rules the CLI does not check, so a clean local run is not a guarantee. Anthropic's official marketplace does not take submissions through that portal.
+
+**Is there a way to have Claude Code suggest my plugin?** An entry can carry a `relevance` block describing the projects it suits, and users see suggestions from your marketplace only when an admin lists it in `pluginSuggestionMarketplaces`. If you maintain a CLI or SDK, there is a separate mechanism for recommending your plugin from your own tool.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A5.3" /> returns to the component you have been shipping without examining closely. There are five hook handler types rather than the three you have used, including one that posts the event to an HTTP endpoint and one that routes it to an MCP server you already run, and the event catalog is large enough to be a reference section.
+
+<LessonLink id="A7.4" /> is where the marketplace, the managed settings, and the policy work from earlier modules arrive together as one artifact an organization can adopt.
