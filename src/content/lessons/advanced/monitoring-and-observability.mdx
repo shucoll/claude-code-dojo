@@ -67,6 +67,8 @@ Distributed tracing is in beta behind a second flag, `CLAUDE_CODE_ENHANCED_TELEM
 | `claude_code.tool_decision` | `tool_name`, `tool_use_id`, `decision`, `source`, `language` |
 | `claude_code.api_request` | `model`, `endpoint`, `request_id`, `client_request_id`, `speed` |
 | `claude_code.api_error` | `model`, `endpoint`, `status_code`, `error`, `client_request_id` |
+| `claude_code.api_refusal` | `refusal_reason`, `model`, `request_id`, `message.uuid` |
+| `claude_code.managed_settings_resolved` | `redacted_settings` and `settings_sha256_digest`, both only with `OTEL_LOG_MANAGED_SETTINGS` |
 
 Every event also carries `prompt.id`, a UUID linking all the events produced by one user prompt, along with `event.sequence` for ordering and `message.uuid` for matching back to a transcript message. A single prompt's full causal chain is reconstructable from `prompt.id` alone.
 
@@ -172,6 +174,8 @@ Prompts, responses, and tool details are withheld unless you turn them on. Each 
 | `OTEL_LOG_MANAGED_SETTINGS` | Redacted managed settings with a SHA-256 digest |
 
 `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` caps the size of any logged content, defaulting to 61440 UTF-16 code units, roughly 60 KB.
+
+One gate reaches further than its name suggests. `skill.name` on the cost and token metrics reports built-in, bundled, user-defined, and official-marketplace skill names verbatim, while a third-party plugin's skill names arrive as `third-party` until `OTEL_LOG_TOOL_DETAILS` is set. Attribution across skills you did not write is a content decision rather than a metrics one.
 
 An audit trail that can answer "who approved the `Bash` call that touched production" needs `OTEL_LOG_TOOL_DETAILS`, because `claude_code.tool_decision` without it tells you a decision was made and not what was decided about. Turning it on means your collector now holds the commands developers ran. That is a data-handling decision in the sense <LessonLink id="A3.4" /> means, made about a system your organization operates rather than about Anthropic's retention, and it should be made with the same people in the room.
 
