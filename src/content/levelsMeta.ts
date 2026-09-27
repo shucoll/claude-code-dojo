@@ -30,7 +30,7 @@ export const LEVELS_META: LevelMeta[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    description: 'Comfortable with Claude Code day-to-day and ready to become a power user.',
-    comingSoon: true,
+    description:
+      'You use Claude Code every day and want to run it beyond your own terminal. Learn to orchestrate parallel agents, automate Claude Code in CI and on a schedule, govern it for a team, measure what it costs, and build your own agents with the Agent SDK, then take a project from your machine to production.',
   },
 ]

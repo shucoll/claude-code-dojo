@@ -1,0 +1,13 @@
+Fast mode adds a request header that is part of the cache key, so the first
+request Claude Code sends with it on reads the whole history uncached, billed at
+fast mode rates. Turning it on at the start of a session therefore costs less
+than turning it on deep into a long one.
+
+The cost applies once per conversation. Afterwards Claude Code keeps sending the
+header and varies only the request's speed setting, which is not part of the
+key. Turning fast mode off, falling back to standard speed after a rate limit,
+and turning it back on later all keep the cache. `/clear` and `/compact` reset
+this, since they rebuild the cache at those points anyway.
+
+If your current model does not support fast mode, enabling it also switches the
+model, and that switch starts a fresh cache on its own.

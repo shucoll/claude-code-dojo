@@ -1,0 +1,16 @@
+Tool definitions live in the system prompt layer, so what matters is whether a
+server's tools are in the prefix at all.
+
+**Deferred by tool search,** the default on supported models: a server
+connecting, disconnecting, or changing its tool list appends new content and
+disturbs nothing already cached.
+
+**Loaded into the prefix:** any change to them rebuilds everything behind them.
+Tools load into the prefix when tool search is unavailable or disabled, for a
+server or tool marked `alwaysLoad`, and for definitions kept upfront by
+threshold-based loading.
+
+In that second case the invalidation often arrives without you doing anything:
+a stdio server's process exits, an HTTP session expires, a server reconnects
+after a transient failure, or a connected server pushes a dynamic tool update.
+Editing the MCP config itself changes nothing until a restart.

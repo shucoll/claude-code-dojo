@@ -34,9 +34,10 @@ test("a fresh visitor's CTAs point into onboarding", () => {
   for (const cta of ctas) expect(cta).toHaveAttribute('href', '/onboarding')
 })
 
-test('the coming-soon pathway is not an interactive control', () => {
+test('every pathway, Advanced included, is an interactive control', () => {
   renderHome()
-  // Beginner + Intermediate are buttons; Advanced (coming soon) is not.
-  expect(screen.queryByRole('button', { name: /start advanced/i })).not.toBeInTheDocument()
-  expect(screen.getByText(/coming soon/i)).toBeInTheDocument()
+  for (const level of ['Beginner', 'Intermediate', 'Advanced']) {
+    expect(screen.getByRole('button', { name: new RegExp(level) })).toBeInTheDocument()
+  }
+  expect(screen.queryByText(/coming soon/i)).not.toBeInTheDocument()
 })

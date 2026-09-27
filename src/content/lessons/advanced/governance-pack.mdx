@@ -4,29 +4,282 @@ slug: "governance-pack"
 title: "Governance pack"
 type: "milestone"
 order: 4
-estimatedMinutes: 25
+estimatedMinutes: 45
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A7.3"]
 teaches: ["org-deployment", "version-pinning", "plugin-promotion"]
-references: ["A3.3", "A5.1", "A5.2"]
-docsSources: ["https://code.claude.com/docs/en/server-managed-settings", "https://code.claude.com/docs/en/managed-settings", "https://code.claude.com/docs/en/managed-mcp", "https://code.claude.com/docs/en/plugin-marketplaces"]
+references: ["A3.3", "A5.1", "A5.2", "I8.7", "A7.5"]
+docsSources: ["https://code.claude.com/docs/en/server-managed-settings", "https://code.claude.com/docs/en/managed-settings", "https://code.claude.com/docs/en/managed-mcp", "https://code.claude.com/docs/en/plugins/org", "https://code.claude.com/docs/en/plugins/create-marketplace", "https://code.claude.com/docs/en/plugins/marketplace-reference", "https://code.claude.com/docs/en/plugins/dependencies", "https://code.claude.com/docs/en/plugin-evals"]
 ---
 
 # Governance pack
 
+Everything PulseBoard enforces so far lives in files its own contributors can edit. That holds for a team that reviews the same repository. It stops holding when twenty people run Claude Code on their own laptops, some of whom never read the runbook. This milestone writes the policy those twenty people receive, and ships the `pulseboard-dev` plugin through release channels with an upgrade story.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Build a governance pack for a 20-developer organization: managed settings and a managed MCP policy, delivered through channels you choose deliberately, and a pair of version-pinned marketplaces that carry the `pulseboard-dev` plugin from <LessonLink id="I8.7" /> to two groups on different release channels. Before the plugin reaches the stable channel it passes `claude plugin validate` and a `claude plugin eval` run.
+
+The graded deliverable is `GOVERNANCE.md`, which records each decision in the seven rows of <LessonLink id="A6.4">A6.4</LessonLink>'s governance rubric. It is also one of the module's exit artifacts, beside `RUNBOOK.md`.
+
+**Environment:** your PulseBoard repository with the <LessonLink id="A7.3">A7.3</LessonLink> work merged, the GitHub CLI authenticated, and administrator rights on your own machine for the rehearsal in step 7. You do not need a Team plan. The pack is a set of files, and you rehearse it through the file-based channel. Delivering it to a real organization takes an Owner on Team or Enterprise and device management.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Describe the organization, then choose the channels
+
+Governance is written for a specific organization, so pin one down before writing a key. This milestone's organization has twenty developers on a Team plan, all on macOS laptops enrolled in MDM, all signing in with claude.ai. Four platform engineers want plugin changes as soon as they merge. Sixteen product engineers want them after they have proven themselves. Some developers start cloud sessions from claude.ai.
+
+The first decision is the delivery channel, and two facts from the docs decide it for this organization. Cloud sessions read server-managed settings and never a device's MDM profile or file. And the admin console sends one configuration to every user in the organization, so it cannot give the platform group a different release channel from the product group. The organization needs both: server-managed settings for the policy everyone shares, and one MDM profile per group for the release channel.
+
+Both channels create the precedence problem from <LessonLink id="A3.3" />. By default Claude Code applies only the first managed source that delivers a policy key, and server-managed settings come first, so every key in the MDM profile would be ignored. The pack sets `managedSourcesBehavior` to `"merge"` in the server payload, which applies every admin source. Merge is safe here because the only source below the server is the MDM profile, and administrators control it.
+
+One rule keeps merge predictable: every key lives in exactly one source. The server payload never mentions a marketplace registration or an enabled plugin, and the MDM profiles never mention a permission. Merge then never has to decide between two values for the same key, and anyone reading the pack can tell where a setting comes from by which file it is in.
+
+Create a `governance/` directory in the PulseBoard repository for the files in the next two steps.
+
+### 2. Write the organization-wide policy
+
+Save `governance/server-managed.json`. An Owner pastes it into the Claude Code managed settings in the admin console:
+
+```json
+{
+  "managedSourcesBehavior": "merge",
+  "requiredMinimumVersion": "2.1.273",
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Bash(git push --force *)",
+      "Bash(git push -f *)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "sandbox": {
+    "enabled": true,
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws", "mode": "deny" }
+      ]
+    }
+  },
+  "allowManagedMcpServersOnly": true,
+  "allowedMcpServers": [
+    { "serverUrl": "https://api.githubcopilot.com/*" }
+  ],
+  "strictKnownMarketplaces": [
+    { "source": "github", "repo": "anthropics/claude-plugins-official" },
+    { "source": "github", "repo": "your-org/pulseboard-stable" },
+    { "source": "github", "repo": "your-org/pulseboard-latest" }
+  ],
+  "disableSideloadFlags": true
+}
+```
+
+- The deny list covers secrets through two paths. `Read` rules stop the Read tool, and the `sandbox.credentials` entries stop a Bash command from reading the same directories. A deny rule written in a user's own settings would hold only until that user edited it.
+- `disableBypassPermissionsMode` removes the one mode that would skip every rule above it.
+- The MCP policy is an approved catalog: servers whose URL matches the GitHub MCP endpoint load, and nothing else does. The entry matches by `serverUrl` because a `serverName` entry matches whatever label a user typed, which is no control at all. `allowManagedMcpServersOnly` stops a user's own allowlist from widening it.
+- `managed-mcp.json` is deliberately absent. Its exclusive control blocks every server it does not define, plugin-provided servers included, so deploying it would switch off the GitHub server that `pulseboard-dev` ships.
+- `strictKnownMarketplaces` lists the only three marketplace sources plugins may come from, and `disableSideloadFlags` closes `--plugin-dir`, which the allowlist does not cover.
+- `requiredMinimumVersion` refuses to start any client older than 2.1.273, the first version that reads the MCP lock across managed sources. Several keys in this file do nothing on older clients, and nothing warns you when a key is ignored.
+
+Two locks from <LessonLink id="A3.3" /> are absent on purpose. `allowManagedPermissionRulesOnly` would erase every project's own allow list, including PulseBoard's, and `allowManagedHooksOnly` would stop hooks from project and user settings. Leave both until you know what developers rely on, and write the reason in `GOVERNANCE.md` so the next administrator does not add them by reflex.
+
+### 3. Write the group profiles
+
+Save `governance/mdm-stable.json`. Your MDM tool delivers it to the product group as a configuration profile whose top-level keys are these settings keys:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": { "source": "github", "repo": "anthropics/claude-plugins-official" }
+    },
+    "pulseboard-stable": {
+      "source": { "source": "github", "repo": "your-org/pulseboard-stable" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "pulseboard-dev@pulseboard-stable": true,
+    "security-guidance@claude-plugins-official": true
+  }
+}
+```
+
+`governance/mdm-latest.json` is the same file with `pulseboard-latest` in place of `pulseboard-stable` in both places, and it goes to the platform group.
+
+The allowlist in step 2 registers nothing on its own. `extraKnownMarketplaces` is what registers a marketplace on each machine, and it must itself pass the allowlist. The official marketplace gets an explicit entry because it registers itself only in interactive terminal sessions, and the `security-guidance` dependency in step 4 has to resolve in every session. Setting `autoUpdate` in a managed entry also locks it, so a developer cannot turn updates off for their channel. `enabledPlugins` force-enables both plugins, and disabling one at user scope does not stop it loading.
+
+### 4. Version the plugin and declare its dependency
+
+Release 1.1.0 of the plugin makes the security lens from <LessonLink id="A7.2" /> part of it, so any repository that installs `pulseboard-dev` gets `security-guidance` too. Update `pulseboard-dev/.claude-plugin/plugin.json`:
+
+```json
+{
+  "name": "pulseboard-dev",
+  "description": "PulseBoard's dev environment: release-notes and standup skills, the review board, the quality-gate hooks, and the GitHub MCP server.",
+  "version": "1.1.0",
+  "author": { "name": "Your Name" },
+  "dependencies": [
+    { "name": "security-guidance", "marketplace": "claude-plugins-official" }
+  ]
+}
+```
+
+The dependency names its marketplace because `security-guidance` lives in the official one, and it declares no version range. A range resolves against git tags named `security-guidance--v<version>` in the dependency's repository, which you do not control. Use ranges between plugins whose tags you publish yourself, and track a third party's plugin at whatever version its marketplace provides.
+
+Commit the change, merge it to `main`, then tag the release from the repository root:
+
+```bash
+git switch main && git pull
+claude plugin tag ./pulseboard-dev --push
+git rev-parse 'pulseboard-dev--v1.1.0^{commit}'
+```
+
+`claude plugin tag` validates the plugin, refuses a dirty working tree or an existing tag, and creates `pulseboard-dev--v1.1.0`. The last command prints the commit SHA the stable channel will pin.
+
+### 5. Publish the two channels
+
+Each channel is its own marketplace repository, because Claude Code has no channel concept and one marketplace serves one version of each plugin. Create both repositories:
+
+```bash
+gh repo create pulseboard-stable --private --clone
+gh repo create pulseboard-latest --private --clone
+```
+
+In `pulseboard-stable`, save `.claude-plugin/marketplace.json`:
+
+```json
+{
+  "name": "pulseboard-stable",
+  "description": "PulseBoard plugins, stable channel. Pinned to tagged releases.",
+  "owner": {
+    "name": "PulseBoard platform team"
+  },
+  "allowCrossMarketplaceDependenciesOn": [
+    "claude-plugins-official"
+  ],
+  "plugins": [
+    {
+      "name": "pulseboard-dev",
+      "description": "PulseBoard's development environment, stable channel",
+      "source": {
+        "source": "git-subdir",
+        "url": "your-org/pulseboard",
+        "path": "pulseboard-dev",
+        "ref": "pulseboard-dev--v1.1.0",
+        "sha": "PASTE-THE-40-CHARACTER-SHA-OF-THE-TAG"
+      }
+    }
+  ]
+}
+```
+
+Replace `your-org` with the account that owns your repositories, here and in the step 2 allowlist, and paste the SHA from step 4. The `pulseboard-latest` catalog is the same file with its own `name` and `description`, and a source that sets `"ref": "main"` with no `sha`, so the platform group follows every version bump that merges.
+
+The plugin stays in the PulseBoard repository, and `git-subdir` fetches only its directory. `allowCrossMarketplaceDependenciesOn` is required in both catalogs: the dependency is declared in `plugin.json`, and without the allowlist the install completes without `security-guidance` and `pulseboard-dev` then fails to load.
+
+Validate each catalog, then commit and push it:
+
+```bash
+claude plugin validate .
+```
+
+Validation refuses the stable catalog until the SHA is a real 40-character commit hash, which catches the most likely mistake in the pin before a developer's install does.
+
+### 6. Produce the evidence
+
+"The plugin works" has to be something a reviewer can check. Run both checks from the PulseBoard repository:
+
+```bash
+claude plugin validate ./pulseboard-dev --strict
+cd pulseboard-dev && claude plugin eval init
+```
+
+`claude plugin eval init` opens a session that asks what a good result looks like, proposes cases for the plugin's skills, and writes them under `evals/`. Commit the suite with the plugin, so the next release is measured against the same cases. Then run it with a cost ceiling:
+
+```bash
+claude plugin eval . --threshold 0.8 --max-cost-usd 5 --no-publish
+```
+
+Each case runs with and without the plugin. Record the `WITH`, `W/OUT`, and `Δ` columns in `GOVERNANCE.md`. A `Δ` near zero on a case means the plugin is not what made it pass, often because Claude never chose the skill, and that is worth fixing before the release is promoted.
+
+### 7. Rehearse on one machine
+
+You cannot test the server channel without a Team organization, but the whole pack can run through the file channel on your own machine. Merge the org policy and one group profile into a managed settings file:
+
+```bash
+sudo mkdir -p "/Library/Application Support/ClaudeCode"
+jq -s '.[0] * .[1]' governance/server-managed.json governance/mdm-stable.json \
+  | sudo tee "/Library/Application Support/ClaudeCode/managed-settings.json" > /dev/null
+```
+
+On Linux the directory is `/etc/claude-code/`. Start a session and check each row of the pack:
+
+- `/status` reads `Enterprise managed settings (file)`. If it lists the file under `Skipped sources`, a server payload from your organization won, so rehearse signed in to an account without one.
+- `/plugin` shows `pulseboard-dev@pulseboard-stable` and `security-guidance@claude-plugins-official` installed and enabled.
+- `/permissions` lists the managed deny rules.
+- `claude plugin marketplace add anthropics/claude-code` fails with `is blocked by enterprise policy`, followed by the allowed sources.
+- `claude --plugin-dir ./pulseboard-dev` exits with a message naming `disableSideloadFlags`.
+
+Remove the file when you are done, since the sideload block also stops your own plugin development:
+
+```bash
+sudo rm "/Library/Application Support/ClaudeCode/managed-settings.json"
+```
+
+### 8. Write `GOVERNANCE.md`
+
+Write the decisions down at the repository root, one row per rubric line, with the evidence log filled in from step 6:
+
+```markdown
+# PulseBoard governance
+
+For a 20-developer organization on a Team plan: macOS laptops enrolled in MDM, a four-person platform group on early access, and sixteen product developers on the stable channel.
+
+| Row | Decision |
+|---|---|
+| Delivery channel | Both. Server-managed settings carry the organization-wide policy, because cloud sessions read no other channel. MDM profiles carry each group's release channel, because the admin console sends one configuration to everyone. |
+| Precedence | `managedSourcesBehavior: "merge"`, set in the server payload. Safe because the only source below it is the MDM profile, which administrators control. Every key lives in exactly one source, so merge never has to choose between two values. |
+| Deny rules | `governance/server-managed.json`: no reading `.env` files, SSH keys, or AWS credentials, through the Read tool or from a sandboxed command; no force push; bypass mode disabled. |
+| Managed MCP | Approved catalog: the GitHub MCP URL only, locked with `allowManagedMcpServersOnly`. No `managed-mcp.json`, because its exclusive control would also block the plugin's own GitHub server. |
+| Plugin distribution | `pulseboard-stable` pins a tag and SHA; `pulseboard-latest` tracks `main`. Both are on the marketplace allowlist and registered per group. `pulseboard-dev` 1.1.0 depends on `security-guidance` from the official marketplace. |
+| Upgrade story | Release: bump `version`, merge, tag with `claude plugin tag --push`; the platform group receives it through auto-update. Promote after a week on latest with no incident: point the stable entry at the new tag and SHA. Roll back: point it at the previous tag and SHA; the changed version string is what triggers the reinstall. |
+| Evidence | Before any release reaches stable: `claude plugin validate --strict` passes, and the `claude plugin eval` scores below are recorded. |
+
+## Evidence log
+
+| Version | validate --strict | eval WITH | eval W/OUT | Δ | Promoted |
+|---|---|---|---|---|---|
+| 1.1.0 |  |  |  |  |  |
+
+## What this pack cannot enforce
+
+Managed settings are enforced by the Claude Code client. A developer with administrator rights on their own machine can edit the managed source, a modified or pre-floor binary ignores it, a third-party provider in the environment skips the server fetch, and none of it governs API calls made from other tools. The pack raises the cost of stepping outside policy and leaves an audit trail. The controls that hold against a determined user are MDM, which redeploys the profile, and the scope of the credentials each developer holds.
+```
+
+Commit `GOVERNANCE.md` and the `governance/` directory, and push.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- `governance/server-managed.json`, the organization-wide policy, and `governance/mdm-stable.json` and `governance/mdm-latest.json`, one profile per release group.
+- `pulseboard-dev` 1.1.0 with a dependency on `security-guidance`, tagged `pulseboard-dev--v1.1.0`, with an eval suite committed beside it.
+- Two marketplace repositories: `pulseboard-stable` pinned to the tag and its SHA, and `pulseboard-latest` tracking `main`.
+- `GOVERNANCE.md`, recording each decision against the rubric, the evidence for 1.1.0, and what the pack cannot enforce.
+
+**Done looks like:** both catalogs and the plugin pass `claude plugin validate`, the eval scores are in the evidence log, and the rehearsal showed the stable plugin installed, a foreign marketplace refused, and `--plugin-dir` rejected.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+Write governance for the least cautious member of the organization. Every rule that matters sits in a source that person cannot edit, and every lock you leave off is left off in writing, with the reason, so the policy's gaps are decisions someone made.
+
+A plugin is shipped once its upgrade story exists. That means a version that changes on every release, a channel that lets a small group take the risk first, a promotion rule with evidence behind it, and a rollback written down before anyone needs it.
+
+Next milestone, <LessonLink id="A7.5" />: the measurement layer. You wire OpenTelemetry to a dashboard, analyze a week of usage, and write a cost-optimization pass whose savings claims come from the numbers.

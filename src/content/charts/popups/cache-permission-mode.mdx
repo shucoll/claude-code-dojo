@@ -1,0 +1,7 @@
+Switching between permission modes changes neither the system prompt nor the
+tool definitions, so mode changes are cache-safe. Plan mode appends its
+instructions as a conversation message, which is why entering it costs nothing.
+
+The exception is the `opusplan` model setting, which resolves to Opus during
+plan mode and Sonnet during execution. Under `opusplan` every entry into and
+exit from plan mode is a model switch, and each one starts a fresh cache.

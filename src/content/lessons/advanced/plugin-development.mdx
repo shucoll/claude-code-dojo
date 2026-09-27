@@ -4,52 +4,337 @@ slug: "plugin-development"
 title: "Plugin development"
 type: "core"
 order: 1
-estimatedMinutes: 21
+estimatedMinutes: 22
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["plugin-components", "plugin-manifest", "plugin-dev-loop"]
-references: ["I7.2", "I3.2", "I4.3", "I6.2"]
-docsSources: ["https://code.claude.com/docs/en/plugins", "https://code.claude.com/docs/en/plugins-reference", "https://code.claude.com/docs/en/plugin-evals"]
+verifiedAgainstDocsAt: "2026-09-25"
+teaches: ["plugin-components", "plugin-manifest", "plugin-dev-loop", "plugin-evals"]
+references: ["I7.2", "I3.2", "I4.3", "I6.2", "A5.2"]
+docsSources: ["https://code.claude.com/docs/en/plugins", "https://code.claude.com/docs/en/plugins/create", "https://code.claude.com/docs/en/plugins/components", "https://code.claude.com/docs/en/plugins/manifest-reference", "https://code.claude.com/docs/en/plugin-evals"]
 ---
 
 # Plugin development
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+In <LessonLink id="I7.2" /> you packaged a working setup into a plugin: a folder, a manifest, the skills and hooks you already had. That plugin was for you. It loaded, and you could tell it loaded because your own commands were there.
+
+A plugin someone else installs raises questions that one never did. A teammate reports that the skills are missing and the plugin shows up as loaded. A language server never starts and nothing says why. You change a skill description and want to see the effect without killing the session. And the plugin costs every installer context on every turn, in sessions where nothing from it runs, so at some point somebody is going to ask whether it earns that.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+A plugin is a directory whose subdirectory names are its API. Claude Code scans a fixed set of locations under the plugin root, loads whatever it finds there, and namespaces all of it under the plugin's name. A skill at `skills/review/SKILL.md` in a plugin named `my-plugin` becomes `/my-plugin:review` on every machine that installs it, with no registration step anywhere.
+
+The manifest at `.claude-plugin/plugin.json` is how you depart from that: metadata, a component kept somewhere other than its default directory, a value you want to prompt the user for, or a component defined inline. A plugin whose files all sit in default locations can ship without a manifest at all.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The plugin root, and the one folder that is not for components
+
+Every component directory sits at the plugin root, next to `.claude-plugin/`. Only `plugin.json` goes inside `.claude-plugin/`.
+
+```text
+my-plugin/
+├── .claude-plugin/
+│   └── plugin.json
+├── skills/
+│   └── review/
+│       └── SKILL.md
+├── hooks/
+│   └── hooks.json
+└── .mcp.json
+```
+
+Putting `skills/` inside `.claude-plugin/` is the mistake that produces the report at the top of this lesson. The plugin loads, the manifest is valid, and the skills are simply absent, because nothing scans that folder for them.
+
+### The component catalog
+
+Each component type has one default location. Add the directories you use and leave out the rest; none of them is required.
+
+| Component | Default location | What the installer gets | Manifest key |
+|---|---|---|---|
+| Manifest | `.claude-plugin/plugin.json` | The plugin's name and metadata | n/a |
+| Skills | `skills/<name>/SKILL.md` | `/<plugin>:<name>`, and a skill Claude can pick on its own | `skills` |
+| Commands | `commands/<file>.md` | `/<plugin>:<file>`, the older flat form of a skill | `commands` |
+| Agents | `agents/<file>.md` | A subagent named `<plugin>:<name>` | `agents` |
+| Hooks | `hooks/hooks.json` | Lifecycle hooks, same shape as the `hooks` object in settings | `hooks` |
+| MCP servers | `.mcp.json` | A server listed as `plugin:<plugin>:<server>` | `mcpServers` |
+| LSP servers | `.lsp.json` | Diagnostics and navigation for a language | `lspServers` |
+| Output styles | `output-styles/<name>.md` | An entry in `/output-style` as `<plugin>:<name>` | `outputStyles` |
+| Workflows | `workflows/<name>.js` | A workflow the session can run | `workflows` |
+| Themes | `themes/<slug>.json` | An entry in `/theme` under the file's `name` | `experimental.themes` |
+| Monitors | `monitors/monitors.json` | Background watches that notify Claude as events arrive | `experimental.monitors` |
+| Executables | `bin/` | Binaries on the Bash tool's `PATH` while the plugin is enabled | n/a |
+| Settings | `settings.json` | Defaults applied while the plugin is enabled | `settings` |
+
+Four of these are worth a sentence each, because they have no standalone equivalent you would have met earlier.
+
+`.lsp.json` maps a server name straight to its configuration, with no wrapper object, and each entry needs an `extensionToLanguage` map with at least one extension. Your plugin configures the connection and does not install the binary, so Claude Code starts `command` by name from the installer's `PATH`. When two enabled servers claim the same extension, the first one registered wins and the `/plugin` **Errors** tab warns about the other.
+
+`bin/` puts executables on the Bash tool's `PATH`, so Claude can run them as bare commands. Plugin entries come after the user's own `PATH`, so a plugin cannot shadow `git` or `ls`. One distribution constraint follows from this directory: claude.ai and Cowork refuse to install a plugin that has a top-level `bin/`, so a plugin meant for those surfaces keeps its executables under `scripts/` and calls them through a path variable.
+
+`monitors/monitors.json` holds an array of background shell commands. Whatever they print reaches Claude as notifications, which lets Claude react to a log line without being asked to watch the log. They start in interactive sessions only, never under `-p`, and they never receive user configuration values.
+
+`settings.json` at the plugin root accepts exactly two keys, `agent` and `subagentStatusLine`, and drops everything else. `agent` is the interesting one: it runs one of the plugin's own agents as the main thread, so the plugin ships a personality for the whole session rather than something Claude delegates to.
+
+Channels are the one component with no directory. A channel entry in the manifest binds to one of the plugin's own MCP servers and can prompt for its own configuration, which is how a plugin makes an outside system able to send messages into a session.
+
+### How a manifest key meets its default directory
+
+Setting a component key in the manifest does not mean the same thing for every component, and the difference produces load failures that look like nothing happened.
+
+| Behavior | Keys | Effect |
+|---|---|---|
+| Replaces the default | `commands`, `agents`, `outputStyles`, `workflows`, `experimental.themes`, `experimental.monitors` | The default directory stops being scanned |
+| Adds to the default | `skills` | `skills/` is still scanned, and the listed directories load alongside it |
+| Merges | `hooks`, `mcpServers`, `lspServers` | The default file loads first, and the manifest merges into it |
+
+A plugin with a populated `commands/` folder that also sets `"commands"` in the manifest loads the manifest paths and ignores the folder.
+
+Every component path in a manifest is relative to the plugin root and has to start with `./`. A path of `commands/foo.md` fails validation. Paths must resolve inside the plugin root and must exist; a `..` that escapes produces `Path contains ".." which could be a path traversal attempt`.
+
+### The manifest is optional, and what it buys when you write one
+
+Without a manifest, Claude Code loads what it finds in the default locations and takes the plugin's name from the marketplace entry, or from the directory name when the plugin is loaded with `--plugin-dir`. A single-skill plugin can be one `SKILL.md` at the root, with no `skills/` directory.
+
+Write a manifest when you want metadata, a component outside its default directory, `userConfig`, or an inline component definition. `name` is the only required field, and it is the namespace every component inherits. `version` is the field with consequences you will feel later: setting it pins installers to that version until you change it, which is the machinery <LessonLink id="A5.2" /> is built on.
+
+`userConfig` declares the values your plugin needs from the installer, so nobody has to hand-edit a settings file. Each option becomes a labeled field in a dialog, and `"sensitive": true` masks the input and stores the value in secure storage. The dialog only appears in the interactive `/plugin` interface. Open it on demand with `/plugin configure`, and from a shell set values with `claude plugin install --config KEY=VALUE`.
+
+### Paths that move, and data that survives an update
+
+You do not know where your plugin will be installed, and its directory changes when it updates, so refer to files through variables.
+
+| Variable | Resolves to | Use it for |
+|---|---|---|
+| `${CLAUDE_PLUGIN_ROOT}` | The plugin's install directory, which changes on every update | Scripts, server entry points, bundled assets |
+| `${CLAUDE_PLUGIN_DATA}` | `~/.claude/plugins/data/<id>/`, which survives updates | `node_modules`, virtual environments, caches |
+| `${CLAUDE_PROJECT_DIR}` | The project root, the same value hooks receive | Anything in the user's repository |
+
+They are substituted in skill, command, and agent content, in hook and monitor commands, and in MCP and LSP server configuration, and they are exported into hook, MCP, and LSP processes as environment variables.
+
+Quoting has one rule that bites. A hook `command` with no `args` runs through a shell, so wrap the expanded path in double quotes to keep it one word. A `command` with `args` passes each element through with no shell and needs no quoting.
 
 ## Walkthrough
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+This builds a plugin that reviews release notes, loads it three different ways, breaks it deliberately to see where the error surfaces, and finishes by measuring whether it changes what Claude does.
+
+### Scaffold a plugin that loads in every session
+
+`claude plugin init` writes a starter plugin under your personal skills directory, `~/.claude/skills/`. Claude Code loads any folder there that contains a `.claude-plugin/plugin.json` as a plugin in every session, with no flag and no install step.
+
+```bash
+claude plugin init release-notes --with skills
+```
+
+```text
+✔ Created plugin "release-notes" at ~/.claude/skills/release-notes
+It will auto-load next session as release-notes@skills-dir. Run /reload-plugins to load it now.
+```
+
+The `skills-dir` suffix stands where a marketplace name would. Two naming rules apply to what it wrote: the root `SKILL.md` is also a personal skill, so it runs as `/release-notes`, while a skill under `skills/` inside the plugin takes the prefix and runs as `/release-notes:<name>`.
+
+### Add a component that calls a bundled script
+
+Give the plugin a hook so there is something to break later. Save the script at `scripts/check-changelog.sh`, make it executable, and write `hooks/hooks.json` at the plugin root:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/scripts/check-changelog.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Plugin hooks do not wait for one of the plugin's skills to be used. Claude Code registers them when the session loads the plugin, and they fire on their events from then on, which is why the `matcher` is where you control the blast radius.
+
+### Validate before running anything
+
+```bash
+claude plugin validate ~/.claude/skills/release-notes
+```
+
+It checks the manifest and the frontmatter of every skill, agent, and command file, and exits `0` on `Validation passed`. `Validation passed with warnings` still loads; the warnings are things like an unknown top-level field that gets stripped, a `name` that is not kebab-case, or a missing `version`, `description`, or `author`. Add `--strict` to make those warnings fail, which is the form to put in CI.
+
+### Load it without installing it
+
+Three doors open a plugin for one session, and none of them writes anything to your settings.
+
+```bash
+claude --plugin-dir ./release-notes --plugin-dir ./other-plugin.zip
+```
+
+`--plugin-dir` takes a plugin root directory or a `.zip` of one, and repeats. Point it at a folder that holds several plugins and Claude Code loads each immediate subfolder that has a `.claude-plugin/plugin.json`, skipping everything else without an error; that requires v2.1.265 or later. In an interactive session, a subfolder you add afterwards loads once its manifest exists, and one you remove unloads.
+
+```bash
+claude --plugin-url https://example.com/release-notes.zip
+```
+
+`--plugin-url` fetches a `.zip` at startup, which suits a build artifact your CI publishes. Point it only at archives you control. If the fetch fails or the archive is invalid, the session starts without the plugin and records a load error.
+
+Where you cannot add a flag, list absolute paths in the `CLAUDE_CODE_PLUGIN_DIRS` environment variable instead, which needs v2.1.280 or later. Those load in addition to any `--plugin-dir` paths, and project and local settings are not allowed to set the variable.
+
+One trap here has no error message attached. `--plugin-dir` wants a plugin root, the directory holding `.claude-plugin/plugin.json`. Point it at a marketplace root and Claude Code never reads `marketplace.json`, so nothing under `plugins/` loads and nothing tells you why.
+
+### Reload, and find out what failed
+
+With the session running, edit a skill's description on disk and pick the change up in place:
+
+```prompt
+/reload-plugins
+```
+
+It prints one `Reloaded:` line with counts. Then confirm the skill is really there by typing its command, or by opening the manager:
+
+```prompt
+/plugin
+```
+
+The **Installed** tab lists the plugin and, in its details, the components Claude Code found. The **Errors** tab is where the failures live: a manifest path that points at nothing shows as `<component> path not found: <path>`, an invalid `.lsp.json` shows as `Invalid LSP server config`, and a language server whose binary is missing shows as a start failure. Break something on purpose and watch it appear there; it is the panel you will send teammates to.
+
+From the shell, `claude plugin list` prints session-only and skills-directory plugins in their own sections with `Status: ✔ loaded` or the load error. Pass `--plugin-dir` before `plugin list` to include the plugin you are developing.
+
+For an MCP server, run `/mcp` in the session and look for `plugin:release-notes:<server>`. For a hook, trigger its event and read the hook debug log, which shows which hooks matched, their exit codes, and their output.
+
+### Prove that it helps
+
+Everything above answers whether the plugin loaded. `claude plugin eval` answers whether Claude behaves differently because it is there. Each case is a realistic prompt plus one or more graders, and the suite lives under `evals/` inside the plugin. It needs v2.1.269 or later.
+
+```bash
+claude plugin eval init
+```
+
+That opens an interactive session where Claude reads your plugin, asks what a good result looks like, proposes prompts that should and should not trigger it, designs graders, trials them, and writes one case directory per prompt. Exit that session and run the suite:
+
+```bash
+claude plugin eval .
+```
+
+Each case runs three times with the plugin loaded and three times with no plugin at all, so one case is six runs. A run's score is the fraction of its graders that passed; a case's score is the mean across its runs.
+
+```text
+CASE        WITH  W/OUT Δ      RUNS COST    NOTES
+first-case  1.00  0.33  +0.67  6    $0.41
+
+1 case(s) · mean Δ +0.67 · 74s · $0.41
+Report: /Users/you/release-notes/evals/results/2026-09-10T17-02-11-482Z/report.html
+```
+
+`Δ` is the column that justifies the plugin's existence. A case scoring 1.00 in both arms is a case Claude already handled, and the plugin is charging context for it.
+
+A case is two files you can read and edit. The prompt carries the run's limits in frontmatter:
+
+```markdown
+---
+max_turns: 10
+allowed_tools: [Read, Glob, Grep, Skill]
+---
+
+Draft release notes for this change: I renamed getUser to fetchUser and updated the three call sites.
+```
+
+Each file under `graders/` is one check. Six types exist. `regex`, `tool_used`, `tool_order`, and `file_exists` are computed from the transcript and cost nothing, while `llm` and `baseline` call a judge model. This one asserts that your skill is what produced the answer:
+
+```markdown
+---
+type: tool_used
+tool: Skill
+input_match: '"skill"\s*:\s*"(?:[\w-]+:)?release-notes"'
+---
+```
+
+The usual first finding is a `Δ` near zero with that grader failing, which says Claude is not reaching for your skill on natural phrasing. The fix is in the skill's `description`, and then you run the suite again and compare.
+
+Two behaviors surprise people. Runs never stop to ask for permission, so a tool the case asked for and you did not grant is removed from the session entirely; grant the rest with `--allow-tools`, and any form of Bash runs under the OS-level sandbox. And a `tool_used: Skill` grader is excluded from the score in both arms, reported as a pass/fail indicator only, because a check that can never pass without the plugin would drive the no-plugin arm to zero and inflate `Δ`.
+
+In CI, pin both models so a model rollout is not mistaken for a regression, pass `--trust-plugin` so the job never waits at the trust prompt, and gate on the exit code:
+
+```bash
+claude plugin eval . \
+  --trust-plugin \
+  --json results.json \
+  --threshold 0.8 \
+  --model claude-sonnet-5 \
+  --judge-model sonnet \
+  --no-publish
+```
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**You want one convention applied across twelve repositories.** Put the skill in a plugin and install the plugin in each, instead of copying `.claude/skills/` twelve times and watching the copies drift. The plugin is the thing that has a version.
 
-## When to use / when not to use
+**You want the language server your team relies on to arrive with the plugin.** Ship `.lsp.json` with the server's command and its extension map, and document the binary as a prerequisite. The plugin configures the connection and cannot install the tool.
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+**You want a script Claude can call without you spelling out its path.** Put it in `bin/` and make it executable. Claude runs it as a bare command while the plugin is enabled, and the name cannot collide with a system command because plugin entries come last on the `PATH`.
+
+**You want the plugin to install dependencies on first run.** Have a `SessionStart` hook install into `${CLAUDE_PLUGIN_DATA}`, which survives updates, and point the server's `NODE_PATH` there. For a marketplace-installed plugin, Claude Code already installs eligible Node.js dependencies when it caches the plugin, so check whether you need this before writing it.
+
+**The near miss: you want a `CLAUDE.md` of team conventions to ship with the plugin.** Claude Code does not load a `CLAUDE.md` at the plugin root, and `claude plugin validate` warns when it finds one. Instructions that should reach Claude's context belong in a skill, which also means they load when relevant rather than on every turn.
+
+## When to use, and when not to
+
+| Reach for a plugin | Stay with standalone files |
+|---|---|
+| Several components ship and version as one unit | One skill, one project, one person |
+| Teammates need to install it and receive updates | The config is inseparable from this repository's layout |
+| The same setup has to land in many projects | You are still deciding whether the skill works |
+| You want a component type only plugins offer, such as `bin/` or monitors | Nothing needs a namespace |
+
+The cost is paid by every installer on every turn. For each skill, agent, and command Claude can invoke on its own, the name and description sit in context on every turn of every session, including sessions where nothing from the plugin runs. MCP servers the plugin declares run alongside each of those sessions, and its hooks fire at their events. Plugins in Anthropic's official marketplace show a **Context cost** estimate before install, and the **Installed** tab's **Not used recently** group is where a plugin that stopped earning its keep surfaces.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+**Component directories inside `.claude-plugin/`.** The plugin loads, validation passes, and the components are missing. Only `plugin.json` belongs in that folder. Move `skills/`, `commands/`, `agents/`, and `hooks/` up to the plugin root and run `/reload-plugins`.
+
+**A manifest key that silently replaces a populated folder.** Setting `commands`, `agents`, `outputStyles`, `workflows`, `experimental.themes`, or `experimental.monitors` stops the default directory being scanned. Look for `Default <folder>/ folder is ignored because the manifest sets "<key>"` in `claude plugin list`, and list the default folder among the paths to keep it.
+
+**A hook matcher written against an MCP server name.** A tool from a server your plugin declares is named `mcp__plugin_<plugin>_<server>__<tool>`, and a matcher on the server name alone never fires. Write the full tool name. The same name is what permission rules need.
+
+**Keeping the originals under `.claude/` after converting.** Skills and agents do not collide, because the plugin's carry the prefix, so you get both `/deploy` and `/my-plugin:deploy`. Hooks have no prefix, so a hook in both your settings file and `hooks/hooks.json` runs twice on every event. Delete the originals once the plugin works.
+
+**Writing state under `${CLAUDE_PLUGIN_ROOT}`.** Each version installs into its own cache directory, so the path changes on update and the state is gone. Anything meant to persist goes in `${CLAUDE_PLUGIN_DATA}`.
+
+**Expecting the `userConfig` dialog while developing.** It is part of installing through `/plugin` in a session. `--plugin-dir` does not show it and neither does `claude plugin install`. Run `/plugin configure <plugin-name>` with the plugin loaded, or pass `--config KEY=VALUE` from the shell.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+Fifteen minutes, ending with a number that tells you whether your plugin is doing anything.
+
+Scaffold a plugin with `claude plugin init notes-helper --with skills`, then open the skill it wrote under `skills/` and give it a `description` that names a task you actually ask for, phrased the way you would phrase it.
+
+Break it on purpose before you fix it. Move the `skills/` directory inside `.claude-plugin/`, start a session with `--plugin-dir` pointed at the plugin, and confirm two things: the plugin appears in the **Installed** tab of `/plugin`, and its skill is not there. Move `skills/` back to the root, run `/reload-plugins`, and watch the skill appear without restarting.
+
+Now add a manifest field that fails. Set `"agents": "agents/reviewer.md"` with no leading `./`, run `claude plugin validate`, and read the message. Fix it to `"./agents/reviewer.md"`, pointing at a file that exists, and validate again.
+
+Finish with the measurement. Run `claude plugin eval init` from the plugin root, answer Claude's questions about what a good result looks like, then run `claude plugin eval . --runs 1` for a cheap first pass. Read the `Δ` column. If it is near zero, the skill's description is the first thing to change, and running the suite again is how you find out whether the change worked.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Is the manifest required?** No. Claude Code loads whatever sits in the default locations, and the name comes from the marketplace entry or, under `--plugin-dir`, from the directory name. Write one when you want metadata, a component outside its default directory, `userConfig`, or an inline definition. Anthropic's directory does require one.
+
+**Can I keep skills somewhere other than `skills/`?** Yes, and `skills` is the one key that adds to its default rather than replacing it, so `skills/` is still scanned alongside whatever you list. A `SKILL.md` at the plugin root loads as a single skill when there is no `skills/` directory and no `skills` key; set `name` in its frontmatter, because otherwise a marketplace install names the skill after its cache directory.
+
+**How do I load a plugin and something it depends on at the same time?** Repeat `--plugin-dir` for each, or put both in one folder and point the flag at the folder, which loads every immediate subfolder that has a manifest.
+
+**What happens to a manifest field Claude Code does not recognize?** A top-level field is stripped and the plugin loads, with a validation warning. Inside a `userConfig` option, a `channels` entry, an `lspServers` config, or a `monitors` entry, an unknown key is an error and the plugin does not load at all.
+
+**My agent's frontmatter has `permissionMode` and it is being ignored.** Plugin agents ignore `permissionMode`, `hooks`, `mcpServers`, and `initialPrompt`. An agent file cannot bring its own hooks or MCP servers; declare those as plugin components. And frontmatter that fails to parse loads the agent anyway with every field ignored, named after the file, with the description `Agent from <plugin> plugin`, which `claude plugin validate` is how you find.
+
+**How much does an eval suite cost to run?** Roughly cases × runs agent runs with the plugin, the same number again for the baseline, plus three short judge calls per `llm` or `baseline` grader per run. They use your own credentials and count against your plan. `--ablation none` drops the baseline arm and halves it, and `--max-cost-usd` sets a ceiling.
+
+**Can I grade a file the plugin produced rather than the reply?** Yes. Point a grader's `target` or `focus` at `{ source: file, path: <path> }`. For anything long, use a `regex` grader over the file contents, since a judge model reading a long file gives a less stable verdict from run to run.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A5.2" /> takes the plugin you just built and makes it installable by name. That means a marketplace file, seven source types to choose between, a version resolution chain that decides whether anyone ever receives your updates, and the private hosting options that internal distribution actually runs on.
+
+<LessonLink id="A5.3" /> goes back into `hooks/hooks.json` with the harder questions: hooks that call a model, hooks that gate on their exit code, and what to do when a hook has to make a decision rather than run a command.

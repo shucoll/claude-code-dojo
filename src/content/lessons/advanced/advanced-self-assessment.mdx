@@ -4,24 +4,149 @@ slug: "advanced-self-assessment"
 title: "Advanced self-assessment"
 type: "checkpoint"
 order: 4
-estimatedMinutes: 25
+estimatedMinutes: 45
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A1.6", "A2.4", "A3.4", "A4.4", "A5.3", "A6.3"]
 teaches: ["self-assessment"]
 references: ["A1.6", "A2.1", "A3.3", "A7.3", "A7.4"]
+interactive:
+  - kind: "diagram"
+    spec: "orchestration-decision-tree"
 ---
 
 # Advanced self-assessment
 
+Optional, untimed, and self-graded. Skip it and nothing locks. Do it and you find out whether the level's judgment transferred: writing down the controls before autonomy, building an unattended run that fails loudly, and spotting what is wrong with a team plan before it costs anything.
+
 ## What you should be able to do
 
-{/* @@TODO@@ The competencies this checkpoint verifies (no gating; skippable). */}
+By the end of the level, four things:
+
+- Write the guardrails before the job: permissions, sandbox tier, spend limit, failure behavior, and output review for anything that runs without you, per <LessonLink id="A2.4" />.
+- Write governance for the least cautious member of an organization, starting with which delivery channel carries the policy, per <LessonLink id="A3.3" />.
+- Build a headless run to a spec, where every requirement maps to a flag you can name, per <LessonLink id="A2.1" />.
+- Read a coordination plan and find its failures using the three questions from <LessonLink id="A1.6" />.
 
 ## The exercise
 
-{/* @@TODO@@ One ~10-minute hands-on task. */}
+### Part 1: design review
+
+Take two documents: a guardrail design for an autonomous job, and a governance pack for a 20-developer organization. If you have built <LessonLink id="A7.3" /> and <LessonLink id="A7.4" />, use the ones you wrote there. If you have not, write a one-page version of each now for a job you would plausibly schedule, such as a weekly dependency bump. The rubric in the self-check is the spec either way.
+
+Score each document against its rubric before reading the notes under it, so the score reflects the document you wrote.
+
+### Part 2a: a headless run to spec
+
+Write `changelog-entry.sh`, which turns the diff between `main` and `HEAD` into one changelog entry. Work in any repository with a branch ahead of `main`.
+
+```text
+SPEC: changelog-entry.sh
+
+1. Output is one JSON object: type (feat | fix | chore | docs),
+   summary (at most 100 characters), breaking (true | false).
+2. The output is validated against that shape before anything reads it.
+3. The run loads nothing from the machine it runs on: no CLAUDE.md,
+   hooks, skills, plugins, or MCP servers.
+4. Claude cannot run any tool. The diff arrives on stdin.
+5. Nothing can wait on a permission prompt.
+6. The agentic loop is bounded.
+7. On any failure the script exits non-zero and prints nothing to stdout.
+8. The estimated cost of each run goes to stderr.
+```
+
+### Part 2b: critique a team plan
+
+A colleague proposes this agent team. It contains three planted anti-patterns. Find all three, say why each one fails, and say what you would run instead.
+
+```text
+TEAM PLAN: per-user rate limiting for the PulseBoard API
+
+Lead
+  Splits the work into tasks, then builds the rate-limit settings
+  page itself while the teammates run, and merges at the end.
+
+Teammates
+  store      owns src/limits/store.ts, db/migrations/
+  limiter    owns src/limits/middleware.ts, src/api/router.ts
+  wiring     owns src/api/router.ts, src/api/routes/
+  tests      owns tests/limits/
+
+Tasks
+  1. Create the rate_limits table and its store      -> store
+  2. Write the limiter middleware                     -> limiter  (blocked by 1)
+  3. Register the middleware on every route           -> wiring   (blocked by 2)
+  4. Write tests for the limiter and the routes       -> tests    (blocked by 3)
+```
+
+Walk the plan through the tree, one question at a time:
+
+<ChartEmbed id="orchestration-decision-tree" />
 
 ## Self-check
 
-{/* @@TODO@@ Explicit success criteria the learner grades themselves against. */}
+### Guardrail design rubric
+
+Score each row 0 (missing), 1 (present but vague), or 2 (specific enough that someone else could configure it from your text).
+
+| Row | A 2 looks like |
+|---|---|
+| Sandbox tier | Names the isolation tier and why it is enough for this job, from <LessonLink id="A3.2" /> |
+| Permissions | The exact allow-list, and the deny rules that must hold even if the allow-list is wrong |
+| Nothing waits | States the prompt behavior, such as `--permission-prompts none` with `dontAsk`, so the job fails instead of hanging |
+| Spend limit | A number, the flag or setting that enforces it, and what happens when it is hit |
+| Failure behavior | What the job does on a red test, a timeout, and an auth failure, and who finds out |
+| Output review | Where the result lands for a person to read, such as a pull request on a non-default branch |
+| Scheduling surface | Which surface runs the timer, and why the alternatives were wrong for this job |
+
+A 12 or above means the document can gate a real job. Below 10, the rows scored 0 are the ones a reviewer would send back first.
+
+### Governance pack rubric
+
+| Row | A 2 looks like |
+|---|---|
+| Delivery channel | Server-managed, endpoint-managed, or both, with the reason tied to where your developers run sessions |
+| Precedence | What happens if both channels deliver, and whether `managedSourcesBehavior` is set deliberately |
+| Deny rules | The commands and paths nobody in the organization may touch, as `permissions.deny` |
+| Managed MCP | Which servers are provided, and whether `managed-mcp.json` takes exclusive control |
+| Plugin distribution | A required marketplace, a pinned plugin version, and a release channel |
+| Upgrade story | How a new plugin version reaches developers, and how you roll it back |
+| Evidence | `claude plugin validate` and a `claude plugin eval` run on the promoted plugin |
+
+The same thresholds apply: 12 or above, and the rows scored 0 first. Read each row as the least cautious developer in the organization would, since that is who the policy is written for. A deny rule that depends on that person not editing their own settings scores 1, because a managed source is what makes it hold.
+
+### The headless run
+
+Every spec line maps to something you can point at in the script:
+
+| Spec line | What satisfies it |
+|---|---|
+| 1, 2 | `--output-format json` with `--json-schema`, reading `structured_output` |
+| 3 | `--bare`, which also means `ANTHROPIC_API_KEY` in the environment |
+| 4 | `--tools ""` removes every tool from Claude's context |
+| 5 | `--permission-prompts none` with `--permission-mode dontAsk` |
+| 6 | `--max-turns` |
+| 7 | Checking the exit code before `jq` reads stdout, and `set -o pipefail` so a failed `claude` fails the pipe |
+| 8 | `jq '.total_cost_usd'` redirected to stderr |
+
+Prove line 7 rather than asserting it. Break the schema on purpose, run the script, and confirm the exit status is non-zero and stdout is empty. A script that prints an error message where the JSON should be passes every happy-path run and then corrupts whatever consumes it.
+
+### The team plan
+
+The three planted anti-patterns:
+
+| Anti-pattern | Why it fails | Where it is taught |
+|---|---|---|
+| `limiter` and `wiring` both own `src/api/router.ts` | Teams have no worktree isolation, so two teammates editing one file means one silently overwrites the other | <LessonLink id="A1.4" />, and the file-contention question in <LessonLink id="A1.6" /> |
+| Tasks 1 to 4 form a single chain | A teammate can claim only an unblocked task, so one works while three wait, and you pay for all four | <LessonLink id="A1.4">A1.4</LessonLink>'s sequential near-miss |
+| The lead builds the settings page | A lead that starts implementing is a failure <LessonLink id="A1.4" /> tells you to correct by telling it to wait for its teammates, and this plan builds that failure in | <LessonLink id="A1.4">A1.4</LessonLink>'s troubleshooting list |
+
+What to run instead: the chain answers the tree's coordination question on its own. No teammate needs to tell another anything that changes its work, so this is one session doing tasks 1 to 3 in order, with a test-writing subagent at the end if you want its reading kept out of your context. The settings page is a separate job, and a second session in its own worktree runs it alongside.
+
+If you found two of the three, check the one you missed against the tree's questions. The file overlap is easy to miss, because the plan looks partitioned until you compare the file lists line by line.
+
+## Where next
+
+This is the end of the taught level. <LessonLink id="A1.6" /> is the resolver to return to whenever work looks parallel, and <LessonLink id="A6.1" /> is the one to return to whenever it looks like it needs to leave the terminal.
+
+<LessonLink id="A7.1" /> starts the guided project, where PulseBoard goes from working on your machine to operated by a team, and the guardrail document and governance pack from Part 1 become milestones in their own right.

@@ -4,29 +4,470 @@ slug: "autonomous-maintenance"
 title: "Autonomous maintenance"
 type: "milestone"
 order: 3
-estimatedMinutes: 30
+estimatedMinutes: 45
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A7.2"]
 teaches: ["guardrail-document", "sandboxed-scheduled-job", "headless-maintenance"]
-references: ["A2.1", "A2.4", "A3.2"]
-docsSources: ["https://code.claude.com/docs/en/headless", "https://code.claude.com/docs/en/scheduled-tasks", "https://code.claude.com/docs/en/routines", "https://code.claude.com/docs/en/sandboxing"]
+references: ["A2.1", "A2.2", "A2.4", "A3.2", "A7.4"]
+docsSources: ["https://code.claude.com/docs/en/headless", "https://code.claude.com/docs/en/scheduled-tasks", "https://code.claude.com/docs/en/routines", "https://code.claude.com/docs/en/desktop-scheduled-tasks", "https://code.claude.com/docs/en/sandboxing"]
 ---
 
 # Autonomous maintenance
 
+Everything PulseBoard runs so far starts because a person did something: typed a prompt, opened an issue, pushed a branch. This milestone adds the first job that runs with nobody watching, a weekly dependency update, and it adds a rule about the order of work. The document describing the job's guardrails exists, and is reviewed, before the job is allowed to run.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Build a scheduled job that updates PulseBoard's dependencies, runs the test suite, and opens a pull request only when the suite is green. Claude runs headless with `--bare` and `--permission-prompts none` inside Claude Code's Bash sandbox, on a fresh VM, with a hard cap on what one run can spend.
+
+The graded deliverable is the guardrail design: a section of `RUNBOOK.md` covering the sandbox tier, the permissions, what happens when a prompt would appear, the spend limit, failure behavior, output review, and the scheduling surface. It is merged before any job file exists, and the job you build afterwards is its proof.
+
+**Environment:** your PulseBoard repository with the <LessonLink id="A7.2">A7.2</LessonLink> work merged, the GitHub CLI authenticated, and a Claude API key. Bare mode never reads subscription credentials, so a subscription token will not work for this job.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Write the guardrails before the job
+
+Add this section to `RUNBOOK.md`. It is written for PulseBoard's job, and each line becomes a concrete setting in the steps below, so change any decision you would make differently before you build it:
+
+```markdown
+## Scheduled dependency maintenance
+
+Approved before the job first ran. A change to the job changes this section first, in its own pull request.
+
+| Guardrail | Decision |
+|---|---|
+| Sandbox tier | A fresh GitHub-hosted VM per run, discarded afterwards. Inside it, every command Claude runs goes through Claude Code's Bash sandbox: writes confined to the checkout and the package cache, network limited to the package registry, the sandbox required to start, and no unsandboxed retry. Enough for this job because its only untrusted input is package code, and from inside the sandbox that code can reach nothing but the registry and cannot read the API key. |
+| Permissions | `ops/maintain-settings.json`. Allowed: the update and test commands, `git diff`, and edits to the dependency manifest and application code. Denied even if the allow list is wrong: commits, pushes, `gh`, reading `.env`, and edits to `tests/`, `migrations/`, `.github/`, and `ops/`. Claude never publishes anything; the scripts do. |
+| Nothing waits | `--permission-mode dontAsk` with `--permission-prompts none`. Anything outside the allow list is denied and Claude is told not to retry it, so a run fails and never hangs. |
+| Spend limit | Per run: `--max-budget-usd 2`, `--max-turns 40`, a 20-minute timeout on the Claude step, a 30-minute job timeout, and one run at a time. A cap ends the run with a result that is not `success`, which fails the job. Worst case per week: $2 in tokens and 30 runner minutes. |
+| Failure behavior | Red suite: no pull request is opened. Cap reached, step timeout, or a rejected API key: the Claude step fails. In every case the last step opens an issue labelled `maintenance` linking the run log, and GitHub emails whoever last edited the cron line. |
+| Output review | A pull request from `maintenance/deps-DATE-runN` into `main`, labelled `maintenance`, with Claude's summary as its body. The job never writes to `main`. A person reads the diff and the summary before merging. |
+| Scheduling surface | The repository's scheduled workflow, Mondays at 06:17 UTC. `/loop` needs an open session and expires after seven days. A desktop scheduled task needs this laptop on and runs next to my own credentials. A cloud routine runs a session with no CLI flags, so the job could not be bare, capped by turns and budget, or gated by a test step Claude cannot skip. |
+```
+
+The scheduling row departs from <LessonLink id="A2.4" />'s three places a timer can live, and the reason is the job's shape. All three run a Claude session, and this job is a script around a headless Claude run: the script owns the test gate and the pull request, and the Claude run owns only the judgment in between. A timer that runs a script is the `schedule` trigger from <LessonLink id="A2.2" />, so the row records why each of the three was wrong before naming the one that fits.
+
+Now make the order of work real. Commit the section on its own branch, open a pull request, and merge it after your review layer from <LessonLink id="A7.2" /> has read it:
+
+```prompt
+Create a branch named guardrails/dependency-maintenance, commit the new RUNBOOK.md section with a message saying it approves the dependency maintenance job, push it, and open a pull request.
+```
+
+Nothing in the repository runs yet. The next four steps implement the approved document line by line.
+
+### 2. Write the job's settings
+
+The job carries its own settings file, passed with `--settings`, so its permissions and sandbox live in one file reviewed alongside the job. Save `ops/maintain-settings.json`:
+
+<WhenLang is="javascript">
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm outdated)",
+      "Bash(npm update)",
+      "Bash(npm update *)",
+      "Bash(npm test)",
+      "Bash(git diff *)",
+      "Edit(package.json)",
+      "Edit(package-lock.json)",
+      "Edit(routes/**)",
+      "Edit(data/**)",
+      "Edit(public/**)"
+    ],
+    "deny": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh *)",
+      "Read(.env)",
+      "Edit(tests/**)",
+      "Edit(migrations/**)",
+      "Edit(.github/**)",
+      "Edit(ops/**)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": false,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowWrite": [
+        "~/.npm"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "registry.npmjs.org"
+      ],
+      "strictAllowlist": true
+    },
+    "credentials": {
+      "envVars": [
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/bin/pip list --outdated)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/pytest)",
+      "Bash(git diff *)",
+      "Edit(requirements.txt)",
+      "Edit(routes/**)",
+      "Edit(data/**)",
+      "Edit(public/**)",
+      "Bash(.venv/bin/pytest *)"
+    ],
+    "deny": [
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh *)",
+      "Read(.env)",
+      "Edit(tests/**)",
+      "Edit(migrations/**)",
+      "Edit(.github/**)",
+      "Edit(ops/**)",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": false,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "allowWrite": [
+        "~/.cache/pip"
+      ]
+    },
+    "network": {
+      "allowedDomains": [
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "strictAllowlist": true
+    },
+    "credentials": {
+      "envVars": [
+        {
+          "name": "ANTHROPIC_API_KEY",
+          "mode": "deny"
+        }
+      ]
+    }
+  }
+}
+```
+
+</WhenLang>
+
+This file is the Permissions and Sandbox tier rows of the document:
+
+- The deny list holds even if the allow list is wrong. Keeping tests out of reach means a green suite at the end is evidence about the updated packages, and the only way to reach it is to fix application code.
+- `autoAllowBashIfSandboxed` is `false` because its default would quietly cancel the Bash allow list. In the sandbox's default auto-allow mode every sandboxed command runs without a permission check (<LessonLink id="A3.2" />), so the list of allowed commands would restrict nothing. Turned off, every Bash command goes through the permission flow, and under `dontAsk` anything unlisted is denied.
+- `failIfUnavailable` makes a missing sandbox stop the run. Without it, Claude Code warns and runs commands unsandboxed.
+- `strictAllowlist` turns the registry allowlist into a wall, so a request to any other host is denied without a prompt. It only takes effect from user, managed, or `--settings` sources, which is one more reason the job passes its settings on the command line.
+- The `credentials` entry unsets `ANTHROPIC_API_KEY` before every sandboxed command, so a malicious install script in an updated package cannot read the key that is paying for the run.
+- The `allowWrite` entry is the package manager's cache, the one path outside the checkout that the update has to write.
+
+### 3. Write the prompt
+
+Save `ops/bump-prompt.md`:
+
+<WhenLang is="javascript">
+
+```markdown
+Update this project's dependencies to the newest versions their ranges in package.json allow, using npm update. Do not raise any package to a new major version.
+
+Then run npm test. If a test fails because of an updated package, change the application code so the test passes without changing what any endpoint returns. You cannot edit tests, migrations, workflows, or anything in ops/. If the suite still fails after a reasonable attempt, stop and say which package broke what.
+
+End your reply with a pull request description: a table of every package whose resolved version changed, with the old and new version, followed by each code change you made and the reason for it.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```markdown
+Update each pin in requirements.txt to the newest release with the same major version, then install them with .venv/bin/pip install -r requirements.txt. Do not raise any package to a new major version.
+
+Then run .venv/bin/pytest. If a test fails because of an updated package, change the application code so the test passes without changing what any endpoint returns. You cannot edit tests, migrations, workflows, or anything in ops/. If the suite still fails after a reasonable attempt, stop and say which package broke what.
+
+End your reply with a pull request description: a table of every package whose pin changed, with the old and new version, followed by each code change you made and the reason for it.
+```
+
+</WhenLang>
+
+The prompt repeats two limits the settings already enforce, tests and ops, so that Claude plans around them from its first turn. The last paragraph asks for the pull request description, because the run's final message is the only output the script keeps.
+
+### 4. Write the scripts
+
+Three small scripts keep the workflow file readable.
+
+`ops/sandbox-setup.sh` gives a Linux runner what the Bash sandbox needs. GitHub's current `ubuntu-latest` is Ubuntu 24.04, where the default AppArmor policy stops bubblewrap from creating user namespaces, so the script adds the documented profile for `bwrap` when the kernel enforces that restriction:
+
+```bash
+#!/bin/bash
+# sandbox-setup.sh: give the runner what Claude Code's Bash sandbox needs on Linux
+set -euo pipefail
+sudo apt-get update -q
+sudo apt-get install -y -q bubblewrap socat
+# Ubuntu 24.04+ blocks the user namespaces bubblewrap needs, unless bwrap has a profile
+if [[ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null)" == "1" ]]; then
+  sudo tee /etc/apparmor.d/bwrap > /dev/null <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+  include if exists <local/bwrap>
+}
+PROFILE
+  sudo systemctl reload apparmor
+fi
+```
+
+`ops/bump.sh` is the one headless Claude run:
+
+```bash
+#!/bin/bash
+# bump.sh: one headless, sandboxed Claude run that updates dependencies and repairs what breaks
+set -uo pipefail
+out="$RUNNER_TEMP/bump.json"
+
+claude --bare -p "$(cat ops/bump-prompt.md)" \
+  --append-system-prompt-file CLAUDE.md \
+  --settings ops/maintain-settings.json \
+  --permission-mode dontAsk \
+  --permission-prompts none \
+  --max-turns 40 \
+  --max-budget-usd 2 \
+  --output-format json > "$out"
+
+if ! jq -e '.subtype == "success"' "$out" > /dev/null 2>&1; then
+  echo "Claude run did not succeed:" >&2
+  { jq '{subtype, num_turns, total_cost_usd, permission_denials}' "$out" 2>/dev/null || cat "$out"; } >&2
+  exit 1
+fi
+jq -r '.result' "$out" > "$RUNNER_TEMP/pr-body.md"
+jq '{num_turns, total_cost_usd}' "$out"
+```
+
+`--bare` skips hooks, plugins, auto memory, and `CLAUDE.md` discovery, so the run is the same wherever it starts. That also switches off the `Stop` gate from <LessonLink id="I8.4" />, which is why the workflow runs the tests itself. `--append-system-prompt-file CLAUDE.md` puts the project's conventions back explicitly, from the checked-out default branch. The script judges the run by its JSON result: anything other than `success`, including a turn or budget cap, fails the step and prints the turns, the estimated cost, and any permission denials for whoever reads the log.
+
+`ops/open-pr.sh` runs only after the suite has passed:
+
+```bash
+#!/bin/bash
+# open-pr.sh: runs only after the suite passed; publishes the change for a person to review
+set -euo pipefail
+if [[ -z "$(git status --porcelain)" ]]; then
+  echo "Everything is already current. Nothing to open."
+  exit 0
+fi
+branch="maintenance/deps-$(date +%F)-run$GITHUB_RUN_NUMBER"
+git switch -c "$branch"
+git add -A
+git -c user.name="pulseboard-maintenance" -c user.email="maintenance@users.noreply.github.com" \
+  commit -q -m "chore: weekly dependency update"
+git push -q origin "$branch"
+gh pr create --base main --head "$branch" \
+  --title "Weekly dependency update $(date +%F)" \
+  --body-file "$RUNNER_TEMP/pr-body.md" \
+  --label maintenance
+```
+
+When nothing changed it exits quietly. Otherwise it commits on a branch named for the date and the run number, so a manual rerun on the same day cannot collide with the scheduled one, and opens the pull request with Claude's summary as its body.
+
+<WhenLang is="python">
+
+Add `.venv/` to `.gitignore`. The workflow creates the virtual environment inside the checkout, because the sandbox only lets commands write there, and `open-pr.sh` stages everything that is not ignored.
+
+</WhenLang>
+
+Make them executable and create the label the job files everything under:
+
+```bash
+chmod +x ops/*.sh
+gh label create maintenance --description "Opened by the scheduled maintenance job"
+```
+
+### 5. Write the workflow
+
+Save `.github/workflows/maintain.yml`:
+
+<WhenLang is="javascript">
+
+```yaml
+name: Dependency maintenance
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: maintain
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: ./ops/sandbox-setup.sh
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Update dependencies with Claude
+        timeout-minutes: 20
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: ./ops/bump.sh
+      - name: Test
+        run: npm test
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ops/open-pr.sh
+      - name: Report a failed run
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --label maintenance \
+            --title "Dependency maintenance failed $(date +%F)" \
+            --body "Run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```yaml
+name: Dependency maintenance
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: maintain
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - run: python -m venv .venv && .venv/bin/pip install -r requirements.txt
+      - run: ./ops/sandbox-setup.sh
+      - name: Install Claude Code
+        run: |
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Update dependencies with Claude
+        timeout-minutes: 20
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: ./ops/bump.sh
+      - name: Test
+        run: .venv/bin/pytest
+      - name: Open the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ops/open-pr.sh
+      - name: Report a failed run
+        if: ${{ failure() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create --label maintenance \
+            --title "Dependency maintenance failed $(date +%F)" \
+            --body "Run log: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+```
+
+</WhenLang>
+
+Each credential reaches only the step that needs it. The Claude step gets the API key and no GitHub token. The test step gets neither, so the updated packages' code runs with nothing worth stealing in its environment. The pull request and failure steps get the workflow's GitHub token and no API key.
+
+The step timeout is shorter than the job timeout on purpose. A step that runs out of time fails, which triggers the report step. A job that runs out of time is cancelled, and a step conditioned on failure would not run.
+
+The cron minute is 17 for a reason GitHub gives: scheduled runs can be delayed at the start of each hour, when load is highest.
+
+One interaction with <LessonLink id="A7.2" /> to record in the runbook: a pull request opened with the workflow's own token does not trigger other workflows. Code Review reviews it, because it runs through the GitHub App. The Actions review job does not, so on that path, comment on the pull request with `@claude review this dependency update for breaking changes`, which the `claude.yml` workflow answers.
+
+### 6. Drill the failure path, then run it
+
+Commit the job on a branch and merge it through a pull request, the same as the document. Before trusting the schedule, prove the failure path works, since it is the path nobody watches. Break one test on a throwaway branch and run the workflow against that branch:
+
+```bash
+git switch -c drill/red-suite
+# edit one assertion so it fails, then:
+git commit -am "drill: break one test" && git push -u origin drill/red-suite
+gh workflow run maintain.yml --ref drill/red-suite
+gh run watch
+```
+
+The run should fail at the Test step, open no pull request, and file an issue labelled `maintenance` that links the run. Delete the branch and close the issue once you have seen it.
+
+Then run it for real on `main`:
+
+```bash
+gh workflow run maintain.yml --ref main
+gh run watch
+```
+
+A green run ends in one of two states: a pull request labelled `maintenance` with a table of updated packages, or a log line saying everything is already current. Read the Claude step's log for the turn count and estimated cost, and compare them with the spend-limit row. If the real numbers sit far below the caps, leave the caps alone for a few weeks of runs before tightening them.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- A guardrail section in `RUNBOOK.md`, merged through its own pull request before any part of the job existed.
+- `ops/maintain-settings.json`, `ops/bump-prompt.md`, and three scripts that implement it: sandbox setup, one bare headless Claude run, and a pull request opened only after the suite passes.
+- A `maintain.yml` workflow on a weekly schedule, with each credential scoped to the step that needs it.
+- One drilled failure that produced an issue, and one real run that produced a pull request or a clean no-op.
+
+**Done looks like:** the guardrail document's history shows it merged before the workflow, the drill produced an issue and no pull request, and a real run either opened a reviewable pull request or reported nothing to update.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+Each setting in the finished job traces to a line a reviewer approved, so a later change to the job has a place to be argued about before it ships, and a person reading the runbook can check the running system against its own stated limits.
+
+Split any autonomous job so that judgment and publication never sit in the same place, and let a step the model cannot edit decide whether anything leaves the runner.
+
+When a job runs code it did not write, the threat arrives with the work itself. Decide where each secret sits by asking what that code can reach at every step.
+
+Next milestone, <LessonLink id="A7.4" />: the org-level view. You write the managed settings and managed MCP policy a 20-developer organization would receive, and publish the PulseBoard plugin through a version-pinned marketplace.

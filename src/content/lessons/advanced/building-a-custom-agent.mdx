@@ -4,53 +4,595 @@ slug: "building-a-custom-agent"
 title: "Building a custom agent"
 type: "core"
 order: 2
-estimatedMinutes: 26
+estimatedMinutes: 30
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-26"
 prerequisites: ["A6.1"]
-teaches: ["sdk-query-vs-session", "custom-tools", "permission-callbacks", "structured-outputs"]
-references: ["I6.2", "I1.2", "A2.1"]
-docsSources: ["https://code.claude.com/docs/en/agent-sdk/quickstart", "https://code.claude.com/docs/en/agent-sdk/custom-tools", "https://code.claude.com/docs/en/agent-sdk/permissions", "https://code.claude.com/docs/en/agent-sdk/structured-outputs", "https://code.claude.com/docs/en/agent-sdk/mcp", "https://code.claude.com/docs/en/agent-sdk/subagents"]
+teaches: ["sdk-query-loop", "sdk-sessions", "custom-tools", "permission-callbacks", "structured-outputs", "sdk-subagents"]
+references: ["I6.2", "I1.2", "A2.1", "A6.3", "A7.6"]
+docsSources: ["https://code.claude.com/docs/en/agent-sdk/quickstart", "https://code.claude.com/docs/en/agent-sdk/agent-loop", "https://code.claude.com/docs/en/agent-sdk/custom-tools", "https://code.claude.com/docs/en/agent-sdk/permissions", "https://code.claude.com/docs/en/agent-sdk/user-input", "https://code.claude.com/docs/en/agent-sdk/structured-outputs", "https://code.claude.com/docs/en/agent-sdk/sessions", "https://code.claude.com/docs/en/agent-sdk/mcp", "https://code.claude.com/docs/en/agent-sdk/subagents", "https://code.claude.com/docs/en/cli-reference"]
 ---
 
 # Building a custom agent
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+<LessonLink id="A6.1" /> placed bug triage on the Agent SDK: reports arrive from customers, an agent reads the code around each one, and a labeled GitHub issue appears. Built for real, that agent needs five things a `claude -p` script cannot give it cleanly. It needs a way to file issues that your code controls, a rule about labels that your code enforces during the run, a result your service can store without parsing prose, a way to pick a conversation back up when the reporter answers a question days later, and a cheaper model for the searching.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+Each of those needs is a generalization of something you already use in the terminal:
+
+| You know | In the SDK | Where you learned it |
+|---|---|---|
+| The agentic loop | `query()`, which streams a message for each step as Claude works | <LessonLink id="B1.1" /> |
+| The built-in tool belt | Custom tools, defined in your code and served by an in-process MCP server | <LessonLink id="I1.1" /> |
+| Permission rules and prompts | A `canUseTool` callback, where your function answers what a person would have | <LessonLink id="I1.2" /> |
+| `--json-schema` | `outputFormat`, which returns validated data on the result message | <LessonLink id="A2.1" /> |
+| `claude --resume` | The `resume` option, given a session ID you stored | <LessonLink id="B2.5" /> |
+| Custom subagents | The `agents` option, with a description, a prompt, tools, and a model per agent | <LessonLink id="I6.2" /> |
+
+Almost every option has a CLI flag it corresponds to, and a table after the walkthrough lists them. A learner who built the diff-risk script in <LessonLink id="A2.1" /> has written much of this configuration already, in a different notation.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### The loop as a stream of messages
 
-## Walkthrough
+`query()` takes a prompt and options and returns an async iterator. Claude plans, calls tools, reads results, and repeats until it produces a response with no tool calls. Your code sees each step as a message:
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+| Message | When it arrives |
+|---|---|
+| System, subtype `init` | Once at the start, with session metadata |
+| Assistant | For each content block Claude produces: a piece of text or a tool call |
+| User | After each tool runs, carrying the result sent back to Claude |
+| Result | Once at the end, with the final text, cost, usage, and the session ID |
+
+The result's `subtype` says how the loop ended: `success`, or an error such as `error_max_turns`, `error_max_budget_usd`, or `error_max_structured_output_retries`. Every result carries `session_id` and `total_cost_usd`, including the error ones. A single-shot `query()` that ends on an error yields the result message first and then raises, so wrap the loop when your code has to continue past a failure.
+
+### Two layers of tool control
+
+Tool options work on two layers. **Availability** decides which tools Claude can see at all: the `tools` option lists the built-ins to keep, and a bare name in `disallowedTools` removes one. **Permission** decides whether a call Claude attempts is approved, and that runs through a fixed order:
+
+1. Hooks, which can deny outright
+2. Deny rules
+3. Ask rules
+4. The permission mode
+5. Allow rules, including `allowedTools` and calls that never need approval, such as file reads inside the working directory
+6. Your `canUseTool` callback, for whatever is still unresolved
+
+The callback runs last, and that ordering decides how you use it. Any call approved earlier, by an allow rule or a mode like `acceptEdits`, never reaches it. A check that must see every call belongs in a `PreToolUse` hook, which runs first.
+
+## Walkthrough: the triage agent
+
+The agent is one file, built here in five parts in file order. It reads a bug report, sends a subagent to find the code involved, and then either files an issue through a custom tool or asks the reporter one question. Either way, it returns a record your service can store. The finished run looks like this:
+
+```text
+tool: Agent
+tool: Read
+tool: mcp__triage__file_issue
+tool: StructuredOutput
+session: ad9c7ac0-7777-4117-8fd4-a6f69e493a8c
+{
+  "status": "filed",
+  "issue_url": "https://github.com/you/triage-sandbox/issues/1",
+  "suspected_files": [
+    "src/convert.js",
+    "src/cli.js"
+  ]
+}
+```
+
+Set up the project first:
+
+<WhenLang is="javascript">
+
+```bash
+mkdir triage-agent && cd triage-agent
+npm init -y && npm pkg set type=module
+npm install @anthropic-ai/claude-agent-sdk zod
+npm install --save-dev tsx
+```
+
+Zod is a peer dependency of the TypeScript SDK, and the tool schemas below use it. Create `triage.ts` and add each part to it in order.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+mkdir triage-agent && cd triage-agent
+python3 -m venv .venv && source .venv/bin/activate
+pip install claude-agent-sdk pydantic
+```
+
+The SDK needs Python 3.10 or later. Create `triage.py` and add each part to it in order.
+
+</WhenLang>
+
+### Part 1: imports and configuration
+
+<WhenLang is="javascript">
+
+```typescript
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import {
+  query,
+  tool,
+  createSdkMcpServer,
+  type CanUseTool,
+} from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+const ISSUE_REPO = process.env.ISSUE_REPO; // owner/name of your sandbox repo
+const LABELS = ["bug", "documentation", "enhancement"];
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+import asyncio
+import os
+import subprocess
+import sys
+from typing import Any, Literal
+
+from pydantic import BaseModel
+from claude_agent_sdk import (
+    AgentDefinition,
+    AssistantMessage,
+    ClaudeAgentOptions,
+    PermissionResultAllow,
+    PermissionResultDeny,
+    ResultMessage,
+    ToolPermissionContext,
+    ToolUseBlock,
+    create_sdk_mcp_server,
+    query,
+    tool,
+)
+
+ISSUE_REPO = os.environ.get("ISSUE_REPO", "")  # owner/name of your sandbox repo
+LABELS = ["bug", "documentation", "enhancement"]
+```
+
+</WhenLang>
+
+`ISSUE_REPO` names the GitHub repository issues go to. `LABELS` is the policy the permission callback enforces in Part 3. All three are labels GitHub creates in every new repository.
+
+### Part 2: a custom tool
+
+A custom tool has four parts: a name, a description Claude reads to decide when to call it, an input schema, and a handler that runs in your process. You wrap it in a server with `createSdkMcpServer` (`create_sdk_mcp_server` in Python). That server runs inside your application process.
+
+<WhenLang is="javascript">
+
+```typescript
+const fileIssue = tool(
+  "file_issue",
+  "File one GitHub issue for a triaged bug report. Returns the issue URL.",
+  {
+    title: z.string().describe("One-line summary of the bug"),
+    body: z.string().describe("Symptom, suspected cause, and the files involved"),
+    labels: z.array(z.string()).describe(`Any of: ${LABELS.join(", ")}`),
+  },
+  async ({ title, body, labels }) => {
+    try {
+      const url = execFileSync(
+        "gh",
+        ["issue", "create", "--repo", ISSUE_REPO ?? "", "--title", title,
+         "--body", body, "--label", labels.join(",")],
+        { encoding: "utf8" },
+      );
+      return { content: [{ type: "text", text: url.trim() }] };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `gh issue create failed: ${String(error)}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+const triageServer = createSdkMcpServer({
+  name: "triage",
+  version: "1.0.0",
+  tools: [fileIssue],
+});
+```
+
+The input schema is Zod, and the handler's arguments are typed from it.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+@tool(
+    "file_issue",
+    "File one GitHub issue for a triaged bug report. Returns the issue URL.",
+    {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "One-line summary of the bug"},
+            "body": {"type": "string", "description": "Symptom, suspected cause, and the files involved"},
+            "labels": {"type": "array", "items": {"type": "string"}, "description": f"Any of: {', '.join(LABELS)}"},
+        },
+        "required": ["title", "body", "labels"],
+    },
+)
+async def file_issue(args: dict[str, Any]) -> dict[str, Any]:
+    try:
+        done = subprocess.run(
+            ["gh", "issue", "create", "--repo", ISSUE_REPO, "--title", args["title"],
+             "--body", args["body"], "--label", ",".join(args["labels"])],
+            capture_output=True, text=True, check=True,
+        )
+        return {"content": [{"type": "text", "text": done.stdout.strip()}]}
+    except subprocess.CalledProcessError as error:
+        return {
+            "content": [{"type": "text", "text": f"gh issue create failed: {error.stderr}"}],
+            "is_error": True,
+        }
+
+
+triage_server = create_sdk_mcp_server(name="triage", version="1.0.0", tools=[file_issue])
+```
+
+The input schema here is a full JSON Schema because `labels` is an array. For flat inputs, the decorator also accepts a plain dict of names to types, such as `{"title": str}`.
+
+</WhenLang>
+
+Claude sees this tool as `mcp__triage__file_issue`, built from `mcp__`, the server's key in `mcpServers` (set in Part 5), and the tool name. When `gh` fails, the handler returns the error text marked as an error result. Claude reads that text and can retry or explain. An uncaught exception would also reach Claude, as the raw exception message with no context.
+
+### Part 3: the permission callback
+
+<LessonLink id="I1.2" /> gave you rules that answer a permission prompt in advance. A service has nobody to answer the prompts that remain, so the SDK hands them to a function:
+
+<WhenLang is="javascript">
+
+```typescript
+const canUseTool: CanUseTool = async (toolName, input) => {
+  if (toolName !== "mcp__triage__file_issue") {
+    return { behavior: "deny", message: "This agent reads code and files issues, nothing else." };
+  }
+  const labels = input.labels as string[];
+  const unknown = labels.filter((label) => !LABELS.includes(label));
+  if (unknown.length > 0) {
+    return { behavior: "deny", message: `Unknown labels: ${unknown.join(", ")}. Use only: ${LABELS.join(", ")}.` };
+  }
+  return { behavior: "allow", updatedInput: { ...input, labels: [...labels, "agent-triaged"] } };
+};
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+async def can_use_tool(
+    tool_name: str, input_data: dict[str, Any], context: ToolPermissionContext
+) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name != "mcp__triage__file_issue":
+        return PermissionResultDeny(message="This agent reads code and files issues, nothing else.")
+    unknown = [label for label in input_data["labels"] if label not in LABELS]
+    if unknown:
+        return PermissionResultDeny(
+            message=f"Unknown labels: {', '.join(unknown)}. Use only: {', '.join(LABELS)}."
+        )
+    return PermissionResultAllow(
+        updated_input={**input_data, "labels": [*input_data["labels"], "agent-triaged"]}
+    )
+```
+
+</WhenLang>
+
+The callback can deny with a message, which Claude reads as the tool result and can act on. It can also allow with changed input: every filed issue here gets an `agent-triaged` label, and Claude sees the result without being told the input changed.
+
+Two choices make this callback see the right calls. `file_issue` is deliberately absent from any allow rule, because an allowed call would skip the callback and bypass the label policy. And the read tools need no approval inside the working directory, so the only call that normally arrives here is `file_issue`. The deny branch for everything else is a backstop.
+
+### Part 4: the result schema
+
+<WhenLang is="javascript">
+
+```typescript
+const Triage = z.object({
+  status: z.enum(["filed", "needs_info"]),
+  issue_url: z.string().optional(),
+  suspected_files: z.array(z.string()),
+  question_for_reporter: z.string().optional(),
+});
+```
+
+Part 5 converts this to JSON Schema with `z.toJSONSchema(Triage, { target: "draft-7" })`. The target matters: the SDK validates with JSON Schema draft-07, and Zod emits draft 2020-12 by default, which the SDK rejects.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+class Triage(BaseModel):
+    status: Literal["filed", "needs_info"]
+    issue_url: str | None = None
+    suspected_files: list[str]
+    question_for_reporter: str | None = None
+```
+
+Part 5 passes `Triage.model_json_schema()` as the schema and validates the result back into a `Triage`.
+
+</WhenLang>
+
+The SDK validates Claude's final output against the schema and re-prompts on a mismatch. The validated object lands in `structured_output` on the result message. The `StructuredOutput` line in the run above is Claude delivering it.
+
+### Part 5: the query
+
+<WhenLang is="javascript">
+
+```typescript
+const [file, sessionId] = process.argv.slice(2);
+const text = readFileSync(file, "utf8");
+
+for await (const message of query({
+  prompt: sessionId
+    ? `The reporter answered your question:\n\n${text}\n\nFinish the triage.`
+    : `Triage this bug report:\n\n${text}`,
+  options: {
+    cwd: process.env.TARGET_REPO,
+    settingSources: ["project"],
+    systemPrompt: {
+      type: "preset",
+      preset: "claude_code",
+      append:
+        "You triage bug reports for the repository in your working directory. " +
+        "Use the code-locator subagent to find the code involved. " +
+        "If the report says how to reproduce the bug, file one issue with file_issue. " +
+        "If it does not, file nothing and ask the reporter one specific question.",
+    },
+    tools: ["Read", "Glob", "Grep", "Agent"],
+    mcpServers: { triage: triageServer },
+    canUseTool,
+    agents: {
+      "code-locator": {
+        description: "Finds the files and functions involved in a bug report.",
+        prompt:
+          "Search the repository for the code behind the symptom you are given. " +
+          "Return file paths and function names with one line of evidence each. Do not propose fixes.",
+        tools: ["Read", "Glob", "Grep"],
+        model: "haiku",
+      },
+    },
+    outputFormat: { type: "json_schema", schema: z.toJSONSchema(Triage, { target: "draft-7" }) },
+    resume: sessionId,
+    maxTurns: 30,
+    maxBudgetUsd: 1,
+  },
+})) {
+  if (message.type === "assistant" && message.parent_tool_use_id === null) {
+    for (const block of message.message.content) {
+      if (block.type === "tool_use") console.log(`tool: ${block.name}`);
+    }
+  }
+  if (message.type === "result") {
+    console.log(`session: ${message.session_id}`);
+    if (message.subtype === "success" && message.structured_output) {
+      console.log(JSON.stringify(Triage.parse(message.structured_output), null, 2));
+    } else {
+      console.error(`triage ended without a result: ${message.subtype}`);
+    }
+  }
+}
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+async def main() -> None:
+    file, session_id = sys.argv[1], (sys.argv[2] if len(sys.argv) > 2 else None)
+    text = open(file).read()
+    prompt = (
+        f"The reporter answered your question:\n\n{text}\n\nFinish the triage."
+        if session_id
+        else f"Triage this bug report:\n\n{text}"
+    )
+    options = ClaudeAgentOptions(
+        cwd=os.environ.get("TARGET_REPO"),
+        setting_sources=["project"],
+        system_prompt={
+            "type": "preset",
+            "preset": "claude_code",
+            "append": (
+                "You triage bug reports for the repository in your working directory. "
+                "Use the code-locator subagent to find the code involved. "
+                "If the report says how to reproduce the bug, file one issue with file_issue. "
+                "If it does not, file nothing and ask the reporter one specific question."
+            ),
+        },
+        tools=["Read", "Glob", "Grep", "Agent"],
+        mcp_servers={"triage": triage_server},
+        can_use_tool=can_use_tool,
+        agents={
+            "code-locator": AgentDefinition(
+                description="Finds the files and functions involved in a bug report.",
+                prompt=(
+                    "Search the repository for the code behind the symptom you are given. "
+                    "Return file paths and function names with one line of evidence each. "
+                    "Do not propose fixes."
+                ),
+                tools=["Read", "Glob", "Grep"],
+                model="haiku",
+            ),
+        },
+        output_format={"type": "json_schema", "schema": Triage.model_json_schema()},
+        resume=session_id,
+        max_turns=30,
+        max_budget_usd=1.0,
+    )
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, AssistantMessage) and message.parent_tool_use_id is None:
+            for block in message.content:
+                if isinstance(block, ToolUseBlock):
+                    print(f"tool: {block.name}")
+        if isinstance(message, ResultMessage):
+            print(f"session: {message.session_id}")
+            if message.subtype == "success" and message.structured_output:
+                print(Triage.model_validate(message.structured_output).model_dump_json(indent=2))
+            else:
+                print(f"triage ended without a result: {message.subtype}", file=sys.stderr)
+
+
+asyncio.run(main())
+```
+
+</WhenLang>
+
+The options, top to bottom:
+
+- **`cwd` and `settingSources: ["project"]`** point the agent at the repository under triage and load that repository's `CLAUDE.md` and `.claude/` settings, while leaving your personal `~/.claude` setup out, as <LessonLink id="A6.1" /> described.
+- **`systemPrompt` with `preset: "claude_code"` and `append`** keeps Claude Code's own system prompt and adds the triage instructions after it.
+- **`tools`** keeps four built-ins in Claude's context and removes the rest, including `Bash`, `Edit`, and `Write`. MCP tools are unaffected, so `file_issue` stays visible.
+- **`agents`** defines the `code-locator` subagent, which gets read-only tools and runs on Haiku. Claude delegates to it through the `Agent` tool, which is why `Agent` is in the `tools` list. The subagent's searching happens in its own context, and only its summary returns to the main conversation.
+- **`resume`** is empty on a first run and holds a stored session ID on a follow-up.
+- **`maxTurns` and `maxBudgetUsd`** bound the run. The budget includes what subagents spend.
+
+The loop prints only the main agent's tool calls. Messages from inside the subagent carry a `parent_tool_use_id`, and the filter skips them.
+
+### Picking the conversation back up
+
+A vague report takes the other branch. The agent investigates, files nothing, and asks a question:
+
+```text
+tool: Agent
+tool: Read
+tool: Read
+tool: StructuredOutput
+session: 9f813885-a662-42ab-82d5-c5c887645489
+{
+  "status": "needs_info",
+  "suspected_files": [
+    "src/convert.js",
+    "src/cli.js"
+  ],
+  "question_for_reporter": "Can you share the exact command you ran, the number it printed, and the number you expected?"
+}
+```
+
+Your service stores the session ID next to the report. When the reporter answers, pass the reply and that ID back in. The session is transcript history saved on disk, and the resumed run picks up with the code it already read still in context:
+
+```text
+tool: mcp__triage__file_issue
+tool: StructuredOutput
+session: 9f813885-a662-42ab-82d5-c5c887645489
+```
+
+It files the issue without searching again. Resume by ID fits a service that handles many reports at once. For a conversation held open inside one process, Python's `ClaudeSDKClient` continues the same session on each `client.query()` call, and TypeScript's `continue: true` picks up the most recent session in the directory.
+
+### Options and the flags they correspond to
+
+| SDK option (TypeScript / Python) | CLI flag |
+|---|---|
+| `allowedTools` / `allowed_tools` | `--allowedTools` |
+| `disallowedTools` / `disallowed_tools` | `--disallowedTools` |
+| `tools` | `--tools` |
+| `permissionMode` / `permission_mode` | `--permission-mode` |
+| `canUseTool` / `can_use_tool` | `--permission-prompt-tool`, which names an MCP tool to answer the prompts |
+| `outputFormat` / `output_format` | `--json-schema` |
+| `systemPrompt` with `append` / `system_prompt` with `append` | `--append-system-prompt` |
+| `mcpServers` / `mcp_servers` | `--mcp-config` |
+| `agents` | `--agents` |
+| `resume` | `--resume` |
+| `settingSources` / `setting_sources` | `--setting-sources` |
+| `maxTurns` / `max_turns` | `--max-turns` |
+| `maxBudgetUsd` / `max_budget_usd` | `--max-budget-usd` |
+
+Custom tools are the entry with no flag equivalent. `--mcp-config` connects servers that run as their own processes, and a function in your application needs the library.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**You want a human to approve each filing from a review queue.** Keep the callback and make it wait on the queue. It can stay pending as long as the answer takes, and execution stays paused until it returns. If the wait could outlast your process, a `PreToolUse` hook can return a `defer` decision instead, so the process exits and the run resumes later from the saved session.
+
+**You want to block writes to one directory no matter what mode the agent runs in.** Use a `PreToolUse` hook callback that denies `Edit` and `Write` calls whose `file_path` falls under that directory.
+
+**You want the agent to look up the reporter's plan in your customer database.** Write a second custom tool on the same server and mark it `readOnlyHint: true` in its annotations. Read-only tools can run in parallel with other read-only calls.
+
+**You want the agent to comment on existing GitHub issues too.** This is the near-miss. Connect the GitHub MCP server through `mcpServers`, as <LessonLink id="I8.2" /> did from the terminal, and gate its write tools in the callback. A custom tool earns its place when your code has to own the call itself, as `file_issue` does with its label policy.
+
+**You want a chat interface where the user sends follow-ups while the agent works.** Use streaming input, where the prompt is an async iterable of messages, or Python's `ClaudeSDKClient`. A single-shot `query()` takes one prompt and ends with the result.
 
 ## When to use / when not to use
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+| Reach for | When |
+|---|---|
+| A custom tool | Your code has to run the action, check it, or shape the result |
+| An MCP server in `mcpServers` | A server already exists for the service and you only need to gate it |
+| The `canUseTool` callback | A decision that remains after the rules, made from runtime data or a person's answer |
+| A `PreToolUse` hook | A check that must see every call, including ones rules approve |
+| `outputFormat` | Any result another program reads |
+| A subagent | A search or review whose working context the main agent does not need |
+
+A library agent is not the answer for a job whose decisions can all be made before the run starts. That job is a `claude -p` script, which is shorter to write and to operate.
+
+On cost, every run bills tokens against the API key. A fresh `query()` per report pays to read the code from scratch, while a resumed session already holds what it read. Running the subagent on Haiku moves most of the reading to a cheaper model. `maxBudgetUsd` caps a run including its subagents, and `total_cost_usd` on each result gives you the number to log. Tool search is on by default and defers custom tool schemas until Claude needs one, so adding tools to a server costs little context.
 
 ## Pitfalls
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+- **The label policy never runs.** Issues appear without the `agent-triaged` label. `file_issue` is in `allowedTools`, so the call is approved before the callback is consulted; the TypeScript SDK emits a `CLAUDE_SDK_CAN_USE_TOOL_SHADOWED` warning when it can see this. Remove the tool from every allow rule.
+- **The agent runs `Bash` though `allowedTools` lists only read tools.** `allowedTools` works on the permission layer, so unlisted tools stay available. Remove `Bash` from `tools`, or list it bare in `disallowedTools`.
+- **Everything is approved in `bypassPermissions`.** Pairing that mode with a short `allowedTools` list still approves every tool, since unlisted tools fall through to the mode. Deny rules and hooks are the controls that hold in that mode.
+- **The code crashes reading the structured result.** A result can report `success` with no `structured_output`. Treat only `success` with the field present as a result, and everything else as a failure to log.
+- **The run fails at startup naming the schema.** A Zod schema converted without `target: "draft-7"` declares draft 2020-12, which the SDK's validator rejects.
+- **`resume` cannot find the session on another machine.** Sessions are transcript files on the host that ran them. Resume on the same host, or mirror transcripts to shared storage with a session store, which <LessonLink id="A6.3" /> covers with the rest of deployment.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** a repository to triage, either your own or a clone of a small public one such as `sindresorhus/slugify` or `jonschlinkert/is-number`, plus a new private GitHub repository to receive the issues. The agent cannot edit files, since `Edit`, `Write`, and `Bash` are outside its `tools` list, so you do not need a branch on the triage target. You need the `gh` CLI signed in, and an API key from the Claude Console.
+
+1. Create the sandbox repository and the one label GitHub does not provide:
+
+   ```bash
+   gh repo create triage-sandbox --private
+   gh label create agent-triaged --repo YOUR_USER/triage-sandbox
+   export ISSUE_REPO=YOUR_USER/triage-sandbox
+   export TARGET_REPO=/path/to/the/repo/to/triage
+   export ANTHROPIC_API_KEY=your-api-key
+   ```
+
+2. Build the agent from the five parts above.
+3. Write `report.md`: a bug report against the target repository that says what you ran, what happened, and what you expected. Inventing a plausible bug is fine.
+4. Run it, with `npx tsx triage.ts report.md` or `python triage.py report.md`.
+5. Write `vague.md` with one sentence and no steps, such as "The output is wrong sometimes." Run the agent on it and note the question and the session ID.
+6. Answer the question in `reply.md`, then run the agent with the reply file and the session ID as the second argument.
+7. Change the callback to deny any issue labeled `enhancement`, with a message saying why, then file a report that reads like a feature request.
+
+**Success criteria:**
+
+- The first run files an issue in the sandbox carrying `agent-triaged`, a label Claude never chose.
+- The vague report produces a question and no issue.
+- The resumed run files the issue without an `Agent` call in its output.
+- In step 7, Claude reads your denial and either picks another label or reports why it did not file.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+### Why is my custom tool an MCP server?
+
+The SDK exposes tools to Claude through MCP, and `createSdkMcpServer` runs that server inside your process, so you write a function and skip the server plumbing. It also means the docs file custom tools under MCP, and the `mcp__server__tool` naming and the `readOnlyHint` annotation both come from the protocol.
+
+### Do subagents in `.claude/agents/` still load?
+
+Yes, when `settingSources` includes the source they live in. An agent defined in the `agents` option wins over a file-based one with the same name. Subagents can also spawn subagents, and the subagents docs cover capping that depth.
+
+### Python has `query()` and `ClaudeSDKClient`. Which one?
+
+`query()` for one prompt per call, as in this agent, with `resume` when a later call has to continue. `ClaudeSDKClient` holds a session open across several `client.query()` calls in one process and adds controls such as changing the permission mode mid-session.
+
+### Can the permission callback see what Claude is about to do?
+
+It receives the tool name and the full input, such as the `title`, `body`, and `labels` Claude chose here, or the `command` for `Bash`. It can log that input, show it to a person, or return a changed copy.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A6.3" /> takes this agent off your laptop. Right now it holds a GitHub credential in the same process that reads untrusted report text, and the credential-proxy pattern there is the fix. Hosting, cost tracking, and observability follow.
+
+<LessonLink id="A7.6" /> deploys this agent as a service feeding PulseBoard, with the deployment note recording why it is an SDK agent you host rather than a Managed Agent.

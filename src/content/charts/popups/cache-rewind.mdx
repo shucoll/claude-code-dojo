@@ -1,0 +1,11 @@
+`/rewind` truncates the conversation back to an earlier turn. What remains is
+the same content the cache was built from at that point, and the system prompt
+and project context layers never changed, so the next request reads the earlier
+entry. Every turn since then read through that prefix, which kept it warm even
+when the original turn is older than the TTL.
+
+Restoring file checkpoints alongside the conversation adds nothing. File
+contents reach context only when Claude reads them.
+
+That makes `/rewind` the cheaper way to abandon a path you regret. `/compact`
+builds a new prefix where `/rewind` returns to a warm one.

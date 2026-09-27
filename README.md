@@ -34,9 +34,9 @@ Claude Code Dojo is a guided, browser-based course that takes you from your firs
 
 - **Beginner** — what Claude Code is, sessions and context, teaching Claude your project with CLAUDE.md, and a full guided project (Shelf).
 - **Intermediate** — tools and permissions, context engineering, skills, hooks, MCP servers, subagents, plugins, and a guided project (PulseBoard).
-- **Advanced** — deeper workflows and orchestration (in progress).
+- **Advanced** — orchestration and parallel agents, CI and scheduled automation, production safety and governance, cost and observability, plugins and marketplaces, the Agent SDK, and a guided project (Ship It Like a Team) that takes PulseBoard to production.
 
-Lessons are mostly language-agnostic. Language selection applies only to the guided projects, so you build them in a stack you already know.
+Lessons are mostly language-agnostic. Language selection applies to the guided projects and the Agent SDK module, so you build them in a stack you already know. In the Agent SDK module, JavaScript means TypeScript.
 
 ## Contribute
 

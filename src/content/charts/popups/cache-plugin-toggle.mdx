@@ -1,0 +1,14 @@
+A plugin's skills, commands, agents, hooks, monitors, and themes never
+invalidate the cache. Claude Code appends their content after the existing
+conversation, so the next request pays for that content and reads everything
+before it from cache.
+
+A plugin that provides MCP servers follows the MCP rule: the cache holds when
+the tools are deferred, and the next request re-reads the whole conversation
+when they load into the prefix. Where `/reload-plugins` would trigger that
+re-read, Claude Code shows a warning and holds the reload until you run
+`/reload-plugins --force`.
+
+Disabling a plugin you enabled earlier in the same session restores the
+previous request shape. If that prefix is still within its lifetime, the next
+request reads the older entry instead of rebuilding.

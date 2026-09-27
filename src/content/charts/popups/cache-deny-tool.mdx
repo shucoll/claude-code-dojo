@@ -1,0 +1,13 @@
+Adding a bare tool name such as `Bash` or `WebFetch` as a deny rule stops Claude
+calling it from your next request on. What it costs depends on tool search.
+
+With tool search active, the default on supported models, the request's tool
+definitions do not change and the cached prefix survives. Where tool search is
+unavailable or disabled, Claude Code removes the definition from the next
+request, which rebuilds the cache, and removing the rule later rebuilds it
+again.
+
+Only a rule that matches in the tool-name position works this way: a bare name,
+the equivalent `Bash(*)` form, or a tool-name glob such as `"*"` or `"mcp__*"`.
+Scoped rules like `Bash(rm *)`, and all allow and ask rules, are checked when
+Claude attempts the call, so they leave the prefix intact.

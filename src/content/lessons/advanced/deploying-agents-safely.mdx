@@ -4,53 +4,107 @@ slug: "deploying-agents-safely"
 title: "Deploying agents safely"
 type: "core"
 order: 3
-estimatedMinutes: 11
+estimatedMinutes: 14
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A6.2"]
-teaches: ["sdk-hosting", "credential-proxy", "agent-cost-tracking"]
-references: ["A3.2", "A4.3", "A6.1"]
-docsSources: ["https://code.claude.com/docs/en/agent-sdk/hosting", "https://code.claude.com/docs/en/agent-sdk/secure-deployment", "https://code.claude.com/docs/en/agent-sdk/cost-tracking", "https://code.claude.com/docs/en/agent-sdk/observability"]
+teaches: ["sdk-hosting", "session-patterns", "credential-proxy", "multi-tenant-isolation", "agent-cost-tracking", "sdk-telemetry", "build-vs-buy"]
+references: ["A3.2", "A4.3", "A6.1", "A7.6"]
+docsSources: ["https://code.claude.com/docs/en/agent-sdk/hosting", "https://code.claude.com/docs/en/agent-sdk/secure-deployment", "https://code.claude.com/docs/en/agent-sdk/cost-tracking", "https://code.claude.com/docs/en/agent-sdk/observability", "https://code.claude.com/docs/en/agent-sdk/session-storage", "https://platform.claude.com/docs/en/managed-agents/overview"]
 ---
 
 # Deploying agents safely
 
-## The problem
+## What changes when the agent leaves your laptop
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+The triage agent from <LessonLink id="A6.2" /> works on your machine because your machine quietly supplies four things. Your shell holds the API key, `gh` holds a GitHub login, the session transcripts sit in `~/.claude/projects/` where `resume` finds them, and you are watching the output. A deployed agent gets none of that for free.
 
-## The concept
+Behind every `query()` call, the SDK spawns a `claude` subprocess that owns a shell, a working directory, and session transcripts on local disk. One session is one subprocess. Hosting an SDK agent therefore means hosting a long-lived process tied to local state, which is a different job from hosting a stateless API wrapper.
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+## Choose a session pattern
 
-## How it works
+The [hosting guide](https://code.claude.com/docs/en/agent-sdk/hosting) names four patterns, defined by how long a container lives relative to the sessions it serves:
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+| Pattern | Container lifetime | Fits |
+|---|---|---|
+| Ephemeral | One container per task, destroyed when the task ends | One-off jobs such as a bug fix or a document extraction |
+| Long-running | Persistent containers holding many live sessions | Continuous traffic, such as a chat bot or an inbox agent |
+| Hybrid | Ephemeral containers that load a session on start and save it back | Sessions that span many interactions with idle time between them |
+| Multi-agent | Several SDK subprocesses in one container | Agents that must work closely in a shared environment |
 
-## Walkthrough
+The triage agent is hybrid. A report that needs more information sits idle until the reporter answers, which may take days, and no container should stay up for that. The pattern depends on a session store: local disk disappears on a restart, a scale-down, or a move to another node, and a [`SessionStore` adapter](https://code.claude.com/docs/en/agent-sdk/session-storage) mirrors each transcript to durable storage so `resume` works on whichever container picks up the reply. It mirrors transcripts only. `CLAUDE.md` files and anything written to the working directory need their own volume or sync. When a write to the store fails, the SDK drops that batch, emits a `mirror_error` system message, and keeps going, so alert on that message if you depend on the store.
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+Two runtime facts shape the container image. The SDK's bundled Claude Code binary is pinned to the SDK package version, so upgrading the SDK is how you upgrade the CLI. And a session has no timeout of its own, so `maxTurns` and `maxBudgetUsd` are what bound a run, with `maxTurns` on each subagent definition for the delegated work.
 
-## Use-case scenarios
+## The credential-proxy pattern
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+The isolation tiers from <LessonLink id="A3.2" /> apply unchanged: the agent runs inside a sandbox, container, or VM, and the [secure deployment guide](https://code.claude.com/docs/en/agent-sdk/secure-deployment) gives a hardened `docker run` that removes the network entirely except for a mounted socket to a proxy on the host. What deployment adds is the question of where the credentials live.
 
-## When to use / when not to use
+The pattern: the agent never holds a long-lived credential. A proxy outside the agent's security boundary adds the credential to each outgoing request, enforces which endpoints are reachable, and logs what passed through. If report text talks the agent into something, the credential is not in its environment to leak. For the triage agent, each credential gets a new home:
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
+| Credential | On your laptop | Deployed |
+|---|---|---|
+| Anthropic API key | `ANTHROPIC_API_KEY` in your shell | `ANTHROPIC_BASE_URL` points at a proxy that adds the key |
+| GitHub token | `gh`'s stored login | The `file_issue` handler calls an issue-filing service outside the boundary, and that service holds the token |
+| Who sent the report | You | A gateway authenticates the caller, and the agent receives requests that are already authenticated |
 
-## Pitfalls
+The GitHub row uses the custom tool as the boundary crossing. The docs recommend that route for non-Anthropic credentials, because routing HTTPS through `HTTPS_PROXY` gives the proxy only an encrypted tunnel, and injecting a header into it takes a TLS-terminating proxy with its certificate trusted inside the container.
 
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
+If the agent serves more than one customer from a shared container, isolate the tenants as well. Pass `settingSources: []` (`setting_sources=[]` in Python), set `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` and a per-tenant `CLAUDE_CONFIG_DIR` in `env`, give each tenant its own `cwd`, and apply per-tenant egress rules at the proxy. The settings list and the environment variable matter because auto memory and `~/.claude.json` load whatever `settingSources` says, as <LessonLink id="A6.1" /> noted.
+
+## Cost and telemetry
+
+Every result message carries `total_cost_usd`, on success and error results alike. Three rules keep the number honest:
+
+- It is an estimate. The SDK computes it locally from a price table bundled at build time. Use it for budgets and alerts. For billing, read the Usage and Cost API or the Console, and do not charge your own users from this field.
+- A resumed session reports the whole session. On current versions, a result from a resumed call includes the session's earlier spend. For the triage agent's needs-info path, read the latest result for the session total. Adding the two results together counts the first run twice.
+- Tokens dominate. The hosting guide puts token cost ahead of container cost by an order of magnitude or more, so the model and subagent choices from <LessonLink id="A6.2" /> move the bill more than instance sizing does.
+
+Telemetry is <LessonLink id="A4.3" />'s OpenTelemetry export, unchanged, because the SDK passes configuration through to the same CLI. Set the variables at the container or orchestrator level:
+
+```bash
+CLAUDE_CODE_ENABLE_TELEMETRY=1
+CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1   # traces only
+OTEL_TRACES_EXPORTER=otlp
+OTEL_METRICS_EXPORTER=otlp
+OTEL_LOGS_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+OTEL_EXPORTER_OTLP_ENDPOINT=http://collector.internal:4318
+```
+
+Three details are specific to running under the SDK:
+
+- Never use the `console` exporter. It writes to stdout, and stdout is the SDK's message channel.
+- In TypeScript, the `env` option replaces the subprocess environment. Spread `...process.env` into it, or the subprocess loses `PATH` and the API key along with everything else. Python's `env` merges on top of the inherited environment.
+- Attribute actions to your end users yourself. The identity attributes on every event name the credential the CLI used to call Anthropic. To attribute actions to the customer behind a report, set `OTEL_RESOURCE_ATTRIBUTES` per `query()` call in `env`, percent-encoding the values.
+
+With traces on, a subagent's model requests and tool calls nest under the parent's `Agent` tool span, so one triage run reads as a single trace. When your service calls `query()` inside an active span of its own, the SDK passes the trace context to the subprocess, and the agent's spans join your service's trace.
+
+## Build versus buy
+
+Everything above is infrastructure you now operate: a container image and its SDK version, a sandbox, an egress proxy, a secret store, a session store, a telemetry pipeline, and the capacity math of subprocesses per host. [Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview) is the option where Anthropic runs the agent loop and the sandbox, and your service sends events and reads the streamed results.
+
+| Hosting it yourself keeps | Hosting it yourself costs |
+|---|---|
+| Custom tools as functions in your own process | Every row of infrastructure listed above |
+| Full control of the container, network, and data path | Keeping the SDK and its pinned CLI current |
+| Eligibility for the data-retention terms <LessonLink id="A6.1" /> mentioned | Scaling, including session pinning for long-running containers |
+
+If your answer to the left column is "none of those matter to us", <LessonLink id="A6.1" />'s second cut deserves another pass before you build any of this.
 
 ## Try It
 
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**Environment:** the triage agent and sandbox repository from <LessonLink id="A6.2" />.
 
-## FAQ
+1. Add one line to the result branch that prints `total_cost_usd` next to the session ID.
+2. Run the agent on a vague report, then resume it with an answer, as in the <LessonLink id="A6.2">previous lesson's</LessonLink> Try It.
+3. Compare the two printed costs.
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+**Success criteria:**
+
+- The resumed run's cost is higher than the first run's, and the difference is smaller than the first run's own cost, because the second number includes the first.
+- You can state which of the three credentials in the table above your laptop run exposed to the agent's process, and where each would live when deployed.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A7.6" /> deploys this agent as a service feeding PulseBoard, using the proxy pattern for its credentials and reporting into the <LessonLink id="A7.5" /> telemetry stack. Its deployment note records the build-versus-buy decision from this lesson.

@@ -4,29 +4,429 @@ slug: "parallel-sprint-with-an-agent-team"
 title: "Parallel sprint with an agent team"
 type: "milestone"
 order: 1
-estimatedMinutes: 35
+estimatedMinutes: 60
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A1.6", "A2.4", "A3.4", "A4.4", "A5.3", "A6.3"]
 teaches: ["task-decomposition", "team-execution", "sprint-post-mortem"]
-references: ["A1.1", "A1.3", "A1.4", "I4.2"]
-docsSources: ["https://code.claude.com/docs/en/agent-teams", "https://code.claude.com/docs/en/worktrees", "https://code.claude.com/docs/en/cross-session-messaging"]
+references: ["A1.1", "A1.3", "A1.4", "I4.2", "I8.4", "A7.2"]
+docsSources: ["https://code.claude.com/docs/en/agent-teams", "https://code.claude.com/docs/en/worktrees", "https://code.claude.com/docs/en/cross-session-messaging", "https://code.claude.com/docs/en/hooks", "https://code.claude.com/docs/en/costs"]
 ---
 
 # Parallel sprint with an agent team
 
+PulseBoard left the Intermediate level as a configured project built by one developer in one session. Over six milestones this module takes it to production-operated, with you as tech lead of a Claude-powered team. The first capability is parallel work: one epic split across three teammates, with nobody's work lost to a collision.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Ship three new dashboard panels in one sprint, built in parallel by a three-teammate agent team, while you build a fourth piece yourself in a worktree. A `TaskCompleted` hook refuses to close a teammate's task until that teammate's own tests pass.
+
+The graded work comes before any of that: a written plan in `SPRINT.md` that gives every file the epic touches exactly one owner. Teams do not isolate teammates in worktrees (<LessonLink id="A1.4" />), so the plan is the only thing keeping three teammates out of each other's files, and the sprint succeeds or fails on the day you write it. The same file ends with a post-mortem comparing the team's token cost with a subagent run of the same epic and accounting for every conflict.
+
+**Environment:** your PulseBoard repository from <LessonLink id="I8.7">I8.7</LessonLink>, everything committed and pushed, in an interactive terminal. Teams need an interactive session and never spawn under `-p`. You enable them for this repository in step 4.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Write the contract and the decomposition
+
+Create `SPRINT.md` and start it with the epic. Each panel is an endpoint plus a section on the dashboard, and the response shapes are the contract every consumer builds against:
+
+| Panel | Endpoint | Response |
+|---|---|---|
+| Review latency | `GET /api/latency?days=30` | `{"medianHours": 5.2, "prCount": 41}`, the median hours from a pull request opening to its first review, over pull requests merged in the window |
+| Issues by label | `GET /api/labels` | `[{"label": "bug", "open": 12}, ...]` |
+| Release cadence | `GET /api/releases?count=10` | `{"medianDaysBetween": 14, "latest": "v2.3.0"}` |
+| Summary (yours) | `GET /api/summary` | `{"medianReviewHours": 5.2, "topLabel": "bug", "latestRelease": "v2.3.0"}`, one headline figure from each of the other three |
+
+The contract goes first because it removes the dependency chain. Your summary endpoint reads all three panels, and without agreed shapes it would wait for each of them to finish. That chain is the near-miss from <LessonLink id="A1.4" />: a teammate can only claim an unblocked task, so dependent work runs one task at a time while you pay for idle teammates.
+
+Now look at why the current layout cannot be split. Every feature so far went through `server.js` or `app.py` for its route, the single data module for its GitHub and SQLite access, and `public/index.html` for its view. Three teammates building three panels in that layout would all edit the same three files, and a team overwrites without warning. So the plan has two parts: a seam change you make in one session before the team exists (step 2), and an ownership table the team works from afterwards.
+
+<WhenLang is="javascript">
+
+| Owner | Files |
+|---|---|
+| `latency` teammate | `routes/latency.js`, `data/latency.js`, `public/panels/latency.js`, `tests/latency.test.js` |
+| `labels` teammate | `routes/labels.js`, `data/labels.js`, `public/panels/labels.js`, `tests/labels.test.js` |
+| `releases` teammate | `routes/releases.js`, `data/releases.js`, `public/panels/releases.js`, `tests/releases.test.js` |
+| you, in a worktree | `routes/summary.js`, `public/panels/summary.js`, `tests/summary.test.js` |
+| frozen for the sprint | `server.js`, `data/db.js`, `data/github.js`, `public/index.html`, `package.json`, `package-lock.json` |
+
+</WhenLang>
+
+<WhenLang is="python">
+
+| Owner | Files |
+|---|---|
+| `latency` teammate | `routes/latency.py`, `data/latency.py`, `public/panels/latency.js`, `tests/test_latency.py` |
+| `labels` teammate | `routes/labels.py`, `data/labels.py`, `public/panels/labels.js`, `tests/test_labels.py` |
+| `releases` teammate | `routes/releases.py`, `data/releases.py`, `public/panels/releases.js`, `tests/test_releases.py` |
+| you, in a worktree | `routes/summary.py`, `public/panels/summary.js`, `tests/test_summary.py` |
+| frozen for the sprint | `app.py`, `data/__init__.py`, `data/db.py`, `data/github.py`, `public/index.html`, `requirements.txt` |
+
+</WhenLang>
+
+Three more decisions go in the plan, each one closing a collision path the table does not cover:
+
+- Migrations. A teammate that needs a cache table adds a migration, and two teammates picking the same next number collide on the file name. Reserve a name per teammate, with the teammate's name in it. Do not create placeholders: the guard from <LessonLink id="I8.4" /> freezes any migration that already exists, so an empty placeholder is one its owner could never fill.
+- Tests. Every teammate shares one working tree, so a test that loads the whole app also loads whatever another teammate has half-written, and can fail on it. Each test file builds a fresh app with only its owner's route module mounted and never imports the app entry point.
+- Packages. Nobody adds one. The manifest is a shared file.
+
+Grade the plan before you touch code. It passes when all three of these hold, and you write each answer into `SPRINT.md` under the table:
+
+1. Every file the epic will touch has exactly one owner or is frozen.
+2. No teammate's task waits on another's, because the contract lets each start at once.
+3. Every teammate can prove its work is done using only files it owns.
+
+If one fails, fix the plan now.
+
+### 2. Cut the seams in one session
+
+The seam change touches every shared file, which is why a single session makes it before any teammate exists. Switch to plan mode and ask for the restructure:
+
+<WhenLang is="javascript">
+
+```prompt
+Restructure PulseBoard so each feature can live in its own files. Move the SQLite connection to data/db.js and the Octokit client to data/github.js. Move the stale-issue data functions to data/stale.js and delete data.js. Move the stale-issue route to routes/stale.js as an Express router, and have server.js keep the app setup and mount every router. Then add stubs for four features, latency, labels, releases, and summary: a router in routes/ whose endpoint returns 501, a data function in data/ that throws "not implemented" for every feature except summary, and an empty script in public/panels/ with a container for it in public/index.html. Keep the existing tests passing.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Restructure PulseBoard so each feature can live in its own files. Make data/ a package: move the SQLite connection to data/db.py and the GitHub session to data/github.py, move the stale-issue data functions to data/stale.py, and delete data.py. Move the stale-issue route to routes/stale.py as a Flask blueprint, and have app.py keep the app setup and register every blueprint. Then add stubs for four features, latency, labels, releases, and summary: a blueprint in routes/ whose endpoint returns 501, a data function in data/ that raises NotImplementedError for every feature except summary, and an empty script in public/panels/ with a container for it in public/index.html. Keep the existing tests passing.
+```
+
+</WhenLang>
+
+Approve the plan. The stubs are what make the table work: each one pre-wires a feature into the shared files, so the teammate who owns it never needs to open them.
+
+Then bring the environment in line with the new layout, since `CLAUDE.md`, the path-scoped rule, and the allow list from <LessonLink id="I8.1" /> all still name the single data module:
+
+```prompt
+Update CLAUDE.md and .claude/rules/data-access.md for the new layout: routes live in routes/, and all GitHub and SQLite access lives in data/. In .claude/settings.json, replace the allow rule for the old data module with Edit rules for routes/** and data/**.
+```
+
+The `Stop` gate from <LessonLink id="I8.4" /> holds the turn until the suite is green, so the sprint starts from a passing suite.
+
+### 3. Arm the task gate
+
+Save `.claude/hooks/task-gate.sh`:
+
+<WhenLang is="javascript">
+
+```bash
+#!/bin/bash
+# task-gate.sh: a teammate's task closes only when that teammate's own tests pass
+cd "$CLAUDE_PROJECT_DIR"
+input=$(cat)
+owner=$(echo "$input" | jq -r '.teammate_name // empty')
+subject=$(echo "$input" | jq -r '.task_subject')
+
+case "$owner" in
+  "") exit 0 ;;  # not a teammate; the Stop gate covers the lead
+  latency|labels|releases) test_file="tests/$owner.test.js" ;;
+  *)
+    echo "$owner is not in the ownership table in SPRINT.md, so \"$subject\" cannot close." >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -f "$test_file" ]]; then
+  echo "\"$subject\" has no tests. Write $test_file before completing it." >&2
+  exit 2
+fi
+if ! node --test "$test_file" >"/tmp/pulseboard-$owner.log" 2>&1; then
+  echo "$test_file is failing. Fix it before completing \"$subject\":" >&2
+  tail -20 "/tmp/pulseboard-$owner.log" >&2
+  exit 2
+fi
+exit 0
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+#!/bin/bash
+# task-gate.sh: a teammate's task closes only when that teammate's own tests pass
+cd "$CLAUDE_PROJECT_DIR"
+input=$(cat)
+owner=$(echo "$input" | jq -r '.teammate_name // empty')
+subject=$(echo "$input" | jq -r '.task_subject')
+
+case "$owner" in
+  "") exit 0 ;;  # not a teammate; the Stop gate covers the lead
+  latency|labels|releases) test_file="tests/test_$owner.py" ;;
+  *)
+    echo "$owner is not in the ownership table in SPRINT.md, so \"$subject\" cannot close." >&2
+    exit 2
+    ;;
+esac
+
+if [[ ! -f "$test_file" ]]; then
+  echo "\"$subject\" has no tests. Write $test_file before completing it." >&2
+  exit 2
+fi
+if ! pytest "$test_file" >"/tmp/pulseboard-$owner.log" 2>&1; then
+  echo "$test_file is failing. Fix it before completing \"$subject\":" >&2
+  tail -20 "/tmp/pulseboard-$owner.log" >&2
+  exit 2
+fi
+exit 0
+```
+
+</WhenLang>
+
+Make it executable and register it in `.claude/settings.json`, beside the existing hooks. `TaskCompleted` takes no matcher and fires on every task:
+
+```bash
+chmod +x .claude/hooks/task-gate.sh
+```
+
+```json
+{
+  "hooks": {
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/task-gate.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The event fires when a task is marked complete and when a teammate ends its turn with a task still in progress. Its input carries `teammate_name`, and exit `2` keeps the task open with stderr handed back as the reason, the contract from <LessonLink id="I4.2" />.
+
+The gate runs one file's tests for the same reason the tests rule exists. When `latency` finishes, `labels` may be halfway through an edit, and a whole-suite gate would refuse `latency`'s task for someone else's unfinished work. The whole suite still runs, on the lead, through the `Stop` gate.
+
+The `case` statement is also why teammate names are load-bearing in this sprint. The gate knows three names, and an unknown one fails closed: its task cannot close, and the reason points at the table. Letting it through would switch the gate off with no sign that it had.
+
+Two small files prepare the worktree you open in step 5. A worktree is a fresh checkout, so the gitignored `.env` holding your GitHub token is not in it. Create `.worktreeinclude` at the repository root:
+
+```text
+.env
+```
+
+Add `.claude/worktrees/` to `.gitignore`, so worktree contents never show up as untracked files in your main checkout.
+
+Now commit and push. A worktree branches from the remote's default branch, so your session in step 5 sees the seams only after they are pushed:
+
+```prompt
+Commit the restructure, the task gate, .worktreeinclude, the .gitignore change, and SPRINT.md with a message describing the sprint setup, then push.
+```
+
+The push pauses for you, since `git push` is on the `ask` list. Then put the team's work on its own branch:
+
+```bash
+git switch -c sprint/panels
+```
+
+### 4. Enable teams and freeze the shared files
+
+Write `.claude/settings.local.json`. It is gitignored, so both the experimental flag and the freeze stay on your machine:
+
+<WhenLang is="javascript">
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(node --test *)"
+    ],
+    "deny": [
+      "Edit(server.js)",
+      "Edit(data/db.js)",
+      "Edit(data/github.js)",
+      "Edit(public/index.html)",
+      "Edit(package.json)",
+      "Edit(package-lock.json)"
+    ]
+  }
+}
+```
+
+The allow rule lets each teammate run its own test file without a prompt. Every teammate's permission requests surface in your lead session, so three teammates asking for the same command means three prompts.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "permissions": {
+    "deny": [
+      "Edit(app.py)",
+      "Edit(data/__init__.py)",
+      "Edit(data/db.py)",
+      "Edit(data/github.py)",
+      "Edit(public/index.html)",
+      "Edit(requirements.txt)"
+    ]
+  }
+}
+```
+
+The `Bash(pytest *)` allow rule from <LessonLink id="I8.1" /> already lets each teammate run its own test file without a prompt, which matters because every teammate's permission requests surface in your lead session.
+
+</WhenLang>
+
+A deny rule wins over any allow, so a teammate that reaches for a frozen file is refused with a reason it can read, and the refusal stays in its transcript for your post-mortem. The settings file applies to every teammate alike, so it can only freeze what nobody may touch.
+
+### 5. Start your own session in a worktree
+
+In a second terminal, from the repository root:
+
+```bash
+claude --worktree summary --name summary
+```
+
+This creates `.claude/worktrees/summary/` on a new branch, `worktree-summary`, from the pushed seam commit, with `.env` copied in. The `--name` is the address the team lead uses to reach this session. Ask Claude to install the project's dependencies, since a fresh checkout has none, then build your piece:
+
+```prompt
+Build the summary feature against the contract in SPRINT.md. GET /api/summary returns medianReviewHours, topLabel, and latestRelease, taken from the latency, labels, and releases data functions. Those functions are stubs on this branch, so mock them in the summary test. Only edit the summary files in SPRINT.md's ownership table.
+```
+
+Your piece needs only the contract, so it runs on its own branch where the stubs hold still. The worktree gives you a tree the team's in-progress edits never reach, and <LessonLink id="A1.1" /> is the lesson behind that isolation.
+
+### 6. Spawn the team
+
+Back in the first terminal, in the main checkout on `sprint/panels`, start Claude and describe the team. Every sentence of the spawn prompt carries a line of the plan, because teammates load `CLAUDE.md` and the project's files but never your conversation:
+
+<WhenLang is="javascript">
+
+```prompt
+Create an agent team with three teammates, using Sonnet for each. Name them exactly latency, labels, and releases. Each builds one panel from SPRINT.md and edits only the files the ownership table assigns it: its router, its data module, its panel script, and its test file. If a teammate needs a change in a file it does not own, it messages the owner. Each test mounts only its own router on a fresh Express app and never imports server.js. Give each teammate its reserved migration name. Nobody adds a package.
+You do not write code or edit SPRINT.md in this sprint. If a teammate changes a response shape from the contract, tell me and message the session named summary with the new shape.
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```prompt
+Create an agent team with three teammates, using Sonnet for each. Name them exactly latency, labels, and releases. Each builds one panel from SPRINT.md and edits only the files the ownership table assigns it: its blueprint, its data module, its panel script, and its test file. If a teammate needs a change in a file it does not own, it messages the owner. Each test registers only its own blueprint on a fresh Flask app and never imports app.py. Give each teammate its reserved migration name. Nobody adds a package.
+You do not write code or edit SPRINT.md in this sprint. If a teammate changes a response shape from the contract, tell me and message the session named summary with the new shape.
+```
+
+</WhenLang>
+
+Check the agent panel before the work gets far. You want three rows named exactly `latency`, `labels`, and `releases`, and `Ctrl+T` should show a shared task list. If Claude used subagents instead, ask again and say "agent team" explicitly.
+
+### 7. Run the sprint and log what happens
+
+`SPRINT.md` is yours for the whole sprint. The lead reports contract changes to you and you record them, so the file has one editor. Start a conflict log in it and add to it as the sprint runs. These are the events worth a line:
+
+- A gate refusal: a teammate tried to close a task with a missing or failing test file. Note which teammate and what the gate said.
+- A denied edit on a frozen file: a teammate reached outside the plan. Note what it wanted to change, because that is a gap in the decomposition.
+- A contract message reaching your summary session. It shows as a dim line starting `› Message from`. Check that your session adapted to the new shape.
+- The lead writing code. The `Stop` gate still runs on the lead, and a red suite mid-sprint tells it to keep working until the tests pass, which is a push toward doing the teammates' work. Answer it with: `Wait for your teammates to complete their tasks before proceeding`.
+- A task stuck in progress after its work landed. Task status can lag, so check the files, then tell the lead to nudge the teammate.
+
+When all three tasks close, ask the lead to run the full suite, then shut the team down:
+
+```prompt
+Ask latency, labels, and releases to shut down.
+```
+
+Before anything else, run `/usage` in the lead and copy the Session block's per-model usage into `SPRINT.md`. `/clear` resets it. Then commit the sprint:
+
+```prompt
+Commit the three panels with a message describing them.
+```
+
+Finish your summary session: commit its work on `worktree-summary` and exit, keeping the worktree when Claude asks. Merge both branches from the main checkout:
+
+```bash
+git switch main
+git merge sprint/panels
+git merge worktree-summary
+```
+
+The ownership table predicts both merges are clean. A conflict here means two branches touched one file, and the table names which of them should not have. Log it.
+
+### 8. Measure the subagent alternative
+
+The post-mortem compares the team's cost with three subagents doing the same epic. Measure it: rerun the epic from the seam commit, on a throwaway branch, as subagents in a fresh session.
+
+```bash
+git switch -c baseline/subagents <seam-commit-sha>
+```
+
+Before starting Claude, set `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` to `"0"` in `.claude/settings.local.json`. With teams on, a subagent Claude names launches as a teammate (<LessonLink id="A1.4" />), and your baseline would quietly become a second team. Keep the freeze. Then give the same plan to subagents:
+
+```prompt
+Use three subagents, one per panel in SPRINT.md, with the file ownership, test rule, and migration names the plan assigns. Run them in parallel and wait for all three. You do not write code yourself.
+```
+
+When they finish, run `/usage` and note the per-model usage. Then commit the baseline's work so the branch can be dropped whole, switch back, delete it, and record the numbers in `SPRINT.md` on `main`:
+
+```bash
+git add -A && git commit -m "subagent baseline"
+git switch main
+git branch -D baseline/subagents
+```
+
+Use the token counts for the comparison. The dollar figure is a list-price estimate meant for API users, and token counts mean the same thing on every plan. Finally, remove the `deny` block from `.claude/settings.local.json`; the sprint is over.
+
+### 9. Write the post-mortem
+
+Add the post-mortem to `SPRINT.md` under the plan and the conflict log:
+
+```markdown
+## Post-mortem
+
+### Cost
+| Run | Input | Output | Cache read | Cache write |
+|---|---|---|---|---|
+| Agent team, 3 Sonnet teammates |  |  |  |  |
+| Subagents, same plan |  |  |  |  |
+
+What the team's extra tokens bought on this epic:
+
+### Conflicts
+| Event | Collision path | Prevented or caught by |
+|---|---|---|
+
+### What I would change in the decomposition
+```
+
+The conflicts section is the one that grades the plan. Every row names the decision that prevented or caught the event: the ownership table, the freeze, the test rule, the reserved migration names, or the gate. A row that nothing caught is a gap in the plan. If the log is empty, the section still needs content: for each collision path in step 1 (a shared file, a coupled test, a migration name), say which decision closed it.
+
+Commit `SPRINT.md` and push `main`.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- A `SPRINT.md` holding the contract, the ownership table, the three checks, the conflict log, and the post-mortem.
+- Three new panels built by the team and a summary panel built by you, merged to `main` with the suite green.
+- A layout with one set of files per feature, and a `CLAUDE.md`, data-access rule, and allow list updated to match.
+- A committed `task-gate.sh` registered on `TaskCompleted`, and a `.worktreeinclude` that carries `.env` into every worktree.
+
+**Done looks like:** all four endpoints return real data from the tracked repository, `git log` shows the seam commit and both merged branches, and the cost table in `SPRINT.md` has two measured rows.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+For any team you run, start the plan from the shared working tree: list what it lets one teammate break for another, and close each path before anyone spawns. In this sprint that list had three entries, and each became a decision in step 1.
+
+Split every boundary into team-wide and per-teammate. Settings files carry the team-wide part. The per-teammate part needs something that can tell teammates apart, which here was the spawn prompt and a hook keyed on `teammate_name`.
+
+Your summary session made the opposite trade: a worktree and cross-session messaging from <LessonLink id="A1.3" /> bought isolation from the team, paid for with a merge at the end.
+
+The cost table closes the loop with <LessonLink id="A1.6" />. The plan that made the team safe also made its three tasks independent, and independent tasks whose results are all you need are the case that resolver sends to subagents. Your two measured rows put a number on that trade for this epic. A team earns its price when teammates have something to say to each other, so check your conflict log for how often they did.
+
+Next milestone, <LessonLink id="A7.2" />: you wire the repository into CI, so an issue can summon Claude and every pull request meets an automated reviewer before it meets you.
