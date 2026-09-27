@@ -177,7 +177,10 @@ Then decide what the fleet may install and what happens when the policy cannot b
 {
   "allowManagedHooksOnly": true,
   "disableSideloadFlags": true,
-  "allowedMcpServers": ["github", "sentry"],
+  "allowedMcpServers": [
+    { "serverUrl": "https://api.githubcopilot.com/*" },
+    { "serverUrl": "https://mcp.sentry.dev/*" }
+  ],
   "allowManagedMcpServersOnly": true,
   "forceRemoteSettingsRefresh": true,
   "claudeMd": "Run `make lint` before committing. Never push to main directly."
