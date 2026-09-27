@@ -4,29 +4,278 @@ slug: "cost-and-observability"
 title: "Cost and observability"
 type: "milestone"
 order: 5
-estimatedMinutes: 25
+estimatedMinutes: 50
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A7.4"]
 teaches: ["otel-dashboard", "usage-analysis", "cost-optimization-pass"]
-references: ["A4.1", "A4.2", "A4.3"]
-docsSources: ["https://code.claude.com/docs/en/monitoring-usage", "https://code.claude.com/docs/en/prompt-caching", "https://code.claude.com/docs/en/costs"]
+references: ["A4.1", "A4.2", "A4.3", "A7.6"]
+docsSources: ["https://code.claude.com/docs/en/monitoring-usage", "https://code.claude.com/docs/en/prompt-caching", "https://code.claude.com/docs/en/costs", "https://platform.claude.com/docs/en/about-claude/pricing", "https://github.com/anthropics/claude-code-monitoring-guide"]
 ---
 
 # Cost and observability
 
+PulseBoard now runs a team, a CI pipeline, a scheduled job, and a governed plugin, and nobody knows what any of it costs. This milestone adds the measurement layer: telemetry from every session into a dashboard, a week of usage read off it, and a cost-optimization pass in which every claimed saving is arithmetic on a number the dashboard showed.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Run an OpenTelemetry collector, Prometheus, and Grafana locally, send every PulseBoard session's metrics to them, and collect a week of usage, or compress one with a replay script. Build a five-panel dashboard, then write a cost-optimization pass into `RUNBOOK.md` that applies the cache findings from <LessonLink id="A4.1" /> and the model assignments from <LessonLink id="A4.2" />, each with a projected weekly saving and the panel that will confirm it.
+
+The optimization pass is the graded part. A change with no measured baseline behind it does not count.
+
+**Environment:** your PulseBoard repository with the <LessonLink id="A7.4">A7.4</LessonLink> work merged, Docker running, and room for about $5 of usage if you compress the week with the replay script in step 3.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Stand up the stack
+
+The stack is the one <LessonLink id="A4.3" /> wired with a debug exporter, with two services added so the numbers are stored and drawn. It follows the layout of Anthropic's [monitoring guide](https://github.com/anthropics/claude-code-monitoring-guide). Create an `observability/` directory in PulseBoard and save four files in it.
+
+`observability/docker-compose.yml`:
+
+```yaml
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otel-collector.yaml
+    ports:
+      - "4317:4317"
+      - "8889:8889"
+
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+
+volumes:
+  prometheus_data:
+  grafana_data:
+```
+
+`observability/otel-collector.yaml` receives OTLP from Claude Code and serves it for Prometheus to scrape:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch:
+
+exporters:
+  prometheus:
+    endpoint: 0.0.0.0:8889
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheus]
+```
+
+`observability/prometheus.yml`:
+
+```yaml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]
+```
+
+`observability/grafana/provisioning/datasources/prometheus.yaml` connects Grafana to Prometheus on startup, so there is nothing to click through:
+
+```yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+```
+
+Start it:
+
+```bash
+cd observability && docker compose up -d
+```
+
+Prometheus keeps fifteen days of data, so a week fits with room to compare it against the next one.
+
+### 2. Point every session at it
+
+Add the telemetry variables to the `env` block of PulseBoard's `.claude/settings.local.json`, so every session in the repository exports without anyone remembering to:
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+    "OTEL_METRICS_EXPORTER": "otlp",
+    "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+    "OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4317",
+    "OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE": "cumulative"
+  }
+}
+```
+
+`OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` is the one line specific to this stack. Claude Code exports delta values by default, and Prometheus expects counters that only grow, so the variable switches Claude Code to cumulative values.
+
+Start a session, do a few turns of work, wait a minute, and open Prometheus at `http://localhost:9090`. Querying `claude_code_cost_usage_USD_total` should return series labelled with `model`, `query_source`, and `session_id`. If your collector version names the metrics differently, type `claude_code` into the query box and use the names it suggests throughout the rest of this milestone.
+
+For the organization from <LessonLink id="A7.4" />, the same variables would go in the managed `env` block, where <LessonLink id="A4.3" />'s endpoint lock keeps a developer from pointing their sessions elsewhere.
+
+### 3. Collect a week, or compress one
+
+A real week of PulseBoard work is the best dataset. Leave the stack up, work as you normally would, and at the end of each interactive session run `/usage` and copy its `Prompt cache (main)` line into a scratch file with the date.
+
+If you cannot wait a week, compress one. Save `observability/replay-week.sh`, a mix of the kinds of work PulseBoard sees, each run tagged with a `workload` label through `OTEL_RESOURCE_ATTRIBUTES`:
+
+```bash
+#!/bin/bash
+# replay-week.sh: a compressed week of PulseBoard work, each run tagged with its workload
+set -uo pipefail
+
+run() {
+  local workload="$1" model="$2" prompt="$3"
+  OTEL_RESOURCE_ATTRIBUTES="workload=$workload" OTEL_METRIC_EXPORT_INTERVAL=10000 \
+    claude -p "$prompt" \
+      --model "$model" \
+      --allowedTools "Read,Grep,Glob,Agent,Bash(git log *),Bash(git diff *)" \
+      --max-budget-usd 0.50 \
+      --output-format json > /dev/null \
+    || echo "run failed: $workload on $model" >&2
+}
+
+run feature  sonnet "Explain how GET /api/stale decides an issue is stale. Name the files involved."
+run feature  sonnet "Which data/ module would a new panel for pull request size belong in, and why?"
+run feature  sonnet "List every endpoint, the route file that serves it, and the data function it calls."
+run review   sonnet "Review the diff of the last three commits for bugs. Report only what you can cite by file and line."
+run review   sonnet "Check whether every endpoint has a test that mounts only its own route module."
+run explore  sonnet "Use a subagent to read every file under tests/ and summarize what each one covers."
+run explore  sonnet "Use a subagent to find every place the GitHub token is read, and report each file and line."
+run design   opus   "Propose how PulseBoard could cache GitHub responses per repository instead of globally. Do not write code."
+run chores   haiku  "Summarize RUNBOOK.md in five bullets."
+run chores   haiku  "List the scripts in ops/ and what each one does, one line each."
+```
+
+```bash
+chmod +x observability/replay-week.sh
+./observability/replay-week.sh
+```
+
+The runs are read-only apart from `git log` and `git diff`, and each stops at 50 cents. Two of them ask for a subagent, so the week has subagent spend to find. Run one ordinary interactive session afterwards and keep its `/usage` cache line too, since the headless runs do not print one.
+
+Interactive sessions carry no `workload` label. They show up in the panels below as an empty group, which is a useful split on its own: interactive work on one side, automation on the other.
+
+### 4. Build the dashboard
+
+Open Grafana at `http://localhost:3000`, sign in as `admin` with password `admin`, and create a dashboard named "PulseBoard cost". Add five panels, each with the query type set to **Instant** and a bar chart or table visualization.
+
+| Panel | Query |
+|---|---|
+| Spend by workload | `sum by (workload) (max_over_time(claude_code_cost_usage_USD_total[7d]))` |
+| Spend by model | `sum by (model) (max_over_time(claude_code_cost_usage_USD_total[7d]))` |
+| Main conversation versus subagents | `sum by (query_source) (max_over_time(claude_code_cost_usage_USD_total[7d]))` |
+| Cache read share by workload | `sum by (workload) (max_over_time(claude_code_token_usage_tokens_total{type="cacheRead"}[7d])) / sum by (workload) (max_over_time(claude_code_token_usage_tokens_total{type=~"input\|cacheRead\|cacheCreation"}[7d]))` |
+| Tokens by type for one workload | `sum by (type, model) (max_over_time(claude_code_token_usage_tokens_total{workload="explore"}[7d]))` |
+
+Every query uses `max_over_time` where `increase` might look more natural, and the reason is in the data. Each session is its own counter series, starting at the moment the session starts. `increase` measures growth between the samples it sees, so it drops a series' first value, which for a short headless run is most of what the run cost. A counter's largest value within the week is that session's total, and summing those gives the week.
+
+The cost figures are Claude Code's own estimates at list price. They are right for comparing workloads and models against each other, and your provider's billing remains the authority for the actual bill.
+
+### 5. Read the week
+
+Before changing anything, write down what the dashboard says. Start a section in `RUNBOOK.md`:
+
+```markdown
+## Cost and observability
+
+Every PulseBoard session exports metrics to the local stack in observability/.
+Dashboard: http://localhost:3000, "PulseBoard cost".
+
+### Week of YYYY-MM-DD
+
+| Workload | Spend | Share | Main model | Cache read share |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+Subagent share of spend:
+Prompt cache (main) lines from /usage: hit %, misses, named causes
+```
+
+Three readings matter most for the pass that follows:
+
+- A workload whose cache read share sits well below the others is paying to reprocess its prefix. The `/usage` lines say why for interactive sessions, and <LessonLink id="A4.1" /> names the usual causes: a model or effort switch mid-session, compaction after a long break, or tools loading into the prefix.
+- A large subagent share on the session's own model is the case <LessonLink id="A4.2" /> assigns to `haiku` through `CLAUDE_CODE_SUBAGENT_MODEL`.
+- A judgment-light workload on an expensive model, such as the `chores` runs if you had put them on `opus`, is spend buying nothing.
+
+### 6. Write the optimization pass
+
+Add the pass under the week's table. Each change gets four lines, and the projection is written as arithmetic so a reader can check it:
+
+```markdown
+### Optimization pass
+
+1. Change: run subagents on haiku (CLAUDE_CODE_SUBAGENT_MODEL=haiku in settings)
+   Evidence: subagents were N% of spend; explore used X input, Y output,
+   Z cache-read, W cache-write tokens on sonnet this week
+   Projected weekly saving: X × (sonnet input − haiku input)
+     + Y × (sonnet output − haiku output)
+     + Z × (sonnet cache read − haiku cache read)
+     + W × (sonnet cache write − haiku cache write) = $…
+   How we will know: "Main conversation versus subagents" shows the
+   subagent bar dropping by roughly that amount next week
+
+2. Change: …
+```
+
+Take every rate from the [pricing page](https://platform.claude.com/docs/en/about-claude/pricing) on the day you write the pass, and cite the date. Rates change, and a pass with rates copied from memory makes claims nobody can check.
+
+Write at least two changes, one from each lesson:
+
+- A cache change from <LessonLink id="A4.1" />, such as setting model and effort at the start of a session when a `/usage` line named a model switch as the cause. Project it from the tokens re-cached that the line reported, priced at the difference between a cache write and a cache read.
+- A model-assignment change from <LessonLink id="A4.2" />, projected from the fifth panel's token counts for the workload you are moving.
+
+For each workload you decide to leave alone, add one line saying why. A `design` run on `opus` is buying judgment, which is the reason <LessonLink id="A4.2" /> gives for paying that rate. A decision to keep a cost is part of the pass too.
+
+Commit `observability/`, the `RUNBOOK.md` section, and your settings change if you made one to the committed `.claude/settings.json`, and push.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage you have:
+
+- A local collector, Prometheus, and Grafana in `observability/`, receiving metrics from every PulseBoard session.
+- A week of usage, real or replayed, and a five-panel "PulseBoard cost" dashboard reading it.
+- A `RUNBOOK.md` section recording the week by workload, the cache readings, and an optimization pass with at least two changes, each carrying evidence, a projected weekly saving written as arithmetic, and the panel that will confirm it.
+
+**Done looks like:** someone reading only the runbook can find each change's evidence on the dashboard, redo its arithmetic from the cited rates, and know which bar to watch next week.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+A cost pass is checked by the week that follows it, so keep the measurement fixed between the two weeks: the same queries, the same workload labels, and the same replay mix. When a bar moves, the only thing that changed should be the work.
+
+Next milestone, <LessonLink id="A7.6" />: the capstone. The bug-triage agent from <LessonLink id="A6.2" /> becomes a small hosted service feeding PulseBoard, behind the credential proxy from <LessonLink id="A6.3" />, reporting into the stack you just built.
