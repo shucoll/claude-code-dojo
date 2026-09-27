@@ -23,10 +23,10 @@ Optional, untimed, and self-graded. Skip it and nothing locks. Do it and you fin
 
 By the end of the level, four things:
 
-- **Write the guardrails before the job**: permissions, sandbox tier, spend limit, failure behavior, and output review for anything that runs without you, per <LessonLink id="A2.4" />.
-- **Write governance for the least cautious member** of an organization, starting with which delivery channel carries the policy, per <LessonLink id="A3.3" />.
-- **Build a headless run to a spec**, where every requirement maps to a flag you can name, per <LessonLink id="A2.1" />.
-- **Read a coordination plan and find its failures** using the three questions from <LessonLink id="A1.6" />.
+- Write the guardrails before the job: permissions, sandbox tier, spend limit, failure behavior, and output review for anything that runs without you, per <LessonLink id="A2.4" />.
+- Write governance for the least cautious member of an organization, starting with which delivery channel carries the policy, per <LessonLink id="A3.3" />.
+- Build a headless run to a spec, where every requirement maps to a flag you can name, per <LessonLink id="A2.1" />.
+- Read a coordination plan and find its failures using the three questions from <LessonLink id="A1.6" />.
 
 ## The exercise
 
@@ -138,8 +138,8 @@ The three planted anti-patterns:
 | Anti-pattern | Why it fails | Where it is taught |
 |---|---|---|
 | `limiter` and `wiring` both own `src/api/router.ts` | Teams have no worktree isolation, so two teammates editing one file means one silently overwrites the other | <LessonLink id="A1.4" />, and the file-contention question in <LessonLink id="A1.6" /> |
-| Tasks 1 to 4 form a single chain | A teammate can claim only an unblocked task, so one works while three wait, and you pay for all four | <LessonLink id="A1.4" />'s sequential near-miss |
-| The lead builds the settings page | A lead that starts implementing is a failure <LessonLink id="A1.4" /> tells you to correct by telling it to wait for its teammates, and this plan builds that failure in | <LessonLink id="A1.4" />'s troubleshooting list |
+| Tasks 1 to 4 form a single chain | A teammate can claim only an unblocked task, so one works while three wait, and you pay for all four | <LessonLink id="A1.4">A1.4</LessonLink>'s sequential near-miss |
+| The lead builds the settings page | A lead that starts implementing is a failure <LessonLink id="A1.4" /> tells you to correct by telling it to wait for its teammates, and this plan builds that failure in | <LessonLink id="A1.4">A1.4</LessonLink>'s troubleshooting list |
 
 What to run instead: the chain answers the tree's coordination question on its own. No teammate needs to tell another anything that changes its work, so this is one session doing tasks 1 to 3 in order, with a test-writing subagent at the end if you want its reading kept out of your context. The settings page is a separate job, and a second session in its own worktree runs it alongside.
 
