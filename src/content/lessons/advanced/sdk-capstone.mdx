@@ -4,29 +4,707 @@ slug: "sdk-capstone"
 title: "SDK capstone"
 type: "milestone"
 order: 6
-estimatedMinutes: 40
+estimatedMinutes: 60
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-09-27"
 prerequisites: ["A7.5"]
 teaches: ["sdk-deployment", "credential-proxy-in-practice", "exit-artifacts"]
-references: ["A6.2", "A6.3"]
-docsSources: ["https://code.claude.com/docs/en/agent-sdk/quickstart", "https://code.claude.com/docs/en/agent-sdk/secure-deployment", "https://code.claude.com/docs/en/agent-sdk/hosting"]
+references: ["A6.1", "A6.2", "A6.3", "A7.5"]
+docsSources: ["https://code.claude.com/docs/en/agent-sdk/quickstart", "https://code.claude.com/docs/en/agent-sdk/secure-deployment", "https://code.claude.com/docs/en/agent-sdk/hosting", "https://code.claude.com/docs/en/agent-sdk/sessions"]
 ---
 
 # SDK capstone
 
+This milestone is a stretch, and the last one in the level. The bug-triage agent you built in <LessonLink id="A6.2" /> ran on your laptop with your API key and your `gh` login. Here it becomes a small service that other people send reports to, feeding issues into the repository PulseBoard tracks, while holding no credential of its own and reporting its spend into the dashboard from <LessonLink id="A7.5" />.
+
 ## Goal for this stage
 
-{/* @@TODO@@ The working artifact this milestone produces. */}
+Deploy the triage agent as an HTTP service in a container that can reach nothing except a credential proxy. The proxy holds the API key and a GitHub token, forwards only the requests the agent needs, authenticates callers, and routes the agent's telemetry to your collector. Before building it, write a deployment note recording why this is an Agent SDK agent you host and not a Managed Agent, the classification from <LessonLink id="A6.1" />.
+
+Everything runs on your own machine through Docker, so no plan or cloud account gates this milestone beyond an API key. Moving the same containers to a cloud host is the work the hosting guide describes in <LessonLink id="A6.3" />.
+
+**Environment:** your PulseBoard repository with the <LessonLink id="A7.5">A7.5</LessonLink> observability stack running, Docker, a Claude API key, and a fine-grained GitHub token with read and write access to Issues on the PulseBoard repository and nothing else. Create the label the agent adds before you start: `gh label create agent-triaged`.
 
 ## Steps
 
-{/* @@TODO@@ The build steps for this stage. */}
+### 1. Classify the agent before building it
+
+Create a `triage/` directory in PulseBoard and write the deployment note first, the same order <LessonLink id="A7.3" /> used for the maintenance job. Save `triage/DEPLOYMENT.md`:
+
+```markdown
+# Triage service: deployment note
+
+## What it is
+
+An Agent SDK agent that we host. Walking the two cuts from A6.1:
+
+- Nobody sits at a terminal. Reports arrive from other people at any hour, so this is not a Claude Code configuration.
+- The agent has to act during the run. The permission callback denies every tool but `file_issue` and adds a label, and `file_issue` is a tool defined in our code. A `claude -p` script cannot do either.
+- Not Managed Agents. Anthropic would run the loop and the sandbox, and our permission callback, our custom tool, our proxy, and our telemetry all live in a process we operate. Managed Agents is also in beta and not eligible for ZDR or a HIPAA BAA, which GOVERNANCE.md would have to answer for.
+- Not the Client SDK. We want Claude Code's file tools and subagents, and writing the semantics of every tool call ourselves buys nothing here.
+
+## Boundaries
+
+| Credential or input | Where it lives | What can reach it |
+|---|---|---|
+| Anthropic API key | the proxy's environment | the proxy |
+| GitHub token, fine-grained, Issues read and write on one repository | the proxy's environment | the proxy |
+| Caller token | the proxy's environment, and each caller | the ingress port, bound to 127.0.0.1 |
+| PulseBoard code | a clean clone, mounted read-only | the agent |
+
+The agent's container has no route out except the proxy, which forwards three things: model requests, one issue-filing endpoint, and telemetry.
+
+## Session pattern
+
+Hybrid. Each report is one query. A report that needs more information keeps its session in the `sessions` volume, and the reporter's answer resumes it by `session_id`.
+```
+
+The first section is the <LessonLink id="A6.1" /> judgment, applied: the two cuts, and a reason for each option you did not take. The boundaries table is the design for the rest of this milestone. Every row becomes a line of configuration.
+
+### 2. Give the agent its own copy of the code
+
+The agent reads PulseBoard's code to find what a report is about. Give it a clean clone of the default branch, so there is no `.env` and no uncommitted work in what it reads:
+
+```bash
+gh repo clone your-org/pulseboard triage/checkout
+echo "triage/checkout/" >> .gitignore
+```
+
+Two changes from <LessonLink id="A6.2" /> follow from the checkout being input the agent reads. It is mounted read-only, and the agent loads no settings from it: `settingSources` becomes an empty list. PulseBoard's `.claude/settings.json` holds the hooks from <LessonLink id="I8.4" />, and a service that loaded them would run your test suite inside the container at the end of every triage.
+
+### 3. Write the service
+
+The service wraps the <LessonLink id="A6.2" /> agent in one endpoint, `POST /triage`, taking a report, the reporter's identity, and an optional `session_id` to resume a triage that asked a question.
+
+<WhenLang is="javascript">
+
+Save `triage/package.json`, then run `npm install` in `triage/` to create the lockfile the image builds from:
+
+```json
+{
+  "name": "pulseboard-triage",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.283",
+    "zod": "^4.0.0"
+  }
+}
+```
+
+Save `triage/server.ts`:
+
+```typescript
+import { createServer } from "node:http";
+import {
+  query,
+  tool,
+  createSdkMcpServer,
+  type CanUseTool,
+} from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+const PROXY_URL = process.env.PROXY_URL ?? "http://credential-proxy:8080";
+const LABELS = ["bug", "documentation", "enhancement"];
+
+// The GitHub token lives in the proxy. This handler only knows the proxy's address.
+const fileIssue = tool(
+  "file_issue",
+  "File one GitHub issue for a triaged bug report. Returns the issue URL.",
+  {
+    title: z.string().describe("One-line summary of the bug"),
+    body: z.string().describe("Symptom, suspected cause, and the files involved"),
+    labels: z.array(z.string()).describe(`Any of: ${LABELS.join(", ")}`),
+  },
+  async ({ title, body, labels }) => {
+    const response = await fetch(`${PROXY_URL}/github/issues`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title, body, labels }),
+    });
+    if (!response.ok) {
+      return {
+        content: [{ type: "text", text: `filing failed: ${response.status} ${await response.text()}` }],
+        isError: true,
+      };
+    }
+    const issue = (await response.json()) as { html_url: string };
+    return { content: [{ type: "text", text: issue.html_url }] };
+  },
+);
+
+const triageServer = createSdkMcpServer({
+  name: "triage",
+  version: "1.0.0",
+  tools: [fileIssue],
+});
+
+const canUseTool: CanUseTool = async (toolName, input) => {
+  if (toolName !== "mcp__triage__file_issue") {
+    return { behavior: "deny", message: "This agent reads code and files issues, nothing else." };
+  }
+  const labels = input.labels as string[];
+  const unknown = labels.filter((label) => !LABELS.includes(label));
+  if (unknown.length > 0) {
+    return { behavior: "deny", message: `Unknown labels: ${unknown.join(", ")}. Use only: ${LABELS.join(", ")}.` };
+  }
+  return { behavior: "allow", updatedInput: { ...input, labels: [...labels, "agent-triaged"] } };
+};
+
+const Triage = z.object({
+  status: z.enum(["filed", "needs_info"]),
+  issue_url: z.string().optional(),
+  suspected_files: z.array(z.string()),
+  question_for_reporter: z.string().optional(),
+});
+
+type TriageOutcome = {
+  session_id: string;
+  cost_usd: number;
+  triage: z.infer<typeof Triage> | null;
+  error: string | null;
+};
+
+async function triage(report: string, reporter: string, sessionId?: string): Promise<TriageOutcome> {
+  let outcome: TriageOutcome | undefined;
+  const messages = query({
+    prompt: sessionId
+      ? `The reporter answered your question:\n\n${report}\n\nFinish the triage.`
+      : `Triage this bug report:\n\n${report}`,
+    options: {
+      cwd: "/repo",
+      settingSources: [],
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append:
+          "You triage bug reports for the repository in your working directory. " +
+          "Use the code-locator subagent to find the code involved. " +
+          "If the report says how to reproduce the bug, file one issue with file_issue. " +
+          "If it does not, file nothing and ask the reporter one specific question.",
+      },
+      tools: ["Read", "Glob", "Grep", "Agent"],
+      mcpServers: { triage: triageServer },
+      canUseTool,
+      agents: {
+        "code-locator": {
+          description: "Finds the files and functions involved in a bug report.",
+          prompt:
+            "Search the repository for the code behind the symptom you are given. " +
+            "Return file paths and function names with one line of evidence each. Do not propose fixes.",
+          tools: ["Read", "Glob", "Grep"],
+          model: "haiku",
+        },
+      },
+      outputFormat: { type: "json_schema", schema: z.toJSONSchema(Triage, { target: "draft-7" }) },
+      resume: sessionId,
+      maxTurns: 30,
+      maxBudgetUsd: 1,
+      env: {
+        ...process.env,
+        OTEL_RESOURCE_ATTRIBUTES: `workload=triage,reporter=${encodeURIComponent(reporter)}`,
+      },
+    },
+  });
+  try {
+    for await (const message of messages) {
+      if (message.type !== "result") continue;
+      // A rejected key arrives as subtype "success" with is_error set, and the stream then throws.
+      const ok = message.subtype === "success" && !message.is_error && message.structured_output;
+      outcome = {
+        session_id: message.session_id,
+        cost_usd: message.total_cost_usd,
+        triage: ok ? Triage.parse(message.structured_output) : null,
+        error: ok ? null : message.subtype === "success" ? message.result : message.subtype,
+      };
+    }
+  } catch (error) {
+    if (!outcome) throw error;
+  }
+  if (!outcome) throw new Error("the agent ended without a result message");
+  return outcome;
+}
+
+createServer(async (req, res) => {
+  if (req.method !== "POST" || req.url !== "/triage") {
+    res.writeHead(404).end();
+    return;
+  }
+  let raw = "";
+  for await (const chunk of req) raw += chunk;
+  let request: { report?: unknown; reporter?: unknown; session_id?: unknown };
+  try {
+    request = JSON.parse(raw);
+  } catch {
+    res.writeHead(400, { "content-type": "application/json" }).end('{"error":"body is not JSON"}');
+    return;
+  }
+  const { report, reporter, session_id } = request;
+  if (typeof report !== "string" || typeof reporter !== "string") {
+    res.writeHead(400, { "content-type": "application/json" }).end('{"error":"report and reporter are required"}');
+    return;
+  }
+  try {
+    const result = await triage(report, reporter, typeof session_id === "string" ? session_id : undefined);
+    res.writeHead(result.triage ? 200 : 502, { "content-type": "application/json" }).end(JSON.stringify(result));
+  } catch (error) {
+    res.writeHead(500, { "content-type": "application/json" }).end(JSON.stringify({ error: String(error) }));
+  }
+}).listen(3000, () => console.log("triage service listening on :3000"));
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+Save `triage/server.py`:
+
+```python
+import asyncio
+import json
+import os
+import urllib.error
+import urllib.parse
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any, Literal
+
+from pydantic import BaseModel
+from claude_agent_sdk import (
+    AgentDefinition,
+    ClaudeAgentOptions,
+    PermissionResultAllow,
+    PermissionResultDeny,
+    ResultMessage,
+    ToolPermissionContext,
+    create_sdk_mcp_server,
+    query,
+    tool,
+)
+
+PROXY_URL = os.environ.get("PROXY_URL", "http://credential-proxy:8080")
+LABELS = ["bug", "documentation", "enhancement"]
+
+
+# The GitHub token lives in the proxy. This handler only knows the proxy's address.
+@tool(
+    "file_issue",
+    "File one GitHub issue for a triaged bug report. Returns the issue URL.",
+    {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string", "description": "One-line summary of the bug"},
+            "body": {"type": "string", "description": "Symptom, suspected cause, and the files involved"},
+            "labels": {"type": "array", "items": {"type": "string"}, "description": f"Any of: {', '.join(LABELS)}"},
+        },
+        "required": ["title", "body", "labels"],
+    },
+)
+async def file_issue(args: dict[str, Any]) -> dict[str, Any]:
+    request = urllib.request.Request(
+        f"{PROXY_URL}/github/issues",
+        data=json.dumps({"title": args["title"], "body": args["body"], "labels": args["labels"]}).encode(),
+        headers={"content-type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            issue = json.load(response)
+        return {"content": [{"type": "text", "text": issue["html_url"]}]}
+    except urllib.error.HTTPError as error:
+        return {
+            "content": [{"type": "text", "text": f"filing failed: {error.code} {error.read().decode()}"}],
+            "is_error": True,
+        }
+
+
+triage_server = create_sdk_mcp_server(name="triage", version="1.0.0", tools=[file_issue])
+
+
+async def can_use_tool(
+    tool_name: str, input_data: dict[str, Any], context: ToolPermissionContext
+) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name != "mcp__triage__file_issue":
+        return PermissionResultDeny(message="This agent reads code and files issues, nothing else.")
+    unknown = [label for label in input_data["labels"] if label not in LABELS]
+    if unknown:
+        return PermissionResultDeny(
+            message=f"Unknown labels: {', '.join(unknown)}. Use only: {', '.join(LABELS)}."
+        )
+    return PermissionResultAllow(
+        updated_input={**input_data, "labels": [*input_data["labels"], "agent-triaged"]}
+    )
+
+
+class Triage(BaseModel):
+    status: Literal["filed", "needs_info"]
+    issue_url: str | None = None
+    suspected_files: list[str]
+    question_for_reporter: str | None = None
+
+
+async def triage(report: str, reporter: str, session_id: str | None) -> dict[str, Any]:
+    prompt = (
+        f"The reporter answered your question:\n\n{report}\n\nFinish the triage."
+        if session_id
+        else f"Triage this bug report:\n\n{report}"
+    )
+    options = ClaudeAgentOptions(
+        cwd="/repo",
+        setting_sources=[],
+        system_prompt={
+            "type": "preset",
+            "preset": "claude_code",
+            "append": (
+                "You triage bug reports for the repository in your working directory. "
+                "Use the code-locator subagent to find the code involved. "
+                "If the report says how to reproduce the bug, file one issue with file_issue. "
+                "If it does not, file nothing and ask the reporter one specific question."
+            ),
+        },
+        tools=["Read", "Glob", "Grep", "Agent"],
+        mcp_servers={"triage": triage_server},
+        can_use_tool=can_use_tool,
+        agents={
+            "code-locator": AgentDefinition(
+                description="Finds the files and functions involved in a bug report.",
+                prompt=(
+                    "Search the repository for the code behind the symptom you are given. "
+                    "Return file paths and function names with one line of evidence each. "
+                    "Do not propose fixes."
+                ),
+                tools=["Read", "Glob", "Grep"],
+                model="haiku",
+            ),
+        },
+        output_format={"type": "json_schema", "schema": Triage.model_json_schema()},
+        resume=session_id,
+        max_turns=30,
+        max_budget_usd=1.0,
+        env={"OTEL_RESOURCE_ATTRIBUTES": f"workload=triage,reporter={urllib.parse.quote(reporter)}"},
+    )
+    outcome: dict[str, Any] | None = None
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if not isinstance(message, ResultMessage):
+                continue
+            # A rejected key arrives as subtype "success" with is_error set, and the stream then raises.
+            ok = message.subtype == "success" and not message.is_error and message.structured_output
+            outcome = {
+                "session_id": message.session_id,
+                "cost_usd": message.total_cost_usd,
+                "triage": Triage.model_validate(message.structured_output).model_dump() if ok else None,
+                "error": None if ok else (message.result if message.subtype == "success" else message.subtype),
+            }
+    except Exception:
+        if outcome is None:
+            raise
+    if outcome is None:
+        raise RuntimeError("the agent ended without a result message")
+    return outcome
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self) -> None:
+        if self.path != "/triage":
+            self.reply(404, {"error": "not found"})
+            return
+        try:
+            request = json.loads(self.rfile.read(int(self.headers.get("content-length") or 0)))
+        except json.JSONDecodeError:
+            self.reply(400, {"error": "body is not JSON"})
+            return
+        report, reporter = request.get("report"), request.get("reporter")
+        if not isinstance(report, str) or not isinstance(reporter, str):
+            self.reply(400, {"error": "report and reporter are required"})
+            return
+        session_id = request.get("session_id") if isinstance(request.get("session_id"), str) else None
+        try:
+            result = asyncio.run(triage(report, reporter, session_id))
+            self.reply(200 if result["triage"] else 502, result)
+        except Exception as error:
+            self.reply(500, {"error": str(error)})
+
+    def reply(self, status: int, body: dict[str, Any]) -> None:
+        payload = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+
+print("triage service listening on :3000", flush=True)
+ThreadingHTTPServer(("0.0.0.0", 3000), Handler).serve_forever()
+```
+
+</WhenLang>
+
+Four things changed from the laptop version, and each one is about running unattended:
+
+- `file_issue` posts to the proxy. The handler knows an address and holds no token, which is the custom-tool boundary crossing <LessonLink id="A6.3" /> recommends for non-Anthropic credentials.
+- Every query sets `OTEL_RESOURCE_ATTRIBUTES` with `workload=triage` and the percent-encoded reporter, so spend lands on the dashboard under a workload and can be traced to the person who sent the report.
+- A failed upstream call does not arrive as an error subtype. A rejected key produces a result with subtype `success` and `is_error` set, and the stream then raises. The service keeps the result message it already received and answers with a 502 that carries the upstream error.
+- `maxBudgetUsd` of 1 caps what any single report can cost, including a report written to make the agent work as hard as possible.
+
+### 4. Write the proxy
+
+The proxy is Caddy, configured in one file. Save `triage/Caddyfile`:
+
+```text
+{
+	admin off
+}
+
+# Egress: the agent's only way out of the sealed network.
+:8080 {
+	log
+
+	@anthropic path /v1/messages /v1/messages/* /api/hello
+	handle @anthropic {
+		reverse_proxy https://api.anthropic.com {
+			header_up Host api.anthropic.com
+			header_up x-api-key {env.ANTHROPIC_API_KEY}
+			flush_interval -1
+		}
+	}
+
+	@file_issue {
+		method POST
+		path /github/issues
+	}
+	handle @file_issue {
+		rewrite * /repos/{env.ISSUE_REPO}/issues
+		reverse_proxy https://api.github.com {
+			header_up Host api.github.com
+			header_up Authorization "Bearer {env.GITHUB_TOKEN}"
+			header_up Accept application/vnd.github+json
+		}
+	}
+
+	handle_path /otel/* {
+		reverse_proxy host.docker.internal:4318
+	}
+
+	handle {
+		respond "blocked by the credential proxy" 403
+	}
+}
+
+# Ingress: callers authenticate here before a report reaches the agent.
+:9000 {
+	log
+
+	@authorized header Authorization "Bearer {$TRIAGE_CALLER_TOKEN}"
+	handle @authorized {
+		reverse_proxy triage-agent:3000 {
+			header_up -Authorization
+		}
+	}
+
+	handle {
+		respond "unauthorized" 401
+	}
+}
+```
+
+It has three jobs, and each one is a row of the boundaries table:
+
+- Port 8080 is the agent's only way out. Model requests get the real API key in place of the placeholder the agent sends, `POST /github/issues` is rewritten to your repository's issues endpoint with the GitHub token attached, and `/otel/*` goes to your collector. Every other request gets a 403, so a prompt-injected agent asking for any other URL is refused and logged.
+- `flush_interval -1` passes the model's streamed responses through as they arrive, without buffering them.
+- Port 9000 is the way in. A request without the caller token gets a 401, and an authorized request reaches the agent with the token stripped.
+
+The agent sends a placeholder key because Claude Code will not start with no credential at all. The value is not a secret, and the proxy overwrites it on every model request. The agent also sets `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`, so it does not reach for other hosts that the proxy would only refuse.
+
+### 5. Package it and seal the network
+
+<WhenLang is="javascript">
+
+Save `triage/Dockerfile`:
+
+```dockerfile
+FROM node:24-slim
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+COPY server.ts ./
+RUN mkdir -p /data/claude && chown -R node:node /data
+ENV CLAUDE_CONFIG_DIR=/data/claude
+USER node
+CMD ["node", "server.ts"]
+```
+
+Node 24 runs the TypeScript file directly by stripping its types, so there is no build step.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+Save `triage/Dockerfile`:
+
+```dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+RUN pip install --no-cache-dir "claude-agent-sdk>=0.2.160,<0.3" "pydantic>=2"
+COPY server.py ./
+RUN useradd --create-home agent && mkdir -p /data/claude && chown -R agent:agent /data
+ENV CLAUDE_CONFIG_DIR=/data/claude
+USER agent
+CMD ["python", "server.py"]
+```
+
+</WhenLang>
+
+`CLAUDE_CONFIG_DIR` points the agent's session storage at `/data`, which the compose file mounts as a named volume, so a needs-info triage survives a restart. The directory is created and owned by the unprivileged user before the volume is attached, which gives the volume the same ownership.
+
+Save `triage/compose.yml`:
+
+```yaml
+services:
+  credential-proxy:
+    image: caddy:2
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      ISSUE_REPO: ${ISSUE_REPO}
+      TRIAGE_CALLER_TOKEN: ${TRIAGE_CALLER_TOKEN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "127.0.0.1:9000:9000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks: [sealed, egress]
+
+  triage-agent:
+    build: .
+    environment:
+      ANTHROPIC_BASE_URL: http://credential-proxy:8080
+      ANTHROPIC_API_KEY: placeholder-the-proxy-replaces-this
+      PROXY_URL: http://credential-proxy:8080
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      CLAUDE_CODE_ENABLE_TELEMETRY: "1"
+      OTEL_METRICS_EXPORTER: otlp
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://credential-proxy:8080/otel
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: cumulative
+    volumes:
+      - ./checkout:/repo:ro
+      - sessions:/data
+    networks: [sealed]
+
+networks:
+  sealed:
+    internal: true
+  egress: {}
+
+volumes:
+  sessions:
+```
+
+The `sealed` network is `internal`, so it has no route to the internet, and the agent is attached to nothing else. The proxy sits on both networks and is the only bridge. The secrets appear only in the proxy's environment, read from your shell or from `triage/.env`, which PulseBoard's `.gitignore` already covers.
+
+The telemetry route needs one change to the <LessonLink id="A7.5" /> stack. The agent exports over HTTP, so add an `http` receiver beside the `grpc` one in `observability/otel-collector.yaml`:
+
+```yaml
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+```
+
+Publish `"4318:4318"` on the collector in `observability/docker-compose.yml`, then run `docker compose up -d` in `observability/` again.
+
+### 6. Run it and prove the boundaries
+
+Put the secrets in `triage/.env`:
+
+```text
+ANTHROPIC_API_KEY=sk-ant-...
+GITHUB_TOKEN=github_pat_...
+ISSUE_REPO=your-org/pulseboard
+TRIAGE_CALLER_TOKEN=a-long-random-string
+```
+
+Start the service and send a report with reproduction steps:
+
+```bash
+cd triage && docker compose up -d --build
+source .env
+curl -s -X POST http://127.0.0.1:9000/triage \
+  -H "Authorization: Bearer $TRIAGE_CALLER_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"reporter": "ana@example.com", "report": "The stale panel is empty. Set days to 30 on the dashboard: issue 214 has had no activity for two months and is not listed."}'
+```
+
+A working service answers with `"status": "filed"`, an issue URL, and the files the agent suspects. Then send a report with no steps, such as "the dashboard is slow sometimes", take the `session_id` and `question_for_reporter` from the answer, and send the reporter's reply with that `session_id` to finish the triage.
+
+Now check each row of the boundaries table:
+
+<WhenLang is="javascript">
+
+```bash
+docker compose exec triage-agent node -e "fetch('https://example.com').then(r => console.log(r.status), e => console.log('no route:', e.cause?.code))"
+docker compose exec triage-agent env | grep -i -E "key|token"
+docker compose logs credential-proxy | grep -c '"uri":"/github/issues"'
+```
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```bash
+docker compose exec triage-agent python -c "import urllib.request; urllib.request.urlopen('https://example.com', timeout=5)"
+docker compose exec triage-agent env | grep -i -E "key|token"
+docker compose logs credential-proxy | grep -c '"uri":"/github/issues"'
+```
+
+</WhenLang>
+
+The first command fails, because the agent's container has no route to the internet. The second prints only the placeholder key. The third counts the issues that left through the proxy, which should match the reports you filed.
+
+Then look at what the service fed back. The filed issues carry `agent-triaged`, so after PulseBoard refreshes its cache the "Issues by label" panel from <LessonLink id="A7.1" /> shows them, and the "Spend by workload" panel from <LessonLink id="A7.5" /> has a `triage` bar.
+
+### 7. Close out the module
+
+Add the service to `RUNBOOK.md`:
+
+```markdown
+## Triage service
+
+Lives in triage/. Read DEPLOYMENT.md before changing its boundaries.
+
+- Start: `cd triage && docker compose up -d --build`. Stop: `docker compose down`.
+  Sessions survive both; `docker compose down -v` deletes them.
+- Refresh the code it reads: `git -C triage/checkout pull`. No restart needed.
+- Submit a report: POST http://127.0.0.1:9000/triage with the caller token.
+- Spend: at most $1 per query; the "Spend by workload" panel's triage bar.
+- Logs: `docker compose logs credential-proxy` shows every request that left.
+- Rotate a credential: change it in triage/.env, then `docker compose up -d`.
+- Turn it off: `docker compose down`, then revoke the GitHub token and the
+  caller token.
+```
+
+Commit `triage/` apart from its `.env` and `checkout/`, and push. Then run the module's exit check: someone who clones PulseBoard and adds your marketplace should be able to operate everything you built from the two documents alone.
 
 ## The artifact
 
-{/* @@TODO@@ What "done" looks like; how to verify it works. */}
+At the end of this stage, and of the module, you have:
+
+- A triage service in `triage/`: the agent, its `Dockerfile`, a Caddy credential proxy, and a compose file whose sealed network gives the agent no route out except the proxy.
+- `triage/DEPLOYMENT.md`, recording the <LessonLink id="A6.1" /> classification and the boundary for every credential.
+- Issues filed through the proxy with `agent-triaged`, visible in PulseBoard, and triage spend visible on the cost dashboard.
+- The module's exit artifacts together: the PulseBoard repository, `RUNBOOK.md` covering CI and review, the maintenance job's guardrails, cost, and the triage service; `GOVERNANCE.md` for rolling it out to an organization; and the published marketplaces.
+
+**Done looks like:** a report sent to port 9000 comes back filed or with one question, the agent's container cannot reach the internet or print a real credential, and the proxy log accounts for every request that left.
 
 ## Reasoning recap
 
-{/* @@TODO@@ Why these choices — the transferable lesson behind the build. */}
+Write a deployment's boundaries down before building it, and test each one against the running system once it exists.
+
+When an agent leaves your laptop, everything it reads is input, including its own configuration. Ask what it would load that someone else could have written, and load none of it.
+
+Keep every credential outside the process that reads untrusted text.
