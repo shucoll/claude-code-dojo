@@ -4,7 +4,7 @@ Notable changes to Claude Code Dojo, newest first. Entries are grouped as
 **Added**, **Changed**, **Fixed**, and **Lessons** (freshness refreshes and
 content revisions).
 
-## 2026-09-27
+## 1.0.0 (2026-09-27)
 
 ### Added
 
@@ -64,7 +64,7 @@ content revisions).
 - Every Beginner and Intermediate lesson verified against current Claude Code
   documentation, in three passes by how fast each topic changes.
 
-## 2026-07-22
+## 0.1.0 (2026-07-22)
 
 Initial baseline: the state of the platform at the point this log begins.
 
