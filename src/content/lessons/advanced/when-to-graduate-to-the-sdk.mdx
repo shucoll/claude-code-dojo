@@ -4,52 +4,173 @@ slug: "when-to-graduate-to-the-sdk"
 title: "When to graduate from Claude Code to the SDK"
 type: "core"
 order: 1
-estimatedMinutes: 11
+estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
-teaches: ["sdk-vs-cli", "carries-over-inventory", "build-vs-configure"]
-references: ["B1.2", "I7.3", "A2.1"]
-docsSources: ["https://code.claude.com/docs/en/agent-sdk/overview", "https://code.claude.com/docs/en/agent-sdk/claude-code-features"]
+verifiedAgainstDocsAt: "2026-09-26"
+teaches: ["sdk-vs-cli", "carries-over-inventory", "setting-sources", "four-way-choice", "build-vs-configure"]
+references: ["B1.2", "I7.3", "A2.1", "A6.2", "A6.3"]
+docsSources: ["https://code.claude.com/docs/en/agent-sdk/overview", "https://code.claude.com/docs/en/agent-sdk/claude-code-features", "https://code.claude.com/docs/en/agent-sdk/quickstart", "https://platform.claude.com/docs/en/managed-agents/overview"]
 ---
 
 # When to graduate from Claude Code to the SDK
 
 ## The problem
 
-{/* @@TODO@@ 2–4 sentence scenario the learner recognizes; the pain this solves. */}
+Your team wants the bug triage you do by hand to happen inside the support tool. A report arrives, an agent reads the code around it, and a labeled GitHub issue appears. The approach from <LessonLink id="A2.1" /> gets you partway: a service shells out to `claude -p`, parses stdout, and settles every permission question with flags before the run begins. That holds until the service needs to decide something during the run, such as whether `gh issue create` is allowed for the repository this particular report came from. From there on you are writing glue around a process boundary.
+
+The opposite mistake is building an application for work that a person at a terminal handles well with a sharper `CLAUDE.md` and a hook or two.
 
 ## The concept
 
-{/* @@TODO@@ What it is, plain language, one analogy maximum. */}
+<LessonLink id="B1.2" /> described Claude Code as a harness around Claude models and said every surface is a window onto the same engine. The engine is the agent loop (Claude plans, calls a tool, reads the result, and picks the next step), the built-in tools, and the context management around them. The Agent SDK hands you that engine as a Python or TypeScript library. It runs the same code: both SDKs bundle a native Claude Code binary, so an SDK agent reads, edits, and runs commands through the tools you already know.
+
+If you worked through <LessonLink id="A2.1" />, you have used the SDK already. The docs describe `claude -p` as the Agent SDK driven from the CLI, so this run from that lesson is already an SDK call:
+
+```bash
+claude -p "Summarize this project" --allowedTools "Read,Glob,Grep" --output-format json | jq -r '.result'
+```
+
+The same run as library code:
+
+<WhenLang is="javascript">
+
+```typescript
+import { query } from "@anthropic-ai/claude-agent-sdk";
+
+for await (const message of query({
+  prompt: "Summarize this project",
+  options: { allowedTools: ["Read", "Glob", "Grep"] },
+})) {
+  if (message.type === "result" && message.subtype === "success") {
+    console.log(message.result);
+  }
+}
+```
+
+Install the package with `npm install @anthropic-ai/claude-agent-sdk` in a project whose `package.json` sets `"type": "module"`, save the file as `summarize.ts`, and run it with `npx tsx summarize.ts`. The SDK needs Node.js 18 or later.
+
+</WhenLang>
+
+<WhenLang is="python">
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
+
+
+async def main():
+    async for message in query(
+        prompt="Summarize this project",
+        options=ClaudeAgentOptions(allowed_tools=["Read", "Glob", "Grep"]),
+    ):
+        if isinstance(message, ResultMessage) and message.subtype == "success":
+            print(message.result)
+
+
+asyncio.run(main())
+```
+
+Install the package with `pip install claude-agent-sdk` in a virtual environment, save the file as `summarize.py`, and run it with `python summarize.py`. The SDK needs Python 3.10 or later.
+
+</WhenLang>
+
+The prompt, the tool allow-list, and the result field appear in all three versions. What differs is what you get back. The shell version hands you a string to parse after the run ends. The library version hands you a stream of typed messages (assistant text, tool calls, tool results, and a final result) inside a program that can act on each one while the loop is still running.
 
 ## How it works
 
-{/* @@TODO@@ Mechanics: what happens under the hood; files/config; what loads into context and when. */}
+### What carries over
 
-## Walkthrough
+The docs list the Claude Code capabilities available in the SDK. You configured each of them in the terminal first:
 
-{/* @@TODO@@ One fully worked example — real commands, real file contents, representative output. */}
+| Capability | What it does in the SDK | Where you learned it |
+|---|---|---|
+| Built-in tools | Read, write, and edit files, run commands, search the web | <LessonLink id="I1.1" /> |
+| Permissions | Decide which tools run automatically and which need approval | <LessonLink id="I1.2" /> |
+| Sessions | Keep context across exchanges, resume or fork later | <LessonLink id="B2.5" /> |
+| Skills, commands, and memory | Load from the project's `.claude/` and from `~/.claude/`, as in Claude Code | <LessonLink id="B3.1" />, <LessonLink id="I3.1" /> |
+| Hooks | Run your code at points in the agent lifecycle | <LessonLink id="I4.1" /> |
+| MCP | Connect external tools and data sources | <LessonLink id="I5.1" /> |
+| Subagents | Spawn specialized agents for focused subtasks | <LessonLink id="I6.1" /> |
+| Plugins | Package skills, agents, hooks, and MCP servers, loaded by local path | <LessonLink id="I7.2" /> |
+
+The layering from <LessonLink id="I7.3" /> survives the move. A `CLAUDE.md` in the project directory reaches an SDK agent the same way it reaches your terminal session, and a hook in `.claude/settings.json` fires in both. Hooks also gain a second form in the SDK: a callback function passed to `query()` that runs inside your application process and returns a structured decision. The two forms run side by side.
+
+### What loads by default
+
+The `settingSources` option (`setting_sources` in Python) controls which filesystem settings an SDK agent reads. Leave it out and the agent reads what the CLI reads: user, project, and local settings, `CLAUDE.md` files, and the skills, agents, and commands under `.claude/`. The samples above leave it out, so they pick up your `~/.claude/CLAUDE.md` and your user hooks the way an interactive session does.
+
+| `settingSources` | What the agent loads |
+|---|---|
+| Omitted | The same as `["user", "project", "local"]` |
+| `["project"]` | Settings and hooks from `<cwd>/.claude/`, project `CLAUDE.md` files and rules, and project skills, commands, and subagents |
+| `[]` | Nothing from user, project, or local settings; only what you pass in code |
+
+A few inputs load regardless of this option, including managed policy settings, the global `~/.claude.json` config, auto memory, and claude.ai MCP connectors when the session authenticates with a claude.ai login. For an agent on your own laptop, inheriting your setup is convenient. For an agent that serves many customers from one host, the docs warn against relying on the defaults for isolation, and <LessonLink id="A6.3" /> covers the setup they recommend instead.
+
+### What stays behind
+
+- **The person at the keyboard.** Nobody answers a permission prompt inside a library call. What you would have approved interactively becomes an option set in advance or a callback your code supplies, which <LessonLink id="A6.2" /> builds.
+- **<LessonLink id="A1.4">Agent teams</LessonLink>.** The docs describe them as a CLI feature where one session leads, and no SDK option configures one. Subagents do carry over.
+- **Skills defined in code.** Skills load only from `SKILL.md` files on disk, and the SDK has no API for registering one programmatically.
+- **Some hook events in Python.** The TypeScript SDK supports hook events the Python SDK does not, including `SessionStart`, `SessionEnd`, `TeammateIdle`, and `TaskCompleted`.
+- **Your claude.ai login, in anything you ship.** Unless Anthropic has approved it, a product built on the SDK may not offer claude.ai login or its rate limits to users. It authenticates with an API key.
+- **Languages other than Python and TypeScript.** From any other language, run the CLI as a subprocess with `-p` and `--output-format json`, the route from <LessonLink id="A2.1" />.
+
+### Four ways to run an agent
+
+The docs compare the Agent SDK with three neighbors. They differ in who runs the agent loop and who operates the machine it runs on.
+
+| Option | You want to | Who runs the loop | Where it runs |
+|---|---|---|---|
+| Claude Code CLI | Do interactive development or run one-off tasks from a terminal | Claude Code | Your terminal |
+| Agent SDK | Embed Claude Code's agent in your own Python or TypeScript application | Claude Code, as a library | A process you operate |
+| Client SDK | Call the Claude API directly from your own code | Your code, or the Client SDK's beta tool runner | A process you operate |
+| Managed Agents | Have Anthropic host the agent, configured through the Claude API | Anthropic's hosted harness | An Anthropic-managed cloud sandbox, or a self-hosted sandbox on your infrastructure |
+
+The Client SDK is the one row where the carry-over table above does not apply. You get the model through the API, and your code decides what each tool call does.
+
+### Two cuts
+
+The first cut is the rule from before the SDK, and it still holds. If a person sits at a terminal directing the work, configure Claude Code: a better `CLAUDE.md`, a skill, a hook, a subagent. Everything in Beginner and Intermediate was that answer. If the agent has to live inside something else, such as a product, a service, or a pipeline that runs without you, go to the second cut.
+
+The second cut is build versus buy:
+
+1. You want Claude Code's tools and loop in a process you operate: **Agent SDK**.
+2. You want Anthropic to run the loop and the sandbox, for sessions that work for minutes or hours on their own: **Managed Agents**.
+3. You want control below the loop, with your own tool semantics for every call and no Claude Code harness: **Client SDK**.
+
+A `claude -p` script already sits on the first answer, in CLI notation. It graduates to library code when the script has to act during the run: a permission decision that depends on runtime data, a hook that answers from your application's state, tools defined in your own code, or a typed message stream your service consumes as it arrives. If every decision can be made before the run starts, the shell script is the smaller program.
+
+Choosing the Agent SDK also makes you the operator of the process, its sandbox, and its credentials. <LessonLink id="A6.3" /> is what that operation involves.
 
 ## Use-case scenarios
 
-{/* @@TODO@@ 3–5 short "You want X → do Y because Z" scenarios; include one near-miss. */}
+**A nightly job that bumps dependencies and opens a pull request.** No person directs it, so it leaves the first cut. On the second cut it lands on the Agent SDK in its CLI notation. A scheduled `claude -p` run with an allow-list and `--permission-mode dontAsk` makes every decision before it starts, and nothing mid-run needs your code. Keep the shell script. Running unattended does not by itself call for a program.
 
-## When to use / when not to use
+**The bug-triage agent in your support tool.** A customer files a report; the agent reads the relevant code, picks a label, and files a GitHub issue. Whether it may run `gh issue create` depends on which repository the report belongs to, which only your service knows. That decision happens mid-run inside your application, and the result has to come back as structured data your service stores: Agent SDK. <LessonLink id="A6.2" /> builds this agent. If the job shrank to labeling report text without reading any code, it would need no tools, and a single Client SDK call would do.
 
-{/* @@TODO@@ Two-column guidance; include the context/token/complexity cost. */}
-
-## Pitfalls
-
-{/* @@TODO@@ 3–6 real mistakes, each with the observable symptom and the fix. */}
-
-## Try It
-
-{/* @@TODO@@ Hands-on 5–15 min exercise with self-verifiable success criteria. */}
+**A "fix it for me" feature in a hosted product.** Each customer gets an agent that clones their repository into a sandbox, works for up to an hour, pauses for the customer's answer, and resumes later. Your team runs no sandbox fleet and does not want to. Long-running, asynchronous, stateful sessions in a sandbox Anthropic operates is the Managed Agents row. Check two things before committing. Managed Agents is in beta. And because it stores session history and sandbox state server-side, it is not currently eligible for Zero Data Retention or HIPAA BAA coverage. If a customer contract requires either, the answer moves back to the Agent SDK on infrastructure you operate.
 
 ## FAQ
 
-{/* @@TODO@@ The mustAnswer questions not covered above, answered directly. */}
+### Do I need Claude Code installed to use the SDK?
+
+Usually not, because both SDKs bundle a native Claude Code binary. Two kinds of install come without one: a Python install from the source distribution in place of a platform wheel (ARM64 Windows is the documented example), and a TypeScript install that skips optional dependencies, such as `npm ci --omit=optional`. For those, install Claude Code natively. The Python SDK finds it on your `PATH`, and the TypeScript SDK takes its location in the `pathToClaudeCodeExecutable` option.
+
+### Is the Client SDK's tool runner the same thing as the Agent SDK?
+
+Both run a loop for you. The tool runner loops over tools you define against the Claude API. The Agent SDK's loop is Claude Code's, with everything in the carry-over table: built-in tools, permissions, sessions, hooks, and `.claude/` loading. The tool runner fits when you want a loop and none of that harness.
+
+### Can I call my product "Claude Code"?
+
+No. Claude branding is optional for SDK products. If you use it, the docs allow "Claude Agent", "Claude" inside a menu already labeled Agents, or "YourAgentName Powered by Claude". "Claude Code", "Claude Code Agent", and visuals that mimic Claude Code are not permitted.
+
+### How does moving to the SDK change cost?
+
+A shipped SDK agent authenticates with an API key, so its usage bills to the Claude API account behind that key. The context accounting from <LessonLink id="I2.1" /> still applies: every feature you enable adds to each run's context, and with `settingSources` omitted that includes whatever your personal setup loads.
 
 ## Where next
 
-{/* @@TODO@@ Cross-links: prerequisites recap + forward teasers (see §1.6). */}
+<LessonLink id="A6.2" /> builds the bug-triage agent from the second scenario and introduces each SDK primitive where the build needs it: `query()`, sessions, custom tools, permission callbacks, structured outputs, and subagents. It also maps each option to the CLI flag it corresponds to.
+
+<LessonLink id="A6.3" /> is the operator's side of choosing the SDK: hosting, sandboxing, the credential-proxy pattern, cost, and observability. It closes on the build-versus-buy question from this lesson.
