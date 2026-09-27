@@ -22,13 +22,16 @@ test('shows the heading and the three levels', () => {
   expect(screen.getByRole('heading', { name: /your claude code level/i })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Beginner' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Intermediate' })).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: 'Advanced (Coming Soon)' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Advanced' })).toBeInTheDocument()
 })
 
-test('the Advanced level is disabled and marked coming soon', () => {
+test('the Advanced level is selectable', async () => {
+  const user = userEvent.setup()
   renderScreen()
-  const advanced = screen.getByRole('button', { name: 'Advanced (Coming Soon)' })
-  expect(advanced).toBeDisabled()
+  const advanced = screen.getByRole('button', { name: 'Advanced' })
+  expect(advanced).toBeEnabled()
+  await user.click(advanced)
+  expect(JSON.parse(localStorage.getItem('ccd:level')!)).toBe('advanced')
 })
 
 test('selecting a level persists it and advances to the language step', async () => {
