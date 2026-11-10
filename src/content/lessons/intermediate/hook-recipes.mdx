@@ -14,7 +14,7 @@ docsSources: ["https://code.claude.com/docs/en/hooks-guide"]
 
 # Hook recipes
 
-You have the lifecycle from <LessonLink id="I4.1" /> and the I/O contract from <LessonLink id="I4.2" />. This is where hooks stop being a concept and become part of your toolchain: five hooks that have been written enough times to be worth copying rather than inventing. Each one is a config block you can paste, a procedure to prove it works, and the ways it fails so you know what you are signing up for.
+You have the lifecycle from <LessonLink id="I4.1" /> and the I/O contract from <LessonLink id="I4.2" />. This is where hooks stop being a concept and become part of your toolchain: five hooks that have been written enough times to be worth copying rather than inventing. Each one is a config block you can paste, a procedure to prove it works, and the ways it fails.
 
 Everything here goes in a settings file's `hooks` key. Project-wide hooks (auto-format, path protection) belong in `.claude/settings.json` so the team inherits them; personal conveniences (notifications) go in `~/.claude/settings.json`. The scope choice is the one from <LessonLink id="I1.3" />.
 
@@ -47,15 +47,15 @@ Run your formatter on every file Claude writes, so formatting never drifts and C
 **Test it.** Ask Claude to edit a badly-formatted file. Then check the file on disk: it should be formatted even though you never asked Claude to format it. Run `/hooks` and confirm the entry sits under `PostToolUse`.
 
 **Failure modes.**
-- **The formatter reformats a file Claude just wrote, so Claude's in-memory copy is now stale.** Usually harmless, but if the next edit depends on exact line numbers it can misfire. Keep formatters to whitespace and style, not structural rewrites.
+- **The formatter reformats a file Claude just wrote, so Claude's in-memory copy is now stale.** Usually harmless, but if the next edit depends on exact line numbers it can misfire. Keep formatters to whitespace and style changes.
 - **`npx prettier` is slow to cold-start and this fires on every edit.** In a burst of edits the latency adds up. Point the command at a locally installed binary rather than `npx`, or scope the matcher tighter.
 - **The formatter runs on file types it does not understand and errors.** A `PostToolUse` error is non-blocking so nothing breaks, but the transcript fills with noise. Filter by extension in the command, or configure the formatter to ignore unknown types.
 
 ## Recipe 2: protect files and paths
 
-Make sensitive files impossible for Claude to edit: `.env`, lockfiles, `migrations/`, anything under `.git/`. You built this hook in full in <LessonLink id="I4.2" />, so here it is as the consolidated recipe with its operational edges.
+Make sensitive files impossible for Claude to edit: `.env`, lockfiles, `migrations/`, anything under `.git/`.
 
-**Config** (`.claude/settings.json`), calling the `protect-files.sh` script from <LessonLink id="I4.2">I4.2</LessonLink>:
+**Config** (`.claude/settings.json`), calling the `protect-files.sh` script you built in <LessonLink id="I4.2">I4.2</LessonLink>:
 
 ```json
 {
@@ -80,7 +80,7 @@ Make sensitive files impossible for Claude to edit: `.env`, lockfiles, `migratio
 **Failure modes.**
 - **A write that goes through Bash instead of Edit/Write slips past.** The matcher is `Edit|Write`, so `echo SECRET >> .env` run as a Bash command is not caught. To close that hole, add a second `PreToolUse` hook on the `Bash` matcher that inspects `tool_input.command` for the protected paths.
 - **Path matching is substring-based, so it over- or under-matches.** `*".env"*` also blocks `.env.example`. Decide whether you want that, and tighten the patterns (anchor to the basename, check for exact names) if not.
-- **A denied edit that Claude keeps retrying.** If you blocked with a bare exit `2` and no reason, Claude has nothing to route around. Return the JSON `deny` with a `permissionDecisionReason`, per <LessonLink id="I4.2" />.
+- **A denied edit that Claude keeps retrying.** If you blocked with a bare exit `2` and no reason, Claude has nothing to route around. Return the JSON `deny` with a `permissionDecisionReason`.
 
 ## Recipe 3: re-inject context after compaction
 
@@ -108,7 +108,7 @@ When the window fills and Claude compacts the conversation, details get summariz
 
 `SessionStart` with the `compact` matcher fires right after a compaction, and anything the command prints to stdout is added back into Claude's context. The `compact` matcher is what keeps this from firing on every normal launch, where it would be redundant with `CLAUDE.md`.
 
-**Test it.** Run `/compact` in a working session. After it finishes, ask Claude what the current sprint is or which package manager to use. It should answer from the injected text, not guess. Compare against a session without the hook, where the same question after a compaction may come back wrong.
+**Test it.** Run `/compact` in a working session. After it finishes, ask Claude what the current sprint is or which package manager to use. It should answer from the injected text. Compare against a session without the hook, where the same question after a compaction may come back wrong.
 
 **Failure modes.**
 - **The static text goes stale.** Hardcoded sprint names rot. Replace the `echo` with a command that produces live state: `git log --oneline -5`, or a script that reads your current branch and open tickets.
@@ -117,7 +117,7 @@ When the window fills and Claude compacts the conversation, details get summariz
 
 ## Recipe 4: notify when Claude needs input
 
-Get a desktop notification when Claude is waiting on you, so you can step away from the terminal. This is the side-effect-free hook you built in <LessonLink id="I4.1" />; here it is as a recipe with the setup gotchas that trip people up.
+Get a desktop notification when Claude is waiting on you, so you can step away from the terminal. This is the side-effect-free hook you built in <LessonLink id="I4.1" />.
 
 **Config** (`~/.claude/settings.json`, macOS shown):
 
@@ -178,7 +178,7 @@ Record every time a settings or skills file changes during a session, for compli
 **Failure modes.**
 - **It only sees external edits, not changes Claude makes through its own tools.** `ConfigChange` is for files modified outside the session. Edits Claude performs are visible through `PostToolUse` on the write tools instead.
 - **The log grows unbounded.** Nothing rotates it. Point it at a logrotate-managed path, or prune it periodically.
-- **You wanted to block a change, not just log it.** Logging is passive. To reject an unauthorized config edit, exit `2` or return `{"decision": "block"}` from the hook, the decision control from <LessonLink id="I4.2" />.
+- **You wanted to block a change, not just log it.** To reject an unauthorized config edit, exit `2` or return `{"decision": "block"}` from the hook, the decision control from <LessonLink id="I4.2" />.
 
 ## Where next
 

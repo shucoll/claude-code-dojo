@@ -106,7 +106,7 @@ scrape_configs:
       - targets: ["otel-collector:8889"]
 ```
 
-`observability/grafana/provisioning/datasources/prometheus.yaml` connects Grafana to Prometheus on startup, so there is nothing to click through:
+`observability/grafana/provisioning/datasources/prometheus.yaml` connects Grafana to Prometheus on startup, so the data source is in place before you sign in:
 
 ```yaml
 apiVersion: 1
@@ -233,7 +233,7 @@ Three readings matter most for the pass that follows:
 
 - A workload whose cache read share sits well below the others is paying to reprocess its prefix. The `/usage` lines say why for interactive sessions, and <LessonLink id="A4.1" /> names the usual causes: a model or effort switch mid-session, compaction after a long break, or tools loading into the prefix.
 - A large subagent share on the session's own model is the case <LessonLink id="A4.2" /> assigns to `haiku` through `CLAUDE_CODE_SUBAGENT_MODEL`. On its own that variable leaves the built-in Explore and Plan subagents on the session's model, so a pass that moves Explore's work also needs `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`.
-- A judgment-light workload on an expensive model, such as the `chores` runs if you had put them on `opus`, is spend buying nothing.
+- A judgment-light workload on an expensive model, such as the `chores` runs if you had put them on `opus`, pays Opus rates for work a cheaper model would handle.
 
 ### 6. Write the optimization pass
 
@@ -263,7 +263,7 @@ Write at least two changes, one from each lesson:
 - A cache change from <LessonLink id="A4.1" />, such as setting model and effort at the start of a session when a `/usage` line named a model switch as the cause. Project it from the tokens re-cached that the line reported, priced at the difference between a cache write and a cache read.
 - A model-assignment change from <LessonLink id="A4.2" />, projected from the fifth panel's token counts for the workload you are moving.
 
-For each workload you decide to leave alone, add one line saying why. A `design` run on `opus` is buying judgment, which is the reason <LessonLink id="A4.2" /> gives for paying that rate. A decision to keep a cost is part of the pass too.
+For each workload you decide to leave alone, add one line saying why. A `design` run on `opus` is buying judgment, which is the reason <LessonLink id="A4.2" /> gives for paying that rate.
 
 Commit `observability/`, the `RUNBOOK.md` section, and your settings change if you made one to the committed `.claude/settings.json`, and push.
 

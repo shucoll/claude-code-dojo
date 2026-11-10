@@ -18,7 +18,7 @@ docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/do
 
 You connected a server in <LessonLink id="I5.1" /> and it worked. Then you opened a different project and its tools were gone. Meanwhile a teammate pulls your branch, asks Claude to check the error tracker, and gets told there is no such tool, because the server you added lives in a file on your laptop that they will never see.
 
-Both symptoms come from one decision you made without noticing: `claude mcp add` defaults to local scope. Scope is not new machinery. It is the same three-way split from <LessonLink id="I1.3" />, carrying a different payload, and once you see it that way the rest of MCP's configuration story is small: where the entry is written, how a committed file shares it, and how credentials stay out of that file.
+Both symptoms come from one decision you made without noticing: `claude mcp add` defaults to local scope. Scope is the same three-way split from <LessonLink id="I1.3" />, carrying a different payload, and once you see it that way the rest of MCP's configuration story is small: where the entry is written, how a committed file shares it, and how credentials stay out of that file.
 
 ## The three scopes
 
@@ -38,7 +38,7 @@ One naming trap: MCP's "local scope" is not the same file as the local *settings
 
 When a server name is defined at more than one scope, Claude Code connects once and takes the whole entry from the highest-precedence source. Fields are not merged.
 
-**managed → local → project → user → plugin-provided → claude.ai connectors**
+The order, highest first: managed, local, project, user, plugin-provided servers, claude.ai connectors.
 
 A server your organization ships through the [`managedMcpServers`](https://code.claude.com/docs/en/managed-mcp) managed setting outranks every scope you control (Claude Code v2.1.259 or later).
 
@@ -71,8 +71,6 @@ Project scope writes `.mcp.json` at the repository root. Commit it, and cloning 
 }
 ```
 
-This is configuration as code for your tool belt, in the same spirit as a committed `CLAUDE.md`: a new teammate gets the working setup by cloning rather than by following a wiki page.
-
 The first time Claude Code sees a project-scoped server it asks you to approve it. That prompt exists because a repository you cloned should not be able to launch processes on your machine on your behalf. Approve it once and the answer is remembered. If you need to undo a decision, including a rejection you now regret:
 
 ```bash
@@ -85,7 +83,7 @@ A `claude -p` or Agent SDK run cannot show that prompt, so it loads project-scop
 
 ## Keeping secrets out of the committed file
 
-A committed file that holds a token is a leaked token. Claude Code expands environment variables inside `.mcp.json`, which is how a shared entry stays shared without carrying anyone's credentials:
+Claude Code expands environment variables inside `.mcp.json`, which is how a shared entry stays shared without carrying anyone's credentials:
 
 - `${VAR}` expands to the value of `VAR`.
 - `${VAR:-default}` expands to `VAR` if set, otherwise the default.
@@ -106,7 +104,7 @@ Expansion works in `command`, `args`, `env`, `url`, and `headers`, which covers 
 }
 ```
 
-The committed file now says *every developer authenticates with their own key*, and the key itself lives in each developer's environment. That closes the hygiene loop <LessonLink id="B1.3" /> opened: the secret never enters the repository, and never enters a prompt.
+The committed file now says *every developer authenticates with their own key*, and the key itself lives in each developer's environment. That follows the secrets rules from <LessonLink id="B1.3" />: the secret stays out of the repository and out of your prompts.
 
 If a referenced variable is unset with no default, the config still loads. Claude Code reports a missing-variable warning for that server in `claude mcp list` and passes the literal `${VAR}` text through, which usually surfaces as a confusing auth failure rather than an obvious one. Set the variable, or give it a `:-default`.
 
@@ -159,7 +157,7 @@ The two paths do not mix. If you set an `Authorization` header and the server re
 
 - **You add a server, switch projects, and its tools are missing.** Local scope is per project and it is the default. Re-add with `--scope user` for yourself everywhere, or `--scope project` for the team here.
 
-- **You commit `.mcp.json` with a token in it.** Rotate the token, then move it to `${API_KEY}` and set the variable in your environment. A committed secret is compromised the moment it is pushed, not the moment someone reads it.
+- **You commit `.mcp.json` with a token in it.** Rotate the token, then move it to `${API_KEY}` and set the variable in your environment. A committed secret counts as compromised from the moment it is pushed.
 
 - **A teammate says the shared server does nothing.** They either have not approved it yet (`/mcp` shows it pending) or they are missing an environment variable your entry expands. `claude mcp list` names both problems.
 
@@ -173,7 +171,7 @@ The two paths do not mix. If you set an `Authorization` header and the server re
 2. Open `.mcp.json` at the repo root and read the entry it wrote.
 3. Run `claude mcp get claude-code-docs` and confirm it reports project scope.
 4. Edit the entry by hand to route the URL through a variable: `"url": "${DOCS_MCP_URL:-https://code.claude.com/docs/mcp}"`. Restart the session and confirm it still connects, now via the default.
-5. Set `DOCS_MCP_URL` to a deliberately wrong value and restart. Watch the connection fail, which proves the expansion is live rather than decorative.
+5. Set `DOCS_MCP_URL` to a deliberately wrong value and restart. Watch the connection fail, which confirms that Claude Code expands the variable.
 6. Unset it, restart, and confirm the fallback works again.
 
 **Success looks like:** a server defined in a file you could commit, connecting through an expanded variable, with no credential anywhere in the repository.
@@ -197,6 +195,6 @@ There is no `/mcp` panel in `claude -p` or an SDK run, so the OAuth flow cannot 
 
 ## Where next
 
-<LessonLink id="I5.3" /> attaches the bill to all of this: what connected servers actually cost now that tool search is the default, what happens when a tool returns more output than fits, and how to think about trusting a server you did not write.
+<LessonLink id="I5.3" /> covers what connected servers actually cost now that tool search is the default, what happens when a tool returns more output than fits, and how to think about trusting a server you did not write.
 
 <LessonLink id="I1.4" /> is the general resolver for the question this lesson answered for one payload: given any piece of configuration, which file does it belong in.

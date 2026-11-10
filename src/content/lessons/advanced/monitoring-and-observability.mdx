@@ -23,7 +23,7 @@ Someone asks which team is spending the most on Claude Code, or whether the MCP 
 
 Claude Code speaks OpenTelemetry. Turn on the exporter and every session on every machine emits metrics and structured events to a collector you run, tagged with enough attributes to answer cost questions by user, team, model, and feature.
 
-Two properties shape how you use it. Content is redacted by default, so the exporter gives you shapes and numbers until you deliberately turn on the text. And when an administrator sets the destination in managed settings, Claude Code removes the developer-set variables that would conflict with it, which is what turns a telemetry endpoint into a requirement rather than a suggestion.
+Two properties shape how you use it. Content is redacted by default, so the exporter gives you shapes and numbers until you deliberately turn on the text. And when an administrator sets the destination in managed settings, Claude Code removes the developer-set variables that would conflict with it, so developers cannot send telemetry to a different collector.
 
 ## How it works
 
@@ -175,19 +175,19 @@ Prompts, responses, and tool details are withheld unless you turn them on. Each 
 
 `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` caps the size of any logged content, defaulting to 61440 UTF-16 code units, roughly 60 KB.
 
-One gate reaches further than its name suggests. `skill.name` on the cost and token metrics reports built-in, bundled, user-defined, and official-marketplace skill names verbatim, while a third-party plugin's skill names arrive as `third-party` until `OTEL_LOG_TOOL_DETAILS` is set. `agent.name`, `mcp_server.name`, and `mcp_tool.name` go further and report your own subagents and user-configured MCP servers as `custom` under the same gate. Attribution across skills you did not write, and across subagents and servers you did, is a content decision rather than a metrics one.
+One gate reaches further than its name suggests. `skill.name` on the cost and token metrics reports built-in, bundled, user-defined, and official-marketplace skill names verbatim, while a third-party plugin's skill names arrive as `third-party` until `OTEL_LOG_TOOL_DETAILS` is set. `agent.name`, `mcp_server.name`, and `mcp_tool.name` go further and report your own subagents and user-configured MCP servers as `custom` under the same gate. Getting real names for skills you did not write, or for subagents and servers you did, means turning on the variable that also exports developers' commands.
 
 An audit trail that can answer "who approved the `Bash` call that touched production" needs `OTEL_LOG_TOOL_DETAILS`, because `claude_code.tool_decision` without it tells you a decision was made and not what was decided about. Turning it on means your collector now holds the commands developers ran. That is a data-handling decision in the sense <LessonLink id="A3.4" /> means, made about a system your organization operates rather than about Anthropic's retention, and it should be made with the same people in the room.
 
 ### The administrator's lock
 
-Telemetry configured per developer is telemetry a developer can unset. When administrators put the OTLP variables in managed settings, Claude Code removes the conflicting developer-set variables:
+When administrators put the OTLP variables in managed settings, Claude Code removes the conflicting developer-set variables:
 
 - Setting `OTEL_EXPORTER_OTLP_ENDPOINT` removes all per-signal endpoints.
 - Setting `OTEL_EXPORTER_OTLP_PROTOCOL` removes all per-signal protocols.
 - Setting any credential variable removes per-signal credentials and endpoints.
 
-The exporter selectors, `OTEL_METRICS_EXPORTER` and `OTEL_LOGS_EXPORTER`, follow ordinary per-key precedence rather than this removal rule. <LessonLink id="A3.3" /> covers how managed settings reach a machine, and the removal behavior is what makes the destination non-optional once they arrive.
+The exporter selectors, `OTEL_METRICS_EXPORTER` and `OTEL_LOGS_EXPORTER`, follow ordinary per-key precedence rather than this removal rule. <LessonLink id="A3.3" /> covers how managed settings reach a machine.
 
 ## When to use the built-in dashboards instead
 
@@ -201,11 +201,11 @@ Reach for the dashboards when the question is adoption or a rough ROI story for 
 
 ## Pitfalls
 
-**Telemetry set per developer.** Adoption looks like whoever remembered to export the variables, and cost attribution has holes shaped like your most cost-sensitive teams. Deliver the configuration through managed settings, where the endpoint and credential locks apply.
+**Telemetry set per developer.** Adoption looks like whoever remembered to export the variables, and cost attribution misses every developer who did not. Deliver the configuration through managed settings, where the endpoint and credential locks apply.
 
-**Cardinality from `session.id`.** Your collector bill climbs faster than your Claude Code bill, because every session creates a new time series on every metric. Set `OTEL_METRICS_INCLUDE_SESSION_ID=false`, knowing that it removes `session.id` from events too, so per-session investigation goes with it.
+**Cardinality from `session.id`.** Your collector bill climbs faster than your Claude Code bill, because every session creates a new time series on every metric. Set `OTEL_METRICS_INCLUDE_SESSION_ID=false`, at the cost of per-session investigation on events.
 
-**An audit trail with nothing in it.** `claude_code.tool_decision` arrives for every permission decision, and without `OTEL_LOG_TOOL_DETAILS` it records that a `Bash` call was allowed without recording the command. Decide whether you want the detail before an incident asks for it.
+**An audit trail with nothing in it.** The incident review finds every `Bash` approval and none of the commands. Decide whether you want `OTEL_LOG_TOOL_DETAILS` on before an incident asks for it.
 
 **Metrics that never appear.** Both `CLAUDE_CODE_ENABLE_TELEMETRY=1` and an exporter selection are required; setting the endpoint alone emits nothing. Set `OTEL_METRICS_EXPORTER=console` to confirm the pipeline before blaming the collector.
 
@@ -252,6 +252,6 @@ Run the same work again. The tool events now carry the parameters. Decide, befor
 
 ## Where next
 
-<LessonLink id="A7.5" /> is where this comes due. The capstone asks for OTel wired to a dashboard, a week of usage analyzed, and a written cost-optimization pass applying the cache findings and the model assignments from earlier in this module, with projected savings. The plumbing in the walkthrough above is the plumbing that assignment expects.
+<LessonLink id="A7.5" /> is the capstone that uses this setup. It asks for OTel wired to a dashboard, a week of usage analyzed, and a written cost-optimization pass applying the cache findings and the model assignments from earlier in this module, with projected savings. Its OTel step starts from the collector in the walkthrough above.
 
 <LessonLink id="A4.4" /> puts `skill.name` to a different use: in a repository large enough to accumulate skills nobody invokes, the attribution above is how you find them.

@@ -16,19 +16,19 @@ docsSources: ["https://code.claude.com/docs/en/output-styles", "https://code.cla
 
 ## The concept
 
-You find this feature in `/config`, see a setting called Output style, and reasonably conclude it is where you configure Claude. So your project's conventions go in it, and then either they follow you into every unrelated project or Claude quietly stops behaving like a software engineer. Both outcomes are the feature working as designed on the wrong input.
+You find this feature in `/config`, see a setting called Output style, and reasonably conclude it is where you configure Claude. So your project's conventions go in it, and then either they follow you into every unrelated project or Claude quietly stops behaving like a software engineer.
 
-Output styles change **how Claude responds, not what Claude knows.** Role, tone, default format. They are the answer to re-prompting for the same voice every turn ("explain your reasoning as you go", "always lead with a diagram"), and to using Claude Code as something other than a coding tool.
+Output styles change how Claude responds: its role, tone, and default format. Use one when you keep re-prompting for the same voice every turn ("explain your reasoning as you go", "always lead with a diagram"), or when you use Claude Code as something other than a coding tool.
 
-Anything about your project, your conventions, or your codebase is <LessonLink id="B3.1">`CLAUDE.md`</LessonLink>'s job. The two are not competing for the same slot: an output style changes Claude Code's own instructions, and `CLAUDE.md` adds a user message without touching them.
+Anything about your project, your conventions, or your codebase is <LessonLink id="B3.1">`CLAUDE.md`</LessonLink>'s job.
 
 ## How it works
 
 An output style changes the instructions Claude Code gives Claude. The active style's instructions go out with every request, and while a style other than *Default* is selected Claude Code keeps reminding Claude of it as the conversation goes on.
 
-**Five built-ins.** *Default* is the existing set of instructions, tuned for software engineering. *Proactive* executes immediately and makes reasonable assumptions rather than pausing on routine decisions (stronger autonomous-execution guidance than auto mode, and it changes nothing about your permission mode, so that mode still decides what runs without asking). *Concise* leads with the result and skips preamble, doing the same engineering work in fewer words (v2.1.237 or later). *Explanatory* adds educational "Insights" as it works. *Learning* goes further and leaves `TODO(human)` markers for you to fill in.
+Claude Code has five built-in styles. *Default* is the existing set of instructions, tuned for software engineering. *Proactive* executes immediately and makes reasonable assumptions rather than pausing on routine decisions (stronger autonomous-execution guidance than auto mode, and it changes nothing about your permission mode, so that mode still decides what runs without asking). *Concise* leads with the result and skips preamble, doing the same engineering work in fewer words (v2.1.237 or later). *Explanatory* adds educational "Insights" as it works. *Learning* goes further and leaves `TODO(human)` markers for you to fill in.
 
-**Selecting one.** Run `/config` and pick under **Output style**; your choice saves to `.claude/settings.local.json`. You can set the `outputStyle` field in any settings file directly instead:
+To select one, run `/config` and pick under **Output style**; your choice saves to `.claude/settings.local.json`. You can set the `outputStyle` field in any settings file directly instead:
 
 ```json
 {
@@ -38,15 +38,15 @@ An output style changes the instructions Claude Code gives Claude. The active st
 
 `/output-style <style>` switches without the menu, for example `/output-style concise`, and lists the styles when you run it bare. The command was removed in v2.1.91 and returned in v2.1.269, so on versions in between use `/config`.
 
-**A switch lands on your next message.** Claude Code delivers the new style's instructions as a conversation message, so the change applies right away and the cached prefix survives. Before v2.1.251 it waited for `/clear` or a new session. The style *files* are still read at startup, so restart Claude Code after you create or edit one.
+A switch lands on your next message. Claude Code delivers the new style's instructions as a conversation message, so the change applies right away and the cached prefix survives. Before v2.1.251 it waited for `/clear` or a new session. The style *files* are still read at startup, so restart Claude Code after you create or edit one.
 
-**A custom style removes the coding instructions by default.** `keep-coding-instructions` defaults to `false`, so a custom style drops Claude Code's built-in software engineering instructions: how to scope changes, write comments, verify work. That is correct when Claude is not doing software engineering. It is a silent downgrade when you only wanted a different voice. Set it to `true` whenever you are still coding. That section exists only in the full system prompt. Models newer than Opus 4.7, Sonnet 5, and Haiku 4.5 default to a shorter prompt without it, so there the field changes nothing; `CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=0` selects the full prompt on any model.
+A custom style removes the coding instructions by default. `keep-coding-instructions` defaults to `false`, so a custom style drops Claude Code's built-in software engineering instructions: how to scope changes, write comments, verify work. That is correct when Claude is not doing software engineering. It is a silent downgrade when you only wanted a different voice. Set it to `true` whenever you are still coding. That section exists only in the full system prompt. Models newer than Opus 4.7, Sonnet 5, and Haiku 4.5 default to a shorter prompt without it, so there the field changes nothing; `CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=0` selects the full prompt on any model.
 
-**The cost** is small and mostly cached. The added instructions cost input tokens, and prompt caching absorbs that after the first request in a session. Output tokens are the real variable: *Explanatory* and *Learning* produce longer responses by design, *Concise* shorter ones, and a custom style costs whatever you told it to produce.
+The cost is small and mostly cached. The added instructions cost input tokens, and prompt caching absorbs that after the first request in a session. Output tokens are the real variable: *Explanatory* and *Learning* produce longer responses by design, *Concise* shorter ones, and a custom style costs whatever you told it to produce.
 
 ## Which mechanism, though
 
-Five features shape Claude's behavior and are easy to confuse. The separating question is *what does it modify, and when*.
+Five features shape Claude's behavior. The separating question is *what does it modify, and when*.
 
 | Feature | How it works | Reach for it when |
 |---|---|---|
@@ -56,7 +56,7 @@ Five features shape Claude's behavior and are easy to confuse. The separating qu
 | **Skills** | load task-specific instructions when invoked or relevant | you have a reusable procedure |
 | **Subagents** | run a helper with its own system prompt, model, and tools | you want a separately scoped worker for a focused task |
 
-**When not to reach for an output style:** anything project-specific, anything that is a procedure rather than a manner, and anything you want enforced. A style is still instructions, so it carries the same lack of guarantee as `CLAUDE.md`, and <LessonLink id="I1.4" /> is the decision for the enforcement cases. If you are on the fence between this and <LessonLink id="I3.1">a skill</LessonLink>, ask whether it should apply to *every* turn. Styles have no trigger and stay on until you switch away; skills load only when invoked or relevant.
+An output style is the wrong tool for anything project-specific, anything that is a procedure rather than a manner, and anything you want enforced. A style is still instructions, so it carries the same lack of guarantee as `CLAUDE.md`, and <LessonLink id="I1.4" /> is the decision for the enforcement cases. If you are on the fence between this and <LessonLink id="I3.1">a skill</LessonLink>, ask whether it should apply to *every* turn. Styles have no trigger and stay on until you switch away; skills load only when invoked or relevant.
 
 ## Writing one
 
@@ -78,7 +78,7 @@ Use `flowchart TD` for control flow and `sequenceDiagram` for request paths.
 Keep diagrams under 15 nodes.
 ```
 
-`keep-coding-instructions: true` is doing real work there. The style changes how Claude explains, and nothing about how it codes, so the built-in engineering instructions stay.
+The example sets `keep-coding-instructions: true` because the style only changes how Claude explains, so the built-in engineering instructions stay.
 
 The four frontmatter fields:
 
@@ -105,4 +105,4 @@ The four frontmatter fields:
 
 That closes Module I2. Startup context has a budget, `CLAUDE.md` has a ceiling and a refactor path when it hits one, and Claude Code's default instructions have one adjustable slot.
 
-Everything so far has been about what Claude knows and how it says things. <LessonLink id="I3.1" /> starts the half of this level about what Claude can *do*: the procedure bucket from <LessonLink id="I2.2" />'s sort, which no amount of scoping ever fixed.
+<LessonLink id="I3.1" /> starts the half of this level about what Claude can *do*: the procedure bucket from <LessonLink id="I2.2" />'s sort, which scoped rules do not cover.

@@ -29,19 +29,17 @@ You did not ask for any of that today. You asked for it once, in a settings file
 
 Everything in <LessonLink id="I1.3">the `.claude` directory</LessonLink> you toured has a price, and the price is paid at startup, in every session, whether or not today's work touches it.
 
-Two things make this worth understanding, and neither is the one people expect.
+The price is smaller than you think. A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it. Window size depends on the model: Fable models, Sonnet 5 and later, Haiku 5.5, Opus 4.6 and later, and Sonnet 4.6 support a 1 million token window, where that same startup is under 1%. The percentages in this lesson assume 200,000, so they are the conservative reading.
 
-**It is smaller than you think.** A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it. Window size depends on the model: Fable models, Sonnet 5 and later, Haiku 5.5, Opus 4.6 and later, and Sonnet 4.6 support a 1 million token window, where that same startup is under 1%. The percentages in this lesson assume 200,000, so they are the conservative reading.
+Startup is also the part you chose. File reads are Claude's decisions, made fresh each time. Startup is your decisions, made once and repeated forever. A `CLAUDE.md` line you wrote in March is in context right now, shaping a task it has nothing to do with.
 
-**It is the part you chose.** File reads are Claude's decisions, made fresh each time. Startup is your decisions, made once and repeated forever. A `CLAUDE.md` line you wrote in March is in context right now, shaping a task it has nothing to do with.
-
-So startup is not a budget problem. It is a curation problem that happens to have a token bill attached.
+So the work startup asks of you is curation: deciding which lines belong in every session.
 
 ## How it works
 
 The mechanism underneath is **progressive disclosure**: load an index up front, load the body on demand.
 
-Most of what you configure now works this way. A skill contributes one line to a listing at startup; its actual content loads only if Claude invokes it. An MCP server contributes its tool *names*; the full schemas stay deferred until a task needs one. In both cases you pay for the table of contents, not the book.
+Most of what you configure now works this way. A skill contributes one line to a listing at startup; its actual content loads only if Claude invokes it. An MCP server contributes its tool *names*; the full schemas stay deferred until a task needs one.
 
 A shorter list loads in full, every time, no matter what you are doing:
 
@@ -55,21 +53,17 @@ A shorter list loads in full, every time, no matter what you are doing:
 
 The eager column is the one to watch, and it is short. `CLAUDE.md` is the only entry on it that grows without anyone deciding to grow it.
 
-### The MCP default moved
+### MCP tool search
 
-Older advice, including advice still circulating, says connecting MCP servers floods your context with tool definitions. That was true. It is not the default any more.
+Tool search is on by default: only tool names and server instructions load at session start. The docs state the consequence plainly, that adding more MCP servers has minimal impact on your context window. `ENABLE_TOOL_SEARCH=false` loads every schema eagerly instead, and `ENABLE_TOOL_SEARCH=auto` loads them up front while their definitions stay under 10% of the window and defers all of them once they cross it.
 
-Tool search is on by default: only tool names and server instructions load at session start. The docs state the consequence plainly, that adding more MCP servers has minimal impact on your context window. You can still get the old behavior on purpose with `ENABLE_TOOL_SEARCH=false`, which loads every schema eagerly, or `ENABLE_TOOL_SEARCH=auto`, which loads them up front while their definitions stay under 10% of the window and defers all of them once they cross it.
-
-If you have been rationing your MCP connections, you were following a rule whose reason expired.
+Advice to ration MCP connections so they do not flood your context with tool definitions was written for eager loading.
 
 ## The startup ledger
 
 <ChartEmbed id="context-cost-ledger" />
 
-Three quarters of startup is the system prompt and `CLAUDE.md`. The system prompt you cannot touch, which leaves exactly one line worth your attention, and it is the one you write.
-
-Skills and MCP servers, the two features people most expect to be expensive, add up to less than a tenth of startup.
+You cannot edit the system prompt, so the largest line you control is `CLAUDE.md`, the file you write.
 
 ## Auditing your own session
 
@@ -89,15 +83,15 @@ In a fresh session, before typing anything else:
 
 Read it against the ledger and ask three questions:
 
-1. **Is anything much larger than the ledger's version of it?** The line that most often is, by a wide margin, is `CLAUDE.md`.
-2. **Is anything here that you forgot you installed?** A skill from an experiment, a server for a project you finished. The listing is cheap, but a listing you cannot justify is a decision nobody made.
-3. **What is the largest thing you control?** That is where any effort belongs, and it is rarely where people look first.
+1. Is anything much larger than the ledger's version of it? The line that most often is, by a wide margin, is `CLAUDE.md`.
+2. Is anything here that you forgot you installed? A skill from an experiment, a server for a project you finished. The listing is cheap, but it still loads in every session.
+3. What is the largest thing you control? That is where any effort belongs.
 
-Then compare against a session that has done some work. Read four or five files and run `/context` again. The startup block will not have moved. Everything else will have dwarfed it.
+Then compare against a session that has done some work. Read four or five files and run `/context` again. The startup block will not have moved, and the file reads alone will already be about as large as it.
 
 ## Pitfalls
 
-**`CLAUDE.md` as a junk drawer.** The symptom is not a token warning, it is Claude ignoring your instructions. A file carrying migration procedures, PR conventions, and deploy steps is mostly irrelevant to any given task, and the signal you care about is buried in it. The docs put the target at under 200 lines. Past that, the fix is not deletion: move procedures into <LessonLink id="I3.1">skills</LessonLink> and file-specific conventions into path-scoped rules, both covered in <LessonLink id="I2.2" />.
+**`CLAUDE.md` as a junk drawer.** The symptom is Claude ignoring your instructions. A file carrying migration procedures, PR conventions, and deploy steps is mostly irrelevant to any given task, and the signal you care about is buried in it. The docs put the target at under 200 lines. Past that, keep the content and move it: procedures into <LessonLink id="I3.1">skills</LessonLink> and file-specific conventions into path-scoped rules, both covered in <LessonLink id="I2.2" />.
 
 **Rationing MCP servers on outdated advice.** The symptom is a workflow where you paste from a browser tab because you decided a server was too expensive to connect. At 120 tokens for the names, it is not. <LessonLink id="I5.3" /> is where this gets its full treatment.
 
@@ -127,19 +121,19 @@ Read the files involved in how authentication works in this project. Don't chang
 
 **What exactly is in context before I type anything?** The system prompt, your project and personal `CLAUDE.md`, auto memory, environment info (working directory, platform, shell, git state), the skill listing, and MCP tool names. Your setup may add to that: an output style and text from `--append-system-prompt` both fold into the system prompt the same way.
 
-**What does a plugin cost?** Whatever its components cost, because a plugin is a delivery mechanism rather than a thing in itself. A plugin shipping three skills and an MCP server costs three skill lines and a set of tool names. <LessonLink id="I7.1" /> covers the packaging; the rent is the rent of the parts.
+**What does a plugin cost?** Whatever its components cost, because a plugin only packages them. A plugin shipping three skills and an MCP server costs three skill lines and a set of tool names. <LessonLink id="I7.1" /> covers the packaging.
 
 **How much does a subagent cost me?** Nothing at startup, and less than you would think while running. A subagent loads `CLAUDE.md` and the same skill and MCP setup, but into its own separate window. Its file reads never touch yours; only its final response comes back. <LessonLink id="I6.1" /> is the module.
 
 **Does auto memory count against me the same way `CLAUDE.md` does?** Yes, and you do not curate it. Claude writes it, per repository, on your machine. The first 200 lines or 25KB load, whichever comes first. <LessonLink id="B3.2" /> covers the split between what you write and what Claude records.
 
-**Are these token numbers exact?** No, and they are not meant to be. They are the official docs' own illustrative figures, and yours will differ with your setup. The proportions are the durable part: system prompt and `CLAUDE.md` dominate, listings are cheap, and everything after your first prompt dwarfs all of it.
+**Are these token numbers exact?** No. They are the official docs' own illustrative figures, and yours will differ with your setup. The proportions are the durable part: system prompt and `CLAUDE.md` dominate, listings are cheap, and everything after your first prompt dwarfs all of it.
 
 **Does startup reload after `/compact`?** Yes. The system prompt, `CLAUDE.md`, memory, and MCP tools all come back automatically, and on Claude Code v2.1.304 or later so does the skill listing.
 
 ## Where next
 
-You now have the frame the rest of this level is measured against. Every feature from here has a cost, every module states it, and the answer is always some version of: an index up front, a body on demand, and `CLAUDE.md` paying full price for everything you put in it.
+Each module in the rest of this level states the startup cost of the feature it teaches.
 
 <LessonLink id="I2.2" /> is the direct sequel, and the one to read if your audit turned up a `CLAUDE.md` well past 200 lines. It covers the refactor path: `.claude/rules/`, path-scoped loading, and imports.
 

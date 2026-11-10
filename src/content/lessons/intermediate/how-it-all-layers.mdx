@@ -19,9 +19,7 @@ interactive:
 
 # How it all layers
 
-Six modules taught six mechanisms, each in its own frame. They do not run in separate frames. They run in one session, in a fixed order, and knowing that order turns six features into one system you can reason about.
-
-Two traces and one table, then the map.
+Six modules taught six mechanisms, each in its own frame. At runtime they share one session and run in a fixed order, and knowing that order turns six features into one system you can reason about.
 
 ## Trace one: startup
 
@@ -39,7 +37,7 @@ Between pressing enter on `claude` and seeing a prompt, a specific sequence runs
 
 **6. Hooks arm.** Matchers are registered against events. No hook has run yet.
 
-Plugins do not appear as a step because they are not one. An enabled plugin contributes at steps 3 through 6 alongside everything else, which is why <LessonLink id="I7.1" />'s cost warning is not a separate kind of cost.
+Plugins have no step of their own. An enabled plugin contributes at steps 3 through 6 alongside everything else, so <LessonLink id="I7.1" />'s cost warning is about costs paid at those same steps.
 
 By the time the prompt appears, all of it is resident, and every turn for the rest of the session pays for it.
 
@@ -59,9 +57,9 @@ You type "add rate limiting to the upload endpoint."
 
 **Claude loops** until it considers the work finished, each result joining the conversation and enlarging it.
 
-**`Stop` hooks fire last.** Exit code 2 here refuses the ending and sends Claude back to work, which is how "done" gets a definition that is not Claude's opinion.
+**`Stop` hooks fire last.** Exit code 2 here refuses the ending and sends Claude back to work, so a check you wrote decides when the work is done.
 
-Three of those steps are unconditional (prompt hooks, the permission gate, stop hooks) and one is discretionary (how Claude chooses to answer). Sorting the mechanisms by which kind of step they live on is most of the skill this level teaches.
+Three of those steps are unconditional (prompt hooks, the permission gate, stop hooks) and one is discretionary (how Claude chooses to answer).
 
 <ChartEmbed id="claude-code-system-map" />
 
@@ -86,19 +84,19 @@ The pairs that get confused match on one column and differ on the other. A hook 
 
 ## The master tree
 
-Those four resolvers each described their ladder as one branch of a larger tree. Here it is, walked in one pass.
+Those four resolvers each described their ladder as one branch of a larger tree, and the tree joins them by asking the questions in a fixed order.
 
-The question order is the reconciliation. Determinism comes first because it eliminates the most: if something must be guaranteed, only two mechanisms qualify and the rest of the tree stops mattering. External reach comes next, since it is a question about the world rather than about Claude. Context economics comes third. The skill-versus-instruction-versus-prompt distinction comes last, which is where most people start, and why they end up with a `CLAUDE.md` holding six procedures.
+Determinism comes first because it eliminates the most: if something must be guaranteed, only two mechanisms qualify and the rest of the tree stops mattering. External reach comes next, since it is a question about the world rather than about Claude. Context economics comes third. The skill-versus-instruction-versus-prompt distinction comes last, which is where most people start, and why they end up with a `CLAUDE.md` holding six procedures.
 
 <ChartEmbed id="mechanism-decision-tree" />
 
-Walking it for the rate-limiting request: not guaranteed, no external system, no output flood, not a repeated procedure, and rate limits are not a standing project fact. It ends at the prompt, correctly. Most work is not a configuration problem, and a level about configuration is a bad place to forget that.
+Walking it for the rate-limiting request: not guaranteed, no external system, no output flood, not a repeated procedure, and rate limits are not a standing project fact. It ends at the prompt, correctly. Most work needs no configuration at all.
 
-Two habits keep the tree honest. **Configure on the second occurrence, not the first**, since one instance rarely shows you the shape of the recurring version. And **when two mechanisms both fit, prefer the cheaper resident cost**, because the one you pay for every turn will outlive your memory of why you added it.
+Two habits keep the tree honest. **Configure on the second occurrence**, since one instance rarely shows you the shape of the recurring version. And **when two mechanisms both fit, prefer the cheaper resident cost**, because the one you pay for every turn will outlive your memory of why you added it.
 
 ## Where next
 
-<LessonLink id="I7.4" /> closes the last gap in the map: agent teams, which are the thing subagents are not, previewed rather than taught.
+<LessonLink id="I7.4" /> closes the last gap in the map with a short preview of agent teams: sessions that work as peers and message each other directly, where a subagent reports back to whoever spawned it.
 
 <LessonLink id="I7.5" /> is the optional self-assessment, where a team policy has to be implemented by choosing mechanisms with the tree above, then packaged as a plugin.
 

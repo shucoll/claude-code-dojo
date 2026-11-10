@@ -142,7 +142,7 @@ export const cacheInvalidationBoard: ChartDef = {
           id: 'fast-mode',
           title: 'Turning on fast mode',
           tone: 'rose',
-          lines: ['The first time reads the whole history uncached, at fast mode rates'],
+          lines: ['Its first request reads the whole history uncached, at fast mode rates'],
           target: popup('Turning on fast mode', () => import('./popups/cache-fast-mode.mdx')),
         },
         {

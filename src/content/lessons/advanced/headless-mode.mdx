@@ -26,9 +26,9 @@ The second problem arrives as soon as you solve the first. The same command in t
 
 `claude -p` runs one prompt and exits. Its whole interface is stdin, stdout, and an exit code, so it goes in a pipeline next to `grep` and `jq`. A permission prompt that would pause an interactive session has to be settled in advance, by the flags you set before the run starts.
 
-That shape raises a second question: what should Claude Code load before it starts? An interactive session loads everything it can discover. A scripted run usually wants the opposite, and `--bare` is the flag that gives it.
+The other decision is what Claude Code loads before it starts. An interactive session loads everything it can discover. A scripted run usually wants the opposite, and `--bare` is the flag that gives it.
 
-One framing note, because the docs say it plainly. This is the Agent SDK driven from the CLI. <LessonLink id="A6.1" /> hands you the library; the flags here are the same options in a different notation.
+`claude -p` is the Agent SDK driven from the CLI. <LessonLink id="A6.1" /> hands you the library; the flags here are the same options in a different notation.
 
 ## How it works
 
@@ -40,7 +40,7 @@ Add `-p` (or `--print`) to any `claude` command:
 claude -p "What does the auth module do?"
 ```
 
-Claude Code prints the response and exits 0. A failed run exits non-zero, so a script can branch on the status. The two failure shapes land in different streams: an invalid flag is reported to stderr before the run starts, while a failure inside the run, such as missing authentication, is printed as the result on stdout. A script that only parses stdout will happily treat an authentication error as an answer, so check the exit code too.
+Claude Code prints the response and exits 0. A failed run exits non-zero, so a script can branch on the status. The two failure shapes land in different streams: an invalid flag is reported to stderr before the run starts, while a failure inside the run, such as missing authentication, is printed as the result on stdout. A script that only parses stdout will treat an authentication error as an answer, so check the exit code too.
 
 Not every option combines with `-p`. Claude Code rejects `--bg`, and rejects `--cloud` with a task description, naming the conflict in the error.
 
@@ -261,7 +261,7 @@ git diff "$BASE"... | claude --bare -p \
   | jq '.structured_output'
 ```
 
-`git diff main...` compares the merge base with your current head, so the script sees the branch's own changes. The diff arrives on stdin, which means Claude never runs git and the run needs no Bash permission.
+`git diff main...` compares the merge base with your current head, so the script sees the branch's own changes.
 
 **3. Run it.** Bare mode reads no OAuth credentials, so export a key first:
 
@@ -343,17 +343,15 @@ The cost sits in three places. Every `-p` invocation is a fresh session, so the 
 
 ## Pitfalls
 
-- **The script parses stdout and gets an error message.** A run that fails inside the turn, most often on authentication after adding `--bare`, prints the failure as the result on stdout and exits non-zero. A pipeline into `jq` then fails on invalid JSON, or worse, a text-mode script treats the error as the answer. Check the exit code before reading stdout.
+- **The script parses stdout and gets an error message.** A run that fails inside the turn, most often on authentication after adding `--bare`, prints the failure as the result on stdout and exits non-zero. A pipeline into `jq` then fails on invalid JSON. Check the exit code before reading stdout.
 
 - **It worked locally and did nothing in CI.** The local run picked up your `permissions.allow` rules from settings, and the CI run did not. With `--output-format stream-json`, read `permission_denials` on the result message; with `json`, expect to see the work missing from the result text and widen `--allowedTools` to the specific commands the job needs.
 
 - **`--permission-prompts none` is rejected as an unknown option.** The runner is on Claude Code older than v2.1.259. Pin the version in CI so a runner image refresh does not silently change which flags exist.
 
-- **The allow-list is wider than it looks.** `Bash(git diff*)` without the space matches `git diff-index` too, and a rule such as `Bash(npm *)` covers `npm publish`. Write the narrowest prefix that still covers the job.
+- **The allow-list is wider than it looks.** A rule such as `Bash(npm *)` covers `npm publish`. Write the narrowest prefix that still covers the job.
 
-- **The run hangs long after the answer.** A background subagent or workflow holds the process open until it finishes, up to ten idle minutes. If a job should never wait, keep background work out of the prompt, or set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` to a limit your CI timeout tolerates.
-
-- **A large input silently stops being a pipe.** Stdin over 10MB exits with an error rather than truncating. Write the content to a file and reference the path in the prompt.
+- **The run hangs long after the answer.** A background subagent or workflow is still running. If a job should never wait, keep background work out of the prompt, or set `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` to a limit your CI timeout tolerates.
 
 ## Try It
 

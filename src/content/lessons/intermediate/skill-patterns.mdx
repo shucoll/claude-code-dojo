@@ -14,15 +14,15 @@ docsSources: ["https://code.claude.com/docs/en/skills"]
 
 # Skill patterns
 
-<LessonLink id="I3.1" /> was what a skill is. <LessonLink id="I3.2" /> was building one that works. This is the distance between a skill that works and one that is good: three patterns that show up again and again in skills worth keeping, and a clinic for the failure that sinks more skills than any other, a description that fires at the wrong times or not at all.
+<LessonLink id="I3.1" /> was what a skill is. <LessonLink id="I3.2" /> was building one that works. This lesson covers three patterns that show up again and again in skills worth keeping, and a clinic for a common failure: a description that fires at the wrong times or not at all.
 
-Each pattern is a problem, the shape that solves it, and a worked example. Take what you need; a skill can use all three or none.
+The patterns are independent: a skill can use all three or none.
 
 ## Pattern: inject live context
 
 **Problem.** A skill that reasons about your repository is only as good as the state it can see. Tell Claude "summarize my changes" and it works from whatever files happen to be open, not your actual diff. You want the skill to run against real, current state every time, without you pasting it in.
 
-**Pattern.** A `` !`<command>` `` line runs a shell command before the skill is sent to Claude, and its output replaces the line. Claude never sees the command, only the data it produced. This is preprocessing, not a tool call: it happens before Claude reads anything. It still runs through your permission rules, but it never prompts you: outside auto mode, a command the rules do not already allow aborts the whole invocation instead. You met it in passing in <LessonLink id="I3.2" />; here are the rules that make it reliable.
+**Pattern.** A `` !`<command>` `` line runs a shell command before the skill is sent to Claude, and its output replaces the line. Claude never sees the command, only the data it produced. This is preprocessing, not a tool call: it happens before Claude reads anything. It still runs through your permission rules, but it never prompts you: outside auto mode, a command the rules do not already allow aborts the whole invocation instead. You met it in passing in <LessonLink id="I3.2" />. Four rules govern how it runs:
 
 - The inline form is recognized only when `!` starts a line or follows whitespace. `KEY=!`cmd`` is left as literal text, so the command does not run.
 - For multiple commands, open a fenced block with ` ```! ` instead of one inline call per line.
@@ -79,7 +79,7 @@ Research $ARGUMENTS thoroughly:
 3. Summarize the findings with specific file references.
 ```
 
-`/deep-research how does auth work` spins up an Explore agent, which reads whatever it needs and hands back a summary. Your window gains the summary, not the reading. This is a preview of <LessonLink id="I6.1" />, where subagents get their full treatment; as a skill recipe it is usable now.
+`/deep-research how does auth work` spins up an Explore agent, which reads whatever it needs and hands back a summary. Your window gains only the summary. This is a preview of <LessonLink id="I6.1" />, where subagents get their full treatment; as a skill recipe it is usable now.
 
 ## Pattern: control who sees it
 
@@ -112,7 +112,7 @@ To gate skills by permission rather than visibility, deny the `Skill` tool whole
 
 ## Troubleshooting: descriptions that misfire
 
-Every skill lives or dies on its description, because that is the only thing Claude weighs when deciding relevance. Two symptoms cover almost every complaint, and they pull in opposite directions.
+A skill's description is the only thing Claude weighs when deciding whether the skill is relevant. Two symptoms cover almost every complaint, and they pull in opposite directions.
 
 ### It never triggers
 
@@ -132,7 +132,7 @@ The opposite: the skill fires on requests you never meant for it. The descriptio
 
 ### The tuning loop
 
-Reading a description and guessing is how descriptions stay wrong. Test it instead. Collect a handful of realistic prompts, run each in a **fresh session** with the skill available and again with it disabled, and compare. Fresh matters: leftover context from writing the skill masks gaps in the description, so a skill that "works" in the session you built it in can fail cold. The `skill-creator` plugin automates this, generating should-trigger and should-not-trigger prompts, measuring the hit rate, and proposing description edits when the skill activates on the wrong requests.
+Test a description instead of rereading it and guessing. Collect a handful of realistic prompts, run each in a fresh session with the skill available and again with it disabled, and compare. Fresh matters: leftover context from writing the skill masks gaps in the description, so a skill that "works" in the session you built it in can fail cold. The `skill-creator` plugin automates this, generating should-trigger and should-not-trigger prompts, measuring the hit rate, and proposing description edits when the skill activates on the wrong requests.
 
 ## Try It
 
@@ -145,16 +145,14 @@ Reading a description and guessing is how descriptions stay wrong. Test it inste
 Give me a standup update.
 ```
 
-Confirm it fires and reports your real branch and commits, not a guess.
+Confirm it fires and reports your real branch and commits.
 3. Now break it on purpose. Change the description to something vague like `description: Helps with daily work.` and ask the same question in a fresh session. It should stay silent.
 4. Fix it: restore a description that names what you would say (`Use when I ask for a standup or a status update`). Ask again. It fires.
 
-**Success looks like:** the skill went from triggering, to silent, to triggering again, and the only thing that changed was the description. You have watched the one field that decides whether a skill is ever found.
+**Success looks like:** the skill went from triggering, to silent, to triggering again, and the only thing that changed was the description.
 
 ## Where next
 
-<LessonLink id="I3.4" /> closes the module by settling where an instruction belongs in the first place: a skill, `CLAUDE.md`, or a slash command. It is the resolver for the level's most common misconfiguration.
+<LessonLink id="I3.4" /> closes the module by settling where an instruction belongs in the first place: a skill, `CLAUDE.md`, or a slash command.
 
 <LessonLink id="I6.1" /> is where `context: fork` becomes a first-class tool rather than a skill recipe, with subagents you design and reuse.
-
-<LessonLink id="I2.1" /> is the cost model underneath the subagent pattern: the reason moving a heavy procedure off the main thread is worth doing is the rent every read pays on your window.

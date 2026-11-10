@@ -6,7 +6,7 @@ type: "milestone"
 order: 2
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B5.1"]
 teaches: ["plan-mode-cycle", "plan-review"]
 references: ["B3.3", "B3.5"]
@@ -24,7 +24,7 @@ Add two behaviors to Shelf, built through a complete plan-mode cycle:
 - `POST /items` with `{ title, tag }` creates an item and returns it with `201`.
 - `GET /items?tag=scifi` returns only the items with that tag.
 
-The artifact is a working tagging feature. The skill is the cycle that produced it: explore, get a plan, **review the plan critically**, approve, execute, review the diff.
+The artifact is a working tagging feature. The skill is the cycle that produced it: explore, get a plan, review the plan critically, approve, execute, review the diff.
 
 **Environment:** your Shelf repo from <LessonLink id="B5.1" />. You committed the scaffold there, so you have a clean baseline to diff against and rewind to if needed.
 
@@ -90,13 +90,13 @@ Plan: add tagging to Shelf
 
 ### 3. Review the plan (this is the part beginners skip)
 
-The ceremony of plan mode is worth nothing if you rubber-stamp the plan. Its whole value is that you get to interrogate the approach *before* a single line is written, when changing your mind costs a sentence instead of a re-run. Read the plan against these questions every time:
+Nothing has been written yet, so changing the approach now costs a sentence of feedback instead of a re-run. Read the plan against these questions every time before you approve:
 
 - **Does it touch the right files, and only those?** Tagging belongs in the data layer and the routes. If the plan wants to add a new file or touch `public/`, ask why before approving.
-- **Does it respect your conventions?** Your `CLAUDE.md` says all database access lives in one file. A plan that runs SQL from the route layer violates that. Catch it here, in one line of the plan, not later across a diff.
+- **Does it respect your conventions?** Your `CLAUDE.md` says all database access lives in one file. A plan that runs SQL from the route layer violates that. It is easier to catch in one line of the plan than spread across a diff.
 - **Where is the test?** A plan with no verification is one you cannot check. This plan names a test; if it had not, you would ask for one now.
 - **Is there hidden scope?** Watch for "add a separate tags table," "add tag validation," or "migrate existing data." Those may be more than you asked for. Trimming scope is free while it is still just a plan.
-- **What about data that already exists?** Items created in the last milestone have no tag. Does the schema allow a null tag? A plan-time question that heads off a runtime surprise.
+- **What about data that already exists?** Items created in the last milestone have no tag. Does the schema allow a null tag?
 
 If any answer is wrong, do not approve. Choose **keep planning** at the prompt and give feedback, or press `Ctrl+G` to open the plan in your editor and fix it directly before Claude proceeds.
 
@@ -185,7 +185,7 @@ def get_items():
 
 </WhenLang>
 
-The route layer has no SQL in it. The plan said all data access stays in one file, the diff proves it did, and you confirmed that by reading rather than trusting.
+The route layer has no SQL in it. The plan kept all data access in one file, and the diff shows the code does too.
 
 ### 6. Verify the feature
 
@@ -233,8 +233,6 @@ And there is a test proving it, plus one commit that contains exactly this featu
 
 ## Reasoning recap
 
-Plan mode's ceremony is worth it when a change touches multiple files you do not fully hold in your head. The health check did not qualify; tagging did. Learning to feel that line is half the lesson.
+Tagging went through plan mode because it crossed three files, and the plan review was the earliest point to correct its approach. Each later point costs more: a wrong approach that gets past both the plan and the diff costs a debugging session after you ship.
 
-The other half is that the leverage is not the plan, it is the **review** of the plan. A wrong approach caught at plan time costs one sentence of feedback. The same mistake caught in the diff costs a re-run. Caught after you ship, it costs a debugging session. Reviewing the plan is how you move a correction as early as it can possibly go, which is the cheapest place to make it.
-
-Next milestone, <LessonLink id="B5.3" />: you deliberately break Shelf and recover it, first with `/rewind` and then with git, so that recovery stops being scary and starts being a tool.
+Next milestone, <LessonLink id="B5.3" />: you deliberately break Shelf and recover it, first with `/rewind` and then with git.

@@ -105,15 +105,15 @@ Agents are namespaced the same way, so `reviewer` becomes `acme-workflow:reviewe
 
 ## Walkthrough: converting your setup
 
-Starting from a project whose `.claude/` holds a skill, the reviewer subagent, and a formatting hook.
+Start from a project whose `.claude/` holds a skill, the reviewer subagent, and a formatting hook.
 
-**1. Scaffold alongside, not inside.**
+**1. Scaffold next to `.claude/`.**
 
 ```bash
 mkdir -p acme-workflow/.claude-plugin
 ```
 
-Keep it next to `.claude/`, not within it, so the copies below have somewhere to land.
+Keeping it outside `.claude/` gives the copies below somewhere to land.
 
 **2. Write the manifest** at `acme-workflow/.claude-plugin/plugin.json`, using the fuller example above.
 
@@ -144,7 +144,7 @@ That session gets the plugin from your working directory, and a local copy takes
 
 **7. Verify each component.** The skill under its namespaced name, the agent listed in `/context` under Custom Agents, and the hook by triggering an edit. Run `/reload-plugins` after each change rather than restarting.
 
-**8. Remove the originals** from `.claude/` and the `hooks` block from `.claude/settings.json`, or the old skill and agent keep loading beside the plugin's copies and every hook runs twice.
+**8. Remove the originals** from `.claude/`, and delete the `hooks` block from `.claude/settings.json`.
 
 ### The lighter path
 
@@ -154,11 +154,11 @@ For something you want everywhere and never intend to publish, skip the marketpl
 claude plugin init my-helper --with skills hooks
 ```
 
-This scaffolds `~/.claude/skills/my-helper/` with a manifest and starter components. It loads on the next session as `my-helper@skills-dir`, with no install step and no marketplace, because any folder under a skills directory containing `.claude-plugin/plugin.json` is picked up as a plugin. Disable it by name; there is nothing to uninstall.
+This scaffolds `~/.claude/skills/my-helper/` with a manifest and starter components. It loads on the next session as `my-helper@skills-dir` without an install step, because Claude Code loads any folder under a skills directory that contains `.claude-plugin/plugin.json` as a plugin. To turn it off, run `claude plugin disable my-helper@skills-dir`.
 
 ## Use-case scenarios
 
-**You want your personal setup on every machine.** Use `claude plugin init` and keep `~/.claude/skills/` in a dotfiles repository. No marketplace, no install step.
+**You want your personal setup on every machine.** Use `claude plugin init` and keep `~/.claude/skills/` in a dotfiles repository.
 
 **Your team should share a workflow.** A real plugin in its own repository, added as a marketplace and enabled through the project's `.claude/settings.json`, which is the project-scope path from <LessonLink id="I7.1" />.
 
@@ -168,7 +168,7 @@ This scaffolds `~/.claude/skills/my-helper/` with a manifest and starter compone
 
 ## When to use / when not to use
 
-The question is not "is this config good enough to package." It is **would I want this in a second project?**
+The test is reuse: would you want this config in a second project?
 
 **Package it when:**
 - You would copy it into another repository

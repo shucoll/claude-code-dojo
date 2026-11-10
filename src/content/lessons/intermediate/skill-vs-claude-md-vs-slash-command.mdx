@@ -20,7 +20,7 @@ Three features look like they do the same job: tell Claude how to do something. 
 
 One fact collapses the choice from three to two. The custom slash command is no longer a separate thing: it has been merged into skills. A file at `.claude/commands/precommit.md` and a skill at `.claude/skills/precommit/SKILL.md` both produce `/precommit`, and if you have both, the skill wins. So there is no real decision between "a skill" and "a slash command." A slash command is how you invoke a skill.
 
-That leaves two homes, and they separate on a single question: **does this apply on its own, or only when something triggers it?**
+That leaves two homes, and they separate on a single question: does this apply on its own, or only when something triggers it?
 
 - **`CLAUDE.md`** holds ambient facts and conventions. It is always loaded, so it applies to every turn without being asked, and it costs its full length in every session.
 - **A skill** holds a procedure. It is indexed at startup and loaded only when triggered, by relevance or by command, so it costs one line until you need it.
@@ -49,13 +49,13 @@ This ladder is one branch of the master decision tree in <LessonLink id="I7.3" /
    - **Safe to run whenever it is relevant?** A skill with a good description, so Claude can load it on its own.
    - **Has side effects you want to time yourself?** ("Ship it": run tests, build, deploy.) A skill with `disable-model-invocation: true`, invoked only as `/command`.
 
-3. **Is it neither a fact nor a procedure but a way of responding?** Tone, role, default format. That is an <LessonLink id="I2.3">output style</LessonLink>, not any of these three.
+3. **Is it neither a fact nor a procedure but a way of responding?** Tone, role, default format. That is an <LessonLink id="I2.3">output style</LessonLink>.
 
-4. **Do you need it enforced, not merely followed?** All three homes are instructions, and instructions can be ignored. Guaranteed behavior is a <LessonLink id="I4.1">hook</LessonLink>.
+4. **Do you need it enforced?** All three homes are instructions, and instructions can be ignored. Guaranteed behavior is a <LessonLink id="I4.1">hook</LessonLink>.
 
 ## Scenario walkthroughs
 
-Three of these are fragments lifted straight from an overgrown `CLAUDE.md`, the exact material <LessonLink id="I2.2" /> told you to move out. Each gets its correct home.
+Three of these are fragments lifted straight from an overgrown `CLAUDE.md`, the material <LessonLink id="I2.2" /> told you to move out. Each gets its correct home.
 
 - **"To cut a release: bump the version, update the changelog, tag, and push."** A procedure. Move it to a skill. In `CLAUDE.md` those forty lines were rent on every session, including the ones nowhere near a release. As a skill they cost one index line until you run `/release`.
 
@@ -71,4 +71,4 @@ Three of these are fragments lifted straight from an overgrown `CLAUDE.md`, the 
 
 **Procedures short enough to live in either home.** A three-line routine you always want applied ("before finishing, run the type-checker and report failures") is defensible in `CLAUDE.md` as a rule or as a tiny skill. At three lines the cost difference is nothing, so decide on trigger semantics: if it should apply to every relevant turn on its own, `CLAUDE.md` is simpler; if you want to invoke it deliberately, or you expect it to grow past a few lines, start it as a skill. The tiebreaker is which way it will drift, since a skill scales and a `CLAUDE.md` entry does not.
 
-**The legacy-command migration question.** Existing `.claude/commands/*.md` files keep working, and the docs only ask you to prefer a skill for new work, so migrating is a want, not a must. Convert one when you hit a wall a flat command file cannot clear: supporting files alongside the command, or letting Claude trigger it from relevance instead of only an explicit `/name`. Until then, a working command is not a problem to fix. If you do migrate and leave both in place, remember the skill takes precedence over a command of the same name.
+**The legacy-command migration question.** The docs only ask you to prefer a skill for new work, so migrating an existing `.claude/commands/*.md` file is optional.

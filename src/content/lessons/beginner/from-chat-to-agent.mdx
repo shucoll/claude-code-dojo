@@ -24,9 +24,9 @@ You have used AI in a chat window. You paste in some code, describe what you wan
 
 Claude Code is **agentic**. Instead of only replying with text, it acts on your project directly. The clearest way to see the difference is to line up the two loops you can be in.
 
-**The chat loop you already know.** You gather the context by hand. You paste it in. You get text back. You apply it by hand. The tool never touches your files, so *you* are the runtime: nothing happens until you copy, paste, and run it yourself.
+In the chat loop you already know, you gather the context by hand. You paste it in. You get text back. You apply it by hand. The tool never touches your files, so *you* are the runtime: nothing happens until you copy, paste, and run it yourself.
 
-**The agentic loop.** You describe a goal, and Claude gathers its own context, takes action, and checks the result. It reads files, runs commands, and edits code on your behalf, repeating until the task is done. You are still in charge, but now you steer instead of shuttle.
+In the **agentic loop**, you describe a goal, and Claude gathers its own context, takes action, and checks the result. It reads files, runs commands, and edits code on your behalf, repeating until the task is done. You are still in charge and steer the work.
 
 One analogy: a chat assistant is a consultant who can only mail you advice, while an agent is a capable teammate working in your repo while you watch and redirect.
 
@@ -42,7 +42,7 @@ Give it a task and it works through three phases that blend together and repeat:
 
 Each result feeds the next decision, so Claude chains many steps together and course-corrects as it learns. The loop adapts to the request. A question about your code might only need step one; a bug fix cycles through all three several times.
 
-Those actions come from **tools**. Informally they fall into a few buckets: reading and editing files, searching, running shell commands, and looking things up on the web. Without tools a model can only produce text. Tools are what turn "chat" into "agent." (You will meet the full tool set later in the course; here it is enough to know why they matter.)
+Those actions come from **tools**. Informally they fall into a few buckets: reading and editing files, searching, running shell commands, and looking things up on the web. Without tools a model can only produce text.
 
 To make this concrete, picture a failing test. In a chat tool you would copy the error, paste in the files you think are relevant, and relay fixes back and forth. With Claude Code you say:
 
@@ -54,20 +54,20 @@ From that one sentence, Claude might run the test suite to see what fails, read 
 
 And you are part of the loop. Claude works on its own but stays responsive: press `Esc` to stop it, or type a correction to nudge it mid-task without starting over.
 
-The whole cycle looks like this. Click any stage to see what happens inside it, and notice the **repeat** edge: verifying feeds straight back into gathering, which is how one prompt turns into many coordinated steps.
+Click any stage of the loop to see what happens inside it.
 
 <ChartEmbed id="agentic-loop-diagram" />
 
 ## FAQ
 
-**How is this different from pasting code into a chat?** In a chat you do the legwork: gathering files, applying answers, running things yourself. Claude Code closes that loop for you. It reads your files, makes the change, and checks the result, so your job shifts from shuttling text to steering a teammate.
+**How is this different from pasting code into a chat?** In a chat you do the legwork: gathering files, applying answers, running things yourself. Claude Code closes that loop for you: it reads your files, makes the change, and checks the result.
 
 **What does "agentic" actually mean?** It means the model can take actions through tools (read, edit, run) and react to what those actions return, not just emit text. That feedback-driven cycle, decide then act then observe then repeat, is the "agent" part.
 
-**Does it act without asking me?** Nothing with side effects runs unreviewed, but who does the reviewing depends on the session's **permission mode**. In Manual mode Claude stops and asks you before it edits files or runs shell commands. In auto mode, where interactive sessions start by default, a classifier model screens those same actions and blocks the risky ones. You pick the mode, so you are steering the whole time.
+**Does it act without asking me?** That depends on the session's **permission mode**. In Manual mode Claude stops and asks you before it edits files or runs shell commands. In auto mode, where interactive sessions start by default, file edits inside your project go ahead without a prompt, and a classifier model screens shell commands and other actions and blocks the risky ones. You pick the mode.
 
-**Can it break my computer?** It is scoped to the directory you start it in, so it works inside your project, not across your whole machine. On top of that, every file edit is snapshotted first, so you can rewind changes. The actions a snapshot cannot undo, the ones that touch systems outside your files, are the ones that get the firmest gate before they run.
+**Can it break my computer?** It is scoped to the directory you start it in, so it works inside your project, not across your whole machine. On top of that, Claude Code snapshots each file before editing it, so you can rewind changes. The actions a snapshot cannot undo, the ones that touch systems outside your files, are the ones that get the firmest gate before they run.
 
 ## Where next
 
-You now have the shape of the agentic loop: gather, act, verify, repeat, with you steering. The rest of this module fills in the picture before you install anything. <LessonLink id="B1.2" /> places Claude Code (not a chatbot, not an editor) and tours the surfaces it runs on. <LessonLink id="B1.3" /> covers what Claude can see and touch, and the permission prompts that keep you in control. Then <LessonLink id="B1.4" /> gets it installed so you can run your own first loop.
+The rest of this module fills in the picture before you install anything. <LessonLink id="B1.2" /> places Claude Code (not a chatbot, not an editor) and tours the surfaces it runs on. <LessonLink id="B1.3" /> covers what Claude can see and touch, and the permission prompts that keep you in control. Then <LessonLink id="B1.4" /> gets it installed so you can run your own first loop.

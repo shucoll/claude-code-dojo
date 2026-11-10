@@ -70,7 +70,7 @@ Claude Code chooses per request, and every request falls into one of two buckets
 
 Once you pass your plan's usage limit and start drawing on usage credits, you are billed for that usage, so Claude Code drops the main conversation to the cheaper five-minute lifetime. To keep the hour there, or to get it on an API key at all, set `promptCacheTtl` to `1h`. The second bucket takes `subagentPromptCacheTtl`. Both accept `5m` or `1h`, both have matching environment variables (`CLAUDE_CODE_PROMPT_CACHE_TTL` and `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`), and both require Claude Code v2.1.242 or later.
 
-The second setting is the one automation touches. A fan-out of workflow agents or a long-running subagent gets five minutes by default even on a subscription, and that is the bucket most likely to sit idle between turns. In a fan-out of same-prefix agents, Claude Code holds all but the first for up to five seconds so their opening requests can read the prefix the first agent cached, which is the runtime doing for you what the TTL setting does across a longer gap. <LessonLink id="A1.5" /> is where that bill lands.
+The second setting is the one automation touches. A fan-out of workflow agents or a long-running subagent gets five minutes by default even on a subscription, and that is the bucket most likely to sit idle between turns. In a fan-out of same-prefix agents, Claude Code holds all but the first for up to five seconds so their opening requests can read the prefix the first agent cached. <LessonLink id="A1.5" /> is where that bill lands.
 
 ## What keeps the cache and what rebuilds it
 
@@ -178,8 +178,4 @@ Then run the control. If you have an MCP server configured, disable it mid-sessi
 
 ## Where next
 
-Context was memory in <LessonLink id="B2.2" /> and a budget in <LessonLink id="I2.1" />. This lesson priced it.
-
 <LessonLink id="A4.2" /> takes the two settings that sit outside the layer table, model and effort, and turns them into an assignment strategy. <LessonLink id="A4.3" /> exports the numbers you just read into somewhere you can watch them across a team.
-
-<LessonLink id="A1.1" /> and <LessonLink id="A1.5" /> both read differently now: one parallelizes across directories, the other is where `subagentPromptCacheTtl` earns a line in a settings file.

@@ -18,17 +18,15 @@ docsSources: ["https://code.claude.com/docs/en/hooks"]
 
 The notification hook from <LessonLink id="I4.1" /> fired a side effect and got out of the way. It never looked at what Claude was doing, and it never changed the outcome. Most of the hooks worth writing do both. A hook that protects your migration files has to see which file is about to be edited, and then it has to actually stop the edit. A hook that skips the approval dialog for `npm test` has to read the command and answer the prompt on your behalf.
 
-For any of that, a hook needs two things the notification hook never used: a way to know what is about to happen, and a way to answer back. That is the contract this lesson is about. It is the heaviest mechanics in the module, and everything in <LessonLink id="I4.3">the recipes</LessonLink> is an application of it.
+For any of that, a hook needs two things the notification hook never used: a way to know what is about to happen, and a way to answer back. The hooks in <LessonLink id="I4.3">the recipes</LessonLink> apply this same input and output contract.
 
 ## The concept
 
-Think of a decision hook as a short exchange, not a trigger. When the event fires, Claude Code hands your command a JSON description of what is happening on **stdin**: which tool, what arguments, which session. Your command reads it, decides, and answers back on one of two channels.
+Think of a decision hook as a short exchange. When the event fires, Claude Code hands your command a JSON description of what is happening on **stdin**: which tool, what arguments, which session. Your command reads it, decides, and answers back on one of two channels.
 
 The first channel is the **exit code**, a blunt one-word reply. Exit `0` and the event proceeds; exit `2` and it is blocked. That is all an exit code can say, and for many hooks it is enough.
 
-The second channel is **structured JSON on stdout**, a full sentence instead of a word. A JSON reply can block with a reason Claude gets to read, approve a prompt, inject context into the conversation, or even rewrite the tool's arguments before it runs. When you need more than yes or no, you print JSON.
-
-So the mental model is: JSON in, describing the event; exit code or JSON out, carrying your decision. Simple hooks read nothing and just exit. Decision hooks read stdin and print JSON. The rest of this lesson is the shape of each side.
+The second channel is **structured JSON on stdout**. A JSON reply can block with a reason Claude gets to read, approve a prompt, inject context into the conversation, or even rewrite the tool's arguments before it runs. When you need more than yes or no, you print JSON.
 
 ## How it works
 
@@ -56,7 +54,7 @@ Each event then adds its own fields. A `PreToolUse` hook also gets what the tool
 }
 ```
 
-`PostToolUse` gets the same plus a `tool_response`, the result of the call, since by then the tool has already run. You read these fields with `jq`. `jq -r '.tool_input.file_path'` pulls the path a hook needs to check; the whole object arrives by reading stdin, so a command that decides must start by consuming it (`input=$(cat)`), not ignore it the way the notification hook did.
+`PostToolUse` gets the same plus a `tool_response`, the result of the call, since by then the tool has already run. You read these fields with `jq`. `jq -r '.tool_input.file_path'` pulls the path a hook needs to check; the whole object arrives by reading stdin, so a command that decides must start by consuming it (`input=$(cat)`).
 
 ### Output channel one: exit codes
 
@@ -64,7 +62,7 @@ If a hook just exits, the exit code is its whole answer:
 
 | Exit code | Meaning |
 |---|---|
-| `0` | Success. If the hook printed JSON on stdout, Claude Code parses it (below); plain text is logged. |
+| `0` | Success. If the hook printed JSON on stdout, Claude Code parses it (below); on most events it writes plain text to the debug log. |
 | `2` | Blocking error. Whatever the hook wrote to **stderr** is fed back to Claude, and the event is blocked. |
 | anything else | Non-blocking error. stderr is shown in the transcript as a hook error, and execution continues, unless the hook sets `"onFailure": "block"`. |
 
@@ -77,7 +75,7 @@ When exit `2` is too blunt, print a JSON object on stdout and exit `0`. There ar
 - `continue: false` stops Claude entirely, with `stopReason` as the message.
 - `systemMessage` shows the user a warning line.
 
-The real control lives under `hookSpecificOutput`, keyed by the event. For `PreToolUse`, this is the richest set in the system:
+Event-specific control lives under `hookSpecificOutput`, keyed by the event. For `PreToolUse`, a deny looks like this:
 
 ```json
 {
@@ -98,13 +96,13 @@ The real control lives under `hookSpecificOutput`, keyed by the event. For `PreT
 | `"ask"` | the user gets the normal permission dialog |
 | `"defer"` | the call is paused so a `claude -p` integration can collect input and resume it later; ignored in interactive sessions |
 
-`permissionDecisionReason` is the sentence Claude reads when you deny, which is the difference that matters: an exit-`2` block with an empty stderr tells Claude only that something stopped it, while a JSON deny with a reason tells it *why*, so it can adjust its approach instead of retrying blindly. Two more fields sharpen it further: `additionalContext` injects a note into the conversation alongside any decision except `defer`, and `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path), turning the hook from a gate into an editor. `updatedInput` replaces the entire input object rather than patching it, so echo back every field you are not changing alongside the ones you are, or the omitted fields are dropped. Claude Code then evaluates permission rules and a Bash command's auto-background eligibility against the input your hook returned, not the one Claude sent.
+`permissionDecisionReason` is the sentence Claude reads when you deny, so it can adjust its approach instead of retrying blindly. `additionalContext` injects a note into the conversation alongside any decision except `defer`. `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path). It replaces the entire input object rather than patching it, so echo back every field you are not changing alongside the ones you are, or the omitted fields are dropped. Claude Code then evaluates permission rules and a Bash command's auto-background eligibility against the input your hook returned, not the one Claude sent.
 
 Other events expose their own `hookSpecificOutput`. `PermissionRequest` (the dialog itself) takes a `decision.behavior` of `allow` or `deny`, which is how a hook answers a permission prompt for you. `SessionStart` takes `additionalContext` to load state. The pattern is constant: name the event in `hookEventName`, then set that event's decision fields.
 
 ### How multiple hooks on one event combine
 
-Configure several hooks on the same event and they all run, **in parallel**, not one after another. Identical handlers are deduplicated automatically. Then their answers are merged by two rules:
+Configure several hooks on the same event and they all run in parallel. Identical handlers are deduplicated automatically. Then their answers are merged by two rules:
 
 - **Context accumulates.** Every hook's `additionalContext` is collected and Claude sees all of it.
 - **The most restrictive decision wins.** If one hook says `allow` and another says `deny`, the call is denied. A `deny`, or any exit `2`, cannot be overridden by another hook voting `allow`.
@@ -113,11 +111,9 @@ Because they run concurrently, do not write two hooks on one event where one dep
 
 ## Walkthrough
 
-Two worked examples, the two things decision hooks are for: stopping something that should never happen, and waving through something that always should.
-
 ### Example one: block edits to protected files
 
-The rule "never modify the migrations" is the case no `CLAUDE.md` instruction can guarantee. As a `PreToolUse` hook it becomes machinery. Save this as `.claude/hooks/protect-files.sh`:
+The rule "never modify the migrations" is the case no `CLAUDE.md` instruction can guarantee. A `PreToolUse` hook checks every edit before it runs, whether or not Claude follows the instruction. Save this as `.claude/hooks/protect-files.sh`:
 
 ```bash
 #!/bin/bash
@@ -225,17 +221,17 @@ Register it on `PermissionRequest`, with an `if` clause so it is only consulted 
 
 - **You want every prompt to start with the current branch and open PR.** A `UserPromptSubmit` hook that prints those as `additionalContext`. The turn begins already knowing the state you would otherwise have to paste.
 
-- **You want a tool call to always carry a flag.** A `PreToolUse` hook that returns `permissionDecision: "allow"` with `updatedInput` carrying the whole `tool_input` back, command included, with `--dry-run` appended. The hook is an editor here, not a gate.
+- **You want a tool call to always carry a flag.** A `PreToolUse` hook that returns `permissionDecision: "allow"` with `updatedInput` carrying the whole `tool_input` back, command included, with `--dry-run` appended.
 
-- **You want "done" to require passing tests.** A `Stop` hook that runs the suite and, on failure, blocks (exit `2` with the failures on stderr, or a JSON `decision: "block"`). Claude cannot end the turn until it is green. This is armed in full in <LessonLink id="I4.3" />.
+- **You want "done" to require passing tests.** A `Stop` hook that runs the suite and, on failure, blocks (exit `2` with the failures on stderr, or a JSON `decision: "block"`). Claude cannot end the turn until it is green. <LessonLink id="I8.4" /> builds this hook in full.
 
-- **You want two independent checks on every edit.** Two `PreToolUse` hooks on `Edit|Write`, one for protected paths and one for secrets. They run in parallel, and if either denies, the edit is blocked. No coordination needed, because most-restrictive-wins does it for you.
+- **You want two independent checks on every edit.** Two `PreToolUse` hooks on `Edit|Write`, one for protected paths and one for secrets. They run in parallel, and if either denies, the edit is blocked.
 
-- **Near miss: you want a hook to improve a weak commit message.** Rewriting prose for quality is judgment, not a decision a script can compute from `tool_input`. `updatedInput` is for mechanical rewrites (a flag, a path), not for asking "is this good." That job wants a <LessonLink id="I4.4">prompt hook</LessonLink> or a skill.
+- **Near miss: you want a hook to improve a weak commit message.** Whether a message is good is a judgment call a script cannot compute from `tool_input`, and `updatedInput` is for mechanical rewrites (a flag, a path). That job wants a <LessonLink id="I4.4">prompt hook</LessonLink> or a skill.
 
 ## When to use / when not to use
 
-Use the **exit code** when the answer is a plain allow or block: a quick gate, a fire-and-exit side effect. On `PreToolUse` and `Stop` an exit-`2` block can still carry one line of reason in stderr. Use **structured JSON** the moment you need more than yes or no: an approval on a `PermissionRequest`, an `ask`, context injected with `additionalContext`, or arguments rewritten with `updatedInput`. Reaching for JSON when an exit code would do is harmless but verbose; reaching for an exit code when you needed one of those is the actual mistake, because an exit code can only block.
+Use the exit code when the answer is a plain allow or block: a quick gate, a fire-and-exit side effect. Use structured JSON the moment you need more than yes or no: an approval on a `PermissionRequest`, an `ask`, context injected with `additionalContext`, or arguments rewritten with `updatedInput`. Reaching for JSON when an exit code would do is harmless but verbose; an exit code cannot express any of those, because it can only block.
 
 Do not use decision output for anything requiring judgment the script cannot compute. If deciding needs the model to read and weigh (is this refactor risky, is this message clear), a shell hook is the wrong shape and the escalation is <LessonLink id="I4.4" />.
 
@@ -278,7 +274,7 @@ The cost is the same as any hook: execution time on the event, and now the added
 
 ## Where next
 
-<LessonLink id="I4.3" /> is the cookbook that puts this contract to work: five production-tested hooks (auto-format, protect paths, re-inject context after compaction, notify, audit), each ready to paste in.
+<LessonLink id="I4.3" /> is the cookbook that puts this contract to work: five hooks (auto-format, protect paths, re-inject context after compaction, notify, audit), each ready to paste in.
 
 <LessonLink id="I4.4" /> is the escalation for the near-miss above: when the decision needs judgment a shell script cannot compute, a prompt hook or an agent hook makes the call, at a cost worth weighing.
 

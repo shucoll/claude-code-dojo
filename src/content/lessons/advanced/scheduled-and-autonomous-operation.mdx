@@ -184,7 +184,7 @@ Events arrive only while the session is open, so an always-on setup means a back
 
 ## The non-negotiables for unattended operation
 
-Autonomous Claude with broad permissions is the most dangerous misconfiguration in this level. Five controls, none of them optional once a run happens without you.
+Autonomous Claude with broad permissions is the most dangerous misconfiguration in this level. A run that happens without you needs all five of these controls.
 
 First, sandbox the run. OS-level isolation holds regardless of what the model chose to run, which no permission rule can promise, because a rule is evaluated from the command string and an allowed command can do more than its name suggests. <LessonLink id="A3.2" /> covers it, and it is why A3 comes before running anything unattended.
 
@@ -192,7 +192,7 @@ Second, narrow the permissions to the job: `--allowedTools` with specific prefix
 
 Third, leave nothing waiting for an answer. `--permission-prompts none` denies what would have prompted and tells Claude not to retry, so a job fails rather than hanging. Pair it with `--permission-mode auto` or `dontAsk`.
 
-Fourth, cap the spend. `--max-turns` bounds an agentic loop. A goal takes its bound from a clause in the condition. Routines have hourly run limits per account, and Code Review has a monthly spend cap in admin settings.
+Fourth, cap the spend. `--max-turns` bounds an agentic loop. Routines have hourly run limits per account, and Code Review has a monthly spend cap in admin settings.
 
 Fifth, review the output. Every mechanism here produces an artifact you read afterwards: a branch, a pull request, a run transcript, a comment. Keep the result reviewable rather than applied, which is why routines push to `claude/` branches instead of the default one.
 

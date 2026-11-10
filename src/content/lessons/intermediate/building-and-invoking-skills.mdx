@@ -26,9 +26,9 @@ A skill that fumbles any one of those is worse than the paste-it-in habit it rep
 
 Writing the body is the easy part. Building a skill is three more decisions layered on top of it:
 
-- **How it triggers.** The `description`, plus the ways you can invoke it by hand.
-- **What input it takes.** Arguments, and the placeholders that drop them into the body.
-- **What it is allowed to do.** Which tools it can use without stopping to ask, and who is allowed to set it running.
+- How it triggers: the `description`, plus the ways you can invoke it by hand.
+- What input it takes: arguments, and the placeholders that drop them into the body.
+- What it is allowed to do: which tools it can use without stopping to ask, and who is allowed to set it running.
 
 Bulk that does not belong in the body goes in **supporting files** beside `SKILL.md`, loaded only when the skill points Claude at them. We build a `conventional-commit` skill and add these one at a time.
 
@@ -107,7 +107,7 @@ Write one Conventional Commits message for the staged changes above.
 - If nothing is staged, say so instead of inventing a message.
 ```
 
-Three things are doing work here. The `` !`git diff --cached` `` and `` !`git log …` `` lines run before Claude sees the skill and paste their output in, so the message is written against your real staged tree, not a guess. `$0` is the optional scope you can pass. And `[reference.md](reference.md)` points at a supporting file we have not written yet.
+Three things are doing work here. The `` !`git diff --cached` `` and `` !`git log …` `` lines run before Claude sees the skill and paste their output in, so Claude writes the message against your real staged tree. `$0` is the optional scope you can pass. And `[reference.md](reference.md)` points at a supporting file we have not written yet.
 
 Create it now, `~/.claude/skills/conventional-commit/reference.md`:
 
@@ -127,7 +127,7 @@ Format: `type(scope): summary`. Summary is imperative and under 72 characters.
 Add a `!` after the type or scope for a breaking change.
 ```
 
-This file loads only when Claude follows the link, so the full type table costs nothing until a commit is actually being written. The folder now looks like this:
+The folder now looks like this:
 
 ```text
 conventional-commit/
@@ -168,7 +168,7 @@ disable-model-invocation: true
 ---
 ```
 
-`allowed-tools` pre-approves exactly those three `git` commands for the turn the skill runs, so it commits without prompting you. The grant is narrow on purpose. It lists the commands this skill needs and nothing else, which is least privilege from <LessonLink id="I1.2" /> applied to a procedure: a skill that only commits has no reason to be able to run `git push` or `rm`, so it is not granted them. The grant also clears the moment you send your next message, so it is a per-run approval, not a standing one.
+`allowed-tools` pre-approves exactly those three `git` commands for the turn the skill runs, so it commits without prompting you. The grant lists only the commands this skill needs, which is least privilege from <LessonLink id="I1.2" /> applied to a procedure: a skill that only commits has no reason to be able to run `git push` or `rm`, so it is not granted them. The grant also clears the moment you send your next message.
 
 `disable-model-invocation: true` takes away Claude's ability to start this skill. It commits, so you want the command to be the only trigger. As a side effect, its description drops out of the startup listing, since Claude no longer needs to match against a skill it cannot invoke.
 
@@ -187,7 +187,7 @@ Move text into a **supporting file** when it is reference material the skill con
 
 Reach for **`allowed-tools`** when a skill runs the same tools every time and the permission prompts are pure friction. Keep the list to what the skill needs. Reach for **`disable-model-invocation`** whenever the skill has side effects you want to time yourself.
 
-The cost to weigh: `SKILL.md` and any injected command output load every time the skill runs and stay in context for the session, so a long body is a recurring bill. Supporting files and scripts are the release valve, since they load or execute only when reached.
+The cost to weigh: `SKILL.md` and any injected command output load every time the skill runs and stay in context for the session, so a long body is a recurring bill. Supporting files and scripts load or execute only when reached, so they add to that bill only on the runs that need them.
 
 ## Pitfalls
 
@@ -218,11 +218,11 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 **Named arguments or positional?** Positional (`$0`, `$1`) is fine for one or two. Declare `arguments: [issue, branch]` in frontmatter when there are several and `$issue` reads clearer than `$0`. Both draw from the same typed arguments.
 
-**How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: they are executed, not read into context, so a bundled script's code never enters context, only the output it prints.
+**How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: Claude executes them, so a bundled script's code never enters context, only the output it prints.
 
-**Does `allowed-tools` restrict the skill to those tools?** No. It pre-approves them for the turn so you are not prompted; every other tool is still available and still governed by your normal <LessonLink id="I1.2">permission rules</LessonLink>. To remove a tool, deny it, do not rely on leaving it off the allow list.
+**Does `allowed-tools` restrict the skill to those tools?** No. It pre-approves them for the turn so you are not prompted; every other tool is still available and still governed by your normal <LessonLink id="I1.2">permission rules</LessonLink>. To remove a tool, use a deny rule or `disallowed-tools`.
 
-**What if I pass arguments to a skill that has no `$ARGUMENTS`?** Claude Code appends `ARGUMENTS: <what you typed>` to the end of the skill so Claude still sees the input. Placeholders are how you *place* it precisely; without them the input still arrives, just at the bottom.
+**What if I pass arguments to a skill that has no `$ARGUMENTS`?** Claude Code appends `ARGUMENTS: <what you typed>` to the end of the skill so Claude still sees the input. Add a placeholder when the input needs to land at a specific spot in the body.
 
 **Can I run more than one skill at once?** Yes. Typing `/write-tests /conventional-commit` at the start of a message loads both and passes any trailing text to each, up to six skills in all. Expansion stops at the first token that is not an inline user-invocable skill, and a skill that forks a subagent, such as `/code-review`, ends the run there too.
 
@@ -230,6 +230,6 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 <LessonLink id="I3.3" /> is the pattern-and-troubleshooting lesson: injecting live context well, running a heavy skill in a subagent to keep it off the main thread, and the clinic for descriptions that trigger too much or not at all.
 
-<LessonLink id="I3.4" /> settles the question this skill sat next to the whole time. A commit format could arguably live in `CLAUDE.md` or a slash command instead. That resolver says which belongs where.
+<LessonLink id="I3.4" /> settles a question this skill raises. A commit format could arguably live in `CLAUDE.md` or a slash command instead. That resolver says which belongs where.
 
 <LessonLink id="I1.2" /> is the full treatment of the permission model that `allowed-tools` is a local shortcut into.

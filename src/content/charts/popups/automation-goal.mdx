@@ -1,5 +1,5 @@
-Not a schedule. `/goal` sets a completion condition, and after every turn a small
-fast model reads the conversation and judges whether it holds.
+`/goal` sets a completion condition on the session you are already in, and after
+every turn a small fast model reads the conversation and judges whether it holds.
 
 **Next turn starts when:** the previous turn finishes and the evaluator says the
 condition is not yet met. The verdict's reason becomes guidance for the next

@@ -21,7 +21,7 @@ Everything PulseBoard runs so far starts because a person did something: typed a
 
 Build a scheduled job that updates PulseBoard's dependencies, runs the test suite, and opens a pull request only when the suite is green. Claude runs headless with `--bare` and `--permission-prompts none` inside Claude Code's Bash sandbox, on a fresh VM, with a hard cap on what one run can spend.
 
-The graded deliverable is the guardrail design: a section of `RUNBOOK.md` covering the sandbox tier, the permissions, what happens when a prompt would appear, the spend limit, failure behavior, output review, and the scheduling surface. It is merged before any job file exists, and the job you build afterwards is its proof.
+The graded deliverable is the guardrail design: a section of `RUNBOOK.md` covering the sandbox tier, the permissions, what happens when a prompt would appear, the spend limit, failure behavior, output review, and the scheduling surface. The job you build afterwards is its proof.
 
 **Environment:** your PulseBoard repository with the <LessonLink id="A7.2">A7.2</LessonLink> work merged, the GitHub CLI authenticated, and a Claude API key. Bare mode never reads subscription credentials, so a subscription token will not work for this job.
 
@@ -481,6 +481,6 @@ Each setting in the finished job traces to a line a reviewer approved, so a late
 
 Split any autonomous job so that judgment and publication never sit in the same place, and let a step the model cannot edit decide whether anything leaves the runner.
 
-When a job runs code it did not write, the threat arrives with the work itself. Decide where each secret sits by asking what that code can reach at every step.
+When a job runs code it did not write, such as an updated package's install scripts and the tests that load it, that code is the threat. Decide where each secret sits by asking what that code can reach at every step.
 
 Next milestone, <LessonLink id="A7.4" />: the org-level view. You write the managed settings and managed MCP policy a 20-developer organization would receive, and publish the PulseBoard plugin through a version-pinned marketplace.

@@ -5,17 +5,17 @@ title: "Context management under pressure"
 type: "milestone"
 order: 5
 estimatedMinutes: 20
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B5.4"]
 teaches: ["compact-boundary", "handoff-note"]
 references: ["B2.2", "B2.4", "B4.4"]
-docsSources: ["https://code.claude.com/docs/en/context-window"]
+docsSources: ["https://code.claude.com/docs/en/context-window", "https://code.claude.com/docs/en/best-practices"]
 ---
 
 # Context management under pressure
 
-Shelf can add, tag, and search. Two things are missing to make it a real app: you cannot edit or delete an item, and there is no usable page, just a placeholder. This milestone finishes both in one deliberately long session, and the length matters: a session big enough to fill the context window is where the habits from <LessonLink id="B2.2" /> stop being theory. Context is a budget, and here you practice spending it on purpose.
+Shelf can add, tag, and search. Two things are missing to make it a real app: you cannot edit or delete an item, and there is no usable page, just a placeholder. This milestone finishes both in one deliberately long session, because a session carrying a whole build's worth of history is where the habits from <LessonLink id="B2.2" /> stop being theory. Context is a budget, and here you practice spending it on purpose.
 
 ## Goal for this stage
 
@@ -49,7 +49,7 @@ Round out the API in app.py and db.py: PUT /items/<id> to edit an item's title o
 
 </WhenLang>
 
-As Claude reads files, runs tests, and shows diffs, the context fills. You will feel it: responses have more history to carry, and the session has been going a while. That is normal. What matters is that you notice it instead of being surprised by it.
+As Claude reads files, runs tests, and shows diffs, the context fills. You will feel it: responses have more history to carry, and the session has been going a while. That is normal.
 
 ### 2. Read your budget with `/context`
 
@@ -62,15 +62,15 @@ Partway through, check where you stand:
 It prints a live breakdown by category with suggestions, something like:
 
 ```text
-Context: 118k / 200k tokens (59%)
+Context: 118k / 1M tokens (12%)
   System prompt & tools    9k
   CLAUDE.md & memory       3k
   Files read              66k
   Conversation            40k
-  Free                    82k
+  Free                   882k
 ```
 
-This is the gauge <LessonLink id="B2.2" /> gave you the model for, now read for real. You are past halfway, most of it is files Claude read while building. Good to know before you start the next big piece.
+This is the gauge <LessonLink id="B2.2" /> gave you the model for, now read for real. There is plenty of room left, and most of what is used is files Claude read while building, which every new message carries along.
 
 ### 3. `/compact` at a boundary, not mid-thought
 
@@ -86,7 +86,7 @@ Compaction replaces the conversation with a structured summary. Your project-roo
 
 ### 4. Hand off before you `/clear`
 
-The frontend is a fresh, self-contained task, and it deserves a clean context rather than one carrying the whole API build. But `/clear` wipes the conversation entirely, and a summary is not always enough to restart from. So before you clear, capture the one paragraph worth keeping, the professional move from <LessonLink id="B4.4" />:
+The frontend is a fresh, self-contained task, and it deserves a clean context rather than one carrying the whole API build. But `/clear` empties the context entirely, and a summary is not always enough to restart from. So before you clear, capture the one paragraph worth keeping, the professional move from <LessonLink id="B4.4" />:
 
 ```prompt
 Before I clear: write a short HANDOFF.md describing where Shelf stands. Include the API endpoints and their shapes, how to run the server and the tests, and that the next task is wiring public/ to the API: list, add, tag-filter, search, edit, delete.
@@ -106,7 +106,7 @@ In the cleared session, point Claude at the note and start the frontend:
 Read HANDOFF.md and CLAUDE.md, then wire public/index.html and public/app.js to the API: list items, add one, filter by tag, search, and delete. Keep it plain HTML, CSS, and fetch, no framework.
 ```
 
-If the note was good, the cold session is productive from the first prompt, with none of the previous session's clutter weighing it down. That is the real test of a handoff note: a fresh context becomes useful immediately.
+If the note was good, the cold session is productive from the first prompt.
 
 ### 6. Finish and commit
 
@@ -114,22 +114,18 @@ With the page wired, open `http://localhost:3000` (or `:5000` on the Python trac
 
 ## The artifact
 
-Shelf is now a complete app: add, tag, search, edit, delete, and a working page you can use in a browser. And you produced it across a session long enough to fill the window without losing the thread, because you:
-
-- read `/context` instead of guessing,
-- compacted at a boundary you chose,
-- and handed off to a clean session that resumed from your note.
+Shelf is now a complete app: add, tag, search, edit, delete, and a working page you can use in a browser.
 
 **Done looks like:** the app works end to end in the browser, the full test suite is green, and the long session never derailed despite its length.
 
 ## Reasoning recap
 
-Context is a budget you spend, not an infinite resource, and the whole difference between a smooth long session and a frustrating one is whether you manage that budget or let it manage you. Three habits do it:
+Running out of context is rare, because compaction runs on its own, but a focused context gets better answers and costs less. Three habits keep it focused:
 
-1. **Read the gauge.** `/context` means you are never surprised by a full window.
-2. **Compact at a boundary.** Summaries made when the work is coherent are better than ones made mid-thought, and choosing the moment beats waiting for auto-compaction to choose it for you.
-3. **Hand off before you clear.** A note that captures the state of play turns "I have to start over" into "I start fresh with everything that mattered." The handoff note is what makes a reset cost nothing.
+1. `/context` shows what the session is carrying and what takes the most room.
+2. Compacting at a boundary makes the summary while the work is coherent, and choosing the moment beats waiting for auto-compaction to choose it for you.
+3. Handing off before you clear puts the state of play in a note, so the cleared session starts with everything that mattered from the old one.
 
-Auto-compaction is the safety net, not the plan. Professionals do not wait for the window to fill; they spend it deliberately and reset on their own terms. And knowing *which* reset to reach for, compact to continue lighter or clear to start clean, is the judgment from <LessonLink id="B2.4" />, now exercised under real pressure.
+Knowing *which* reset to reach for, compact to continue lighter or clear to start clean, is the judgment from <LessonLink id="B2.4" />, now exercised under real pressure.
 
-Next milestone, <LessonLink id="B5.6" />: the app is done, so the last step is shipping it. Claude writes the README from the actual code, you tidy the commit history into a story, and you take the final read-through, because shipping means owning it.
+Next milestone, <LessonLink id="B5.6" />: the app is done, so the last step is shipping it. Claude writes the README from the actual code, you tidy the commit history into a story, and you take the final read-through.
