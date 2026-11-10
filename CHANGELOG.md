@@ -4,6 +4,22 @@ Notable changes to Claude Code Dojo, newest first. Entries are grouped as
 **Added**, **Changed**, **Fixed**, and **Lessons** (freshness refreshes and
 content revisions).
 
+## 2026-11-09
+
+### Lessons
+
+- Refreshed against current Claude Code documentation:
+  - Beginner: Install and authenticate; Permission modes and plan mode.
+  - Intermediate: Prompt-based and agent-based hooks; MCP in practice (and its
+    costs); Delegation patterns; Plugins and marketplaces; Agent teams:
+    preview; Package it.
+  - Advanced: Agent view and dispatch; Cross-session messaging; Agent teams
+    (deep dive); Dynamic workflows; Claude Code in CI; Automated code review,
+    layered; Scheduled and autonomous operation; Org-scale controls; Data
+    handling; Model strategy and effort; Plugin development; Marketplaces and
+    distribution; Building a custom agent; Deploying agents safely; Parallel
+    sprint with an agent team; CI integration; Governance pack; SDK capstone.
+
 ## 1.0.0 (2026-09-27)
 
 ### Added

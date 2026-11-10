@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 18
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A4.1"]
 teaches: ["model-selection", "effort-levels", "hybrid-model-config", "fast-mode", "org-model-restrictions"]
 references: ["B1.2", "I6.2", "A1.4", "A1.5", "A3.3"]
@@ -17,7 +17,7 @@ docsSources: ["https://code.claude.com/docs/en/model-config", "https://code.clau
 
 ## The problem
 
-<LessonLink id="B1.2" /> named models as something that exists and can be switched, then deferred the decision. Since then you have run whatever your account defaults to, at whatever effort that model defaults to, which is a reasonable place to start and an expensive place to stay. A six-teammate agent team on Opus, a `-p` run in CI on the strongest model available, or a batch of mechanical refactors at `max` effort each cost several times what the same work costs when it is assigned deliberately.
+<LessonLink id="B1.2" /> named models as something that exists and can be switched, then deferred the decision. Since then you have run whatever your account defaults to, at whatever effort that model defaults to. That works as a starting point, but it overpays for any work a cheaper model or a lower effort would handle. A six-teammate agent team on Opus, a `-p` run in CI on the strongest model available, or a batch of mechanical refactors at `max` effort each cost several times what the same work costs when it is assigned deliberately.
 
 Three dials control this. They interact, and two of them are cache events.
 
@@ -36,7 +36,7 @@ You rarely type a model ID. Claude Code resolves a small set of aliases, and eac
 | Alias | Resolves to |
 |---|---|
 | `default` | Clears your overrides and returns to the account's runtime default |
-| `best` | Fable where available, otherwise Opus |
+| `best` | The same model as `opus` |
 | `fable` | The latest Fable model, for the longest and hardest tasks |
 | `opus` | The latest Opus, for complex reasoning |
 | `sonnet` | The latest Sonnet, for daily work |
@@ -46,7 +46,7 @@ You rarely type a model ID. Claude Code resolves a small set of aliases, and eac
 
 `opusplan` is the one alias that encodes a strategy. It gives the expensive model the part of the work where judgment pays, reading the codebase and proposing an approach, and the cheaper model the part where following an agreed plan is most of the job. The cost is that each entry into and exit from plan mode is a model switch, so a session that toggles plan mode repeatedly rebuilds its cache every time. `ANTHROPIC_DEFAULT_OPUS_MODEL` and `ANTHROPIC_DEFAULT_SONNET_MODEL` control which models each phase resolves to.
 
-The `[1m]` suffix mostly concerns older models. Fable 5.1, Fable 5, Sonnet 5, and Opus 4.7 and later carry a 1M window natively on the Anthropic API. The explicit variants exist for the rest: `opus[1m]` on Opus 4.6 is included on Max, Team, and Enterprise and draws usage credits on Pro, while `sonnet[1m]` on Sonnet 4.6 draws usage credits on every plan. `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` caps a session at 200K.
+The `[1m]` suffix mostly concerns older models. The Fable models, Sonnet 5 and later, Haiku 5.5, and Opus 4.7 and later carry a 1M window natively. The explicit variants exist for the rest: `opus[1m]` on Opus 4.6 is included on Max, Ultra, Team, and Enterprise and draws usage credits on Pro, while `sonnet[1m]` on Sonnet 4.6 draws usage credits on every plan. `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` caps a session at 200K.
 
 ### Effort
 
@@ -54,36 +54,36 @@ Effort controls adaptive reasoning: the model decides whether and how much to th
 
 | Model | Levels |
 |---|---|
-| Fable 5.1, Fable 5, Opus 5.5, Opus 5, Sonnet 5, Opus 4.8, Opus 4.7 | `low`, `medium`, `high`, `xhigh`, `max` |
+| Fable models, Opus 5.5, Sonnet 5.5, Haiku 5.5, Opus 5, Sonnet 5, Opus 4.8, Opus 4.7 | `low`, `medium`, `high`, `xhigh`, `max` |
 | Opus 4.6, Sonnet 4.6 | `low`, `medium`, `high`, `max` |
 
 Setting a level the active model lacks falls back to the highest supported level at or below it, so `xhigh` runs as `high` on Opus 4.6.
 
-The defaults are uneven. Most models start at `high`, Opus 5.5 starts at `medium`, and Opus 4.7 starts at `xhigh`. `max` applies to the current session only unless you set it through `CLAUDE_CODE_EFFORT_LEVEL`. The scale is calibrated per model, so the same level name represents a different amount of reasoning on two different models.
+The defaults are uneven. Most models start at `high`, Fable 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 start at `medium`, and Opus 4.7 starts at `xhigh`. `max` applies to the current session only unless you set it through `CLAUDE_CODE_EFFORT_LEVEL`. The scale is calibrated per model, so the same level name represents a different amount of reasoning on two different models.
 
-`ultracode` appears in the same `/effort` menu and belongs to Claude Code rather than to the model. It sends `xhigh` to the model and additionally has Claude orchestrate a dynamic workflow for each substantive task, which makes it a cross-link to <LessonLink id="A1.5" /> rather than another notch on the slider. Turn it on with `/effort ultracode`, `claude --effort ultracode` on v2.1.203 or later, the `ultracode` settings key, or the effort slider in the `/model` picker. The `effortLevel` setting and `CLAUDE_CODE_EFFORT_LEVEL` do not accept it, and an environment variable holding any level other than `xhigh` leaves the workflow orchestration inactive.
+`ultracode` appears in the same `/effort` menu and belongs to Claude Code rather than to the model. It has Claude orchestrate a dynamic workflow for each substantive task, the mechanism <LessonLink id="A1.5" /> covers, at whatever effort level the session runs at. Turn it on with `/effort ultracode`, the Ultracode toggle in the `/effort` slider, the `ultracode` settings key, or `claude --effort ultracode` on v2.1.203 or later, which also sets effort to `xhigh`. The `effortLevel` setting and `CLAUDE_CODE_EFFORT_LEVEL` do not accept it.
 
-`ultrathink` is the per-turn version. Include the word anywhere in a prompt and Claude Code adds an in-context instruction for that turn, leaving the session's effort setting alone and the level sent to the API unchanged.
+`ultrathink` is the per-turn version. Include the word anywhere in a prompt and Claude Code adds an in-context instruction for that turn, leaving the session's effort setting alone. Typed in the terminal on v2.1.311 or later, it can also raise that turn to `xhigh`, and the word shows in rainbow colors when it does.
 
 ```prompt
 ultrathink about why the retry loop deadlocks under concurrent writes
 ```
 
-Other phrasings, including "think hard" and "think more", pass through as ordinary prompt text. Extended thinking toggles with Option+T on macOS or Alt+T elsewhere, and `alwaysThinkingEnabled` sets it in a settings file. Opus 5.5 and the Fable models use adaptive reasoning and cannot have thinking turned off at all.
+Other phrasings, including "think hard" and "think more", pass through as ordinary prompt text. Extended thinking toggles with Option+T on macOS or Alt+T elsewhere, and `alwaysThinkingEnabled` sets it in a settings file. Opus 5.5, Sonnet 5.5, Haiku 5.5, and the Fable models use adaptive reasoning and cannot have thinking turned off at all.
 
 ### Fast mode
 
-Fast mode runs Claude Opus through a different API configuration, up to 2.5x faster at a higher price per token, with the same quality and capabilities. It is supported on Opus 5.5, Opus 5, and Opus 4.8 and is unavailable on every other model, so turning it on while running something else also switches your model to Opus.
+Fast mode runs a supported model through a different API configuration, up to 2.5x faster at a higher price per token, with the same quality and capabilities. It is supported on Fable 5.2, Opus 5.5, and Opus 5, and on Opus 4.8 until November 30, 2026, and is unavailable on every other model, so turning it on while running something else also switches your model to Opus.
 
 ```prompt
 /fast
 ```
 
-Its pricing is flat across the full 1M context window and sits above standard Opus rates; the [fast mode page](https://code.claude.com/docs/en/fast-mode) carries the current per-model figures. Fast mode is a research preview, so both pricing and availability can change.
+Its pricing is flat across the full 1M context window and sits above standard rates; the [fast mode page](https://code.claude.com/docs/en/fast-mode) carries the current per-model figures. Fast mode on Opus 5 and Opus 4.8 is still a research preview, so pricing and availability there can change.
 
 Three constraints decide whether it is available at all. It runs only through the Anthropic Console API or a Claude subscription, which rules out Amazon Bedrock, Google Cloud's Agent Platform, Microsoft Foundry, and Claude Platform on AWS. On a subscription plan it bills from usage credits, which have to be turned on, and it draws from them even while your plan has included usage remaining. Team and Enterprise organizations need an Owner to enable it before anyone can use it.
 
-All supported Opus models share one fast mode rate limit pool. On hitting it, Claude Code falls back to standard speed, greys the `↯` icon, and re-enables fast mode when the cooldown expires. Running out of usage credits mid-session is handled the same way with no cooldown, by retrying each rejected request at standard speed.
+Fast mode has its own rate limits, separate from standard speed. On hitting one, Claude Code falls back to standard speed, greys the `↯` icon, and re-enables fast mode when the cooldown expires. Running out of usage credits mid-session is handled the same way with no cooldown, by retrying each rejected request at standard speed.
 
 ### Where each setting is read from
 
@@ -97,13 +97,13 @@ Model resolves in this order, with the first match winning:
 
 In the `/model` picker, `Enter` switches and saves the choice as your default and `s` switches for this session only. The effort slider takes the same two keys.
 
-Effort resolves on its own chain, with `ultracode` off:
+Effort resolves on its own chain:
 
 1. An explicit choice: `CLAUDE_CODE_EFFORT_LEVEL`, `--effort` at launch, or `/effort` in the session
 2. Your settings: the level saved for that model under `modelSettings`, or a top-level `effortLevel`
 3. The model's own default
 
-One wrinkle in that chain catches people. Claude Code saves effort per model under `modelSettings`, and a top-level `effortLevel` in your user settings file is the older form that `/effort` wrote before per-model levels existed. It keeps applying where it always applied, on Opus 5, Fable 5.1, and earlier models, while Opus 5.5 and anything released after it start at their own default until you choose a level for them. A top-level `effortLevel` in project, local, or managed settings, or passed with `--settings`, applies to every model.
+Claude Code saves effort per model under `modelSettings`, and a top-level `effortLevel` in your user settings file is the older form that `/effort` wrote before per-model levels existed. It keeps applying where it always applied, on Opus 5, Fable 5.1, and earlier models, while Opus 5.5 and anything released after it start at their own default until you choose a level for them. A top-level `effortLevel` in project, local, or managed settings, or passed with `--settings`, applies to every model.
 
 ### Subagents and teammates
 
@@ -115,29 +115,29 @@ This is where <LessonLink id="I6.2" /> and <LessonLink id="A1.4" /> get their ec
 
 `fallbackModel`, set in settings or with `--fallback-model sonnet,haiku`, is an availability chain. When the primary model is overloaded or unavailable, Claude Code tries each entry in order, for one turn.
 
-Automatic model fallback is content-based. On Fable 5.1, Fable 5, and Opus 5.5, a request flagged for biology re-runs on Opus 5 and one flagged for cybersecurity re-runs on Opus 4.8. On Opus 5, a cybersecurity flag re-runs on Opus 4.8 while a biology flag is refused with no fallback. The session continues on whichever model answered, which makes this a model switch, and so a cache rebuild you did not choose. Turn it off with `switchModelsOnFlag: false` or in `/config`.
+Automatic model fallback is content-based. On the Fable models and Opus 5.5, a request flagged for biology re-runs on Opus 5 and one flagged for cybersecurity re-runs on Opus 4.8. On Opus 5, a cybersecurity flag re-runs on Opus 4.8 while a biology flag is refused with no fallback, and Sonnet 5.5 works the same way with Sonnet 5 as its cybersecurity fallback. The session continues on whichever model answered, which makes this a model switch, and so a cache rebuild you did not choose. Turn it off with `switchModelsOnFlag: false` or in `/config`.
 
 ## A model for each kind of work
 
 | The work | Assign | Why |
 |---|---|---|
-| Architecture, a hard bug, an unfamiliar codebase | `opus` or `best` | The judgment is the expensive part, and it is the part you are buying |
+| Architecture, a hard bug, an unfamiliar codebase | `opus` or `best` | The outcome depends on judgment, which is what the stronger model adds |
 | A long autonomous run nobody is watching | `fable` | Built for the longest and hardest tasks, where a wrong turn costs more than the rate |
 | Daily feature work, review, refactors with a spec | `sonnet` | Handles most coding work at a fraction of the Opus rate |
-| A plan-then-execute session | `opusplan` | Opus prices the planning, Sonnet prices the typing |
-| Mechanical edits, log reading, format conversion | `haiku` | No judgment to buy |
+| A plan-then-execute session | `opusplan` | Opus runs the planning turns and Sonnet runs the execution |
+| Mechanical edits, log reading, format conversion | `haiku` | The work needs little judgment, so the cheapest model handles it |
 | Subagents that summarize verbose output | `haiku`, through `CLAUDE_CODE_SUBAGENT_MODEL` | One assignment covers every subagent that has no opinion of its own |
 | Agent team teammates | `sonnet` | Balances capability against a cost multiplied by team size |
 | CI and `-p` automation | `sonnet`, or `haiku` for narrow checks | Nobody is waiting on latency, and the runs repeat |
-| Live debugging where latency hurts | Opus with `/fast` | The one case where paying more per token buys back your attention |
+| Live debugging where latency hurts | Opus with `/fast` | Lower latency is worth a higher per-token price when you are waiting on each answer |
 
 Effort is the second choice, made per model:
 
 | Level | Reach for it when |
 |---|---|
 | `low` | Work is short, scoped, latency-sensitive, and not intelligence-sensitive |
-| `medium` | Cost matters and the work can trade away some intelligence. The default on Opus 5.5 |
-| `high` | You want the ordinary balance. The default everywhere except Opus 5.5 and Opus 4.7 |
+| `medium` | Cost matters and the work can trade away some intelligence. The default on Fable 5.2, Opus 5.5, Sonnet 5.5, and Haiku 5.5 |
+| `high` | You want the ordinary balance. The default everywhere except the `medium` models above and Opus 4.7 |
 | `xhigh` | Deeper reasoning is worth the token spend. The default on Opus 4.7 |
 | `max` | A demanding one-off, accepting diminishing returns and a tendency to overthink |
 | `ultracode` | A substantive task you want planned as a dynamic workflow |
@@ -151,7 +151,7 @@ One settings file assigns all three dials for every session you start.
   "model": "sonnet",
   "modelSettings": {
     "claude-opus-5-5": { "effortLevel": "high" },
-    "claude-sonnet-5": { "effortLevel": "medium" }
+    "claude-sonnet-5-5": { "effortLevel": "medium" }
   },
   "fallbackModel": ["claude-sonnet-5", "claude-haiku-4-5"],
   "env": {
@@ -160,7 +160,7 @@ One settings file assigns all three dials for every session you start.
 }
 ```
 
-Four decisions are encoded there. Daily work runs on Sonnet. When you do reach for Opus deliberately it runs at `high` instead of its `medium` default, because the reason you reached for it was the reasoning. Every subagent that expresses no preference of its own drops to Haiku, without editing a single subagent definition. And when Sonnet is overloaded, the turn retries on Sonnet and then Haiku rather than failing.
+Four decisions are encoded there. Daily work runs on Sonnet. When you do reach for Opus deliberately it runs at `high` instead of its `medium` default, because the reason you reached for it was the reasoning. Every subagent that expresses no preference of its own, apart from the built-in Explore and Plan, drops to Haiku, without editing a single subagent definition. And when Sonnet is overloaded, the turn retries on Sonnet and then Haiku rather than failing.
 
 Per-session overrides sit on top. To take one session to Opus without changing your saved default, open the picker and confirm with `s`:
 
@@ -182,13 +182,13 @@ Opus 5.5 with max effort
 
 ## When to change a dial mid-session
 
-Every dial here is cheapest to set before the conversation has any length to lose. A model switch reads the whole history with no cache hits. An effort change does the same on most models, with Opus 5.5 and Fable 5.1 exempt on an API key or a Claude subscription. The first fast mode turn in a conversation pays fast mode's uncached input price for everything already in context, once. <LessonLink id="A4.1" /> holds the mechanism and the full board.
+Every dial here is cheapest to set before the conversation has any length to lose. A model switch reads the whole history with no cache hits. An effort change does the same on most models, with Fable 5.1 and later, Opus 5.5, Sonnet 5.5, and Haiku 5.5 exempt on an API key or a Claude subscription. The first fast mode turn in a conversation pays fast mode's uncached input price for everything already in context, and each later toggle reads uncached whatever the other speed has not cached.
 
 Change a dial mid-session when the work has genuinely changed shape, such as hitting an architectural question in the middle of a mechanical refactor. Leave it alone when the motivation is comfort, and reach for a new session instead when the work has changed enough that the old context is dead weight anyway. Under `opusplan` the same warning applies to plan mode itself, since toggling it is the switch.
 
 ## What your organization can restrict
 
-`availableModels` in managed or policy settings restricts which models anyone can select, and it reaches every route: `/model`, `--model`, `ANTHROPIC_MODEL`, settings files, aliases, subagents, teammates, and skills. Entries match three ways: a family such as `sonnet`, a version prefix such as `claude-sonnet-4-5`, or a full model ID. A version prefix also matches later IDs that extend it, so `claude-fable-5` permits Fable 5 and Fable 5.1 while `claude-fable-5-1` permits only 5.1.
+`availableModels` in managed or policy settings restricts which models anyone can select, and it reaches every route: `/model`, `--model`, `ANTHROPIC_MODEL`, settings files, aliases, subagents, teammates, and skills. Entries match three ways: a family such as `sonnet`, a version prefix such as `claude-sonnet-4-5`, or a full model ID. A version prefix also matches later IDs that extend it, so `claude-fable-5` permits Fable 5, Fable 5.1, and Fable 5.2 while `claude-fable-5-1` permits only 5.1.
 
 On its own the allowlist leaves the Default option sitting on the account's runtime default, which may be the very model you meant to restrict. `enforceAvailableModels: true` alongside a non-empty list extends the allowlist to Default, which then resolves to the first allowed and available entry.
 
@@ -216,7 +216,7 @@ The subagent row is the one with consequences for automation. A blocked subagent
 
 Enterprise admins have two more controls. A default model can be set for the whole organization or per custom role, shown in the picker as Org default; it is a starting point that `--model`, `ANTHROPIC_MODEL`, managed settings, and your own user, project, and local settings all outrank. Override mode raises it above your settings files, so a model you save with `/model` applies for the current session and the organization default returns on the next launch, while the flag, the environment variable, and managed settings still win.
 
-Effort caps arrive through the same channel. Levels above a role's cap are absent from the `/effort` picker, and naming a higher one with `--effort` or `/effort` runs at the cap, warning in interactive sessions and plain-text `--print` runs while clamping silently under `json` or `stream-json`. On any plan and any provider, the `maxEffortLevel` managed setting caps effort client-side instead. Where both apply, the lower cap wins. <LessonLink id="A3.3" /> covers how any of this reaches a developer's machine.
+Effort caps arrive through the same channel. Levels above a role's cap are absent from the `/effort` picker, and naming a higher one with `--effort` or `/effort` runs at the cap, warning on stderr in plain-text `--print` runs and only in the debug log in interactive sessions or under `json` or `stream-json`. On any plan and any provider, the `maxEffortLevel` managed setting caps effort client-side instead. Where both apply, the lower cap wins. <LessonLink id="A3.3" /> covers how any of this reaches a developer's machine.
 
 ## Pitfalls
 
@@ -230,7 +230,7 @@ Effort caps arrive through the same channel. Levels above a role's cap are absen
 
 **Fast mode that refuses to turn on.** Several causes share two messages. Usage credits may be off, an Owner may not have enabled it, managed settings may set `fastMode: false` or `fastModePerSessionOptIn: true`, or `availableModels` may exclude the fast-mode Opus model. The one that looks like a bug is the availability check: Claude Code checks your organization's fast mode availability with a request straight to `api.anthropic.com`, and that check does not follow `ANTHROPIC_BASE_URL`, so a network routing inference through a gateway while blocking direct egress fails the check even though inference works. Allowlist direct egress, or set `CLAUDE_CODE_SKIP_FAST_MODE_NETWORK_ERRORS=1` where the connection is refused and `CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1` where it is intercepted.
 
-**`opusplan` in a session that lives in plan mode.** Repeated slow turns with no obvious cause, because each entry and exit is a model switch. Choose `opus` or `sonnet` outright for sessions that toggle often.
+**`opusplan` in a session that lives in plan mode.** You see repeated slow turns with no obvious cause, because each entry and exit is a model switch. Choose `opus` or `sonnet` outright for sessions that toggle often.
 
 ## Try It
 
@@ -241,7 +241,7 @@ Add a per-model effort level and a subagent default to `~/.claude/settings.json`
 ```json
 {
   "modelSettings": {
-    "claude-sonnet-5": { "effortLevel": "low" }
+    "claude-sonnet-5-5": { "effortLevel": "low" }
   },
   "env": {
     "CLAUDE_CODE_SUBAGENT_MODEL": "haiku"
@@ -255,7 +255,7 @@ Start a session on Sonnet:
 claude --model sonnet
 ```
 
-Three things should be true. The session header reads Sonnet with low effort. Opening `/effort` shows `low` selected, and any level your organization caps is absent from the picker entirely. Dispatching any subagent that names no model of its own runs it on Haiku.
+Three things should be true. The session header reads Sonnet with low effort. Opening `/effort` shows `low` selected, and any level your organization caps is absent from the picker entirely. Dispatching any subagent other than the built-in Explore and Plan that names no model of its own runs it on Haiku.
 
 Then clear the saved level for the active model and watch it return to the model's own default:
 
@@ -263,7 +263,7 @@ Then clear the saved level for the active model and watch it return to the model
 /effort auto
 ```
 
-For the stretch, connect this back to <LessonLink id="A4.1" />. Launch with `claude --model opusplan`, work for a few turns, enter and leave plan mode, then run `/usage` and read the `Prompt cache (main)` line. The miss count rises twice, once for each crossing, which is the cost of the hybrid alias stated in tokens.
+For the stretch, connect this back to <LessonLink id="A4.1" />. Launch with `claude --model opusplan`, work for a few turns, enter and leave plan mode, then run `/usage` and read the `Prompt cache (main)` line. The miss count rises twice, once for each crossing.
 
 ## FAQ
 
@@ -273,7 +273,7 @@ For the stretch, connect this back to <LessonLink id="A4.1" />. Launch with `cla
 
 **Can I try a model without changing my saved default?** Yes. In the `/model` picker press `s` instead of `Enter`, which applies the model to this session and leaves your default alone. The effort slider takes the same key, and `max` behaves that way already: it applies to the current session unless you set it through `CLAUDE_CODE_EFFORT_LEVEL`.
 
-**How do I offer a gateway-hosted model in the picker?** `ANTHROPIC_CUSTOM_MODEL_OPTION`, with `ANTHROPIC_CUSTOM_MODEL_OPTION_NAME` and `ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION`, adds a single entry. For a full lineup in an order you choose, set the `modelPicker` settings key with an `id` and `name` per entry.
+**How do I offer a gateway-hosted model in the picker?** `ANTHROPIC_CUSTOM_MODEL_OPTION`, with `ANTHROPIC_CUSTOM_MODEL_OPTION_NAME` and `ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION`, adds a single entry. For a full lineup in an order you choose, set the `modelPicker` settings key with a `model` and `label` per entry.
 
 **Does an effort level in skill frontmatter override everything else?** It overrides the session level while that skill or subagent runs, and it yields to `CLAUDE_CODE_EFFORT_LEVEL` and to any `maxEffortLevel` or organization cap. <LessonLink id="I3.1" /> covers the frontmatter field itself.
 
@@ -281,8 +281,6 @@ For the stretch, connect this back to <LessonLink id="A4.1" />. Launch with `cla
 
 ## Where next
 
-You now hold both dials <LessonLink id="A4.1" /> named as cache events, along with the reason each one earns its price.
-
-<LessonLink id="A4.3" /> is where the assignments stop being guesses. OpenTelemetry reports tokens and cost per model, per user, and per session, which is what separates a model strategy from a model preference.
+<LessonLink id="A4.3" /> is where the assignments stop being guesses. OpenTelemetry reports tokens and cost per model, per user, and per session, so you can check each assignment against what it actually costs.
 
 <LessonLink id="I6.2" /> and <LessonLink id="A1.4" /> both used cheap delegates before the strategy had a name; they read differently with `CLAUDE_CODE_SUBAGENT_MODEL` and teammate assignment in hand. <LessonLink id="A1.5" /> is where `ultracode` does its work, since dynamic workflows are the orchestration it turns on. <LessonLink id="A3.3" /> is the delivery mechanism for everything in the restrictions section above.

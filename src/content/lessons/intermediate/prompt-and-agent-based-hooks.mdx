@@ -6,7 +6,7 @@ type: "core"
 order: 4
 estimatedMinutes: 9
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I4.2"]
 references: ["I2.1", "I5.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
@@ -20,15 +20,15 @@ Every hook so far has been a shell command: it reads the event JSON, runs some l
 
 Some conditions are not computable that way. "Does this edit weaken test coverage?" "Is this commit message actually descriptive?" "Is this a safe place to write a file?" A regex cannot answer those, because the answer needs judgment. For those, a hook can hand the decision to a model instead of a script. That is the same `type` field you already set to `command`, pointing at one of two model-backed handlers.
 
-The rule this lesson lands on: **shell when you can, prompt when you need judgment, agent only when the judgment needs tools.** The rungs go up in capability and up in cost at the same rate, so the discipline is to stay on the lowest rung that answers the question.
+Pick the handler by what the decision needs: shell when you can, prompt when you need judgment, agent only when the judgment needs tools. The rungs go up in capability and up in cost at the same rate, so stay on the lowest rung that answers the question.
 
 ## Rung one: the shell hook
 
-The one you know. `type: "command"`, decides by running code, costs only execution time and no tokens. If the condition is expressible as a script, this is the answer, and the other two rungs are a mistake. A shell hook runs locally, returns instantly, and spends nothing on the model. Reach past it only when a script genuinely cannot make the call.
+`type: "command"` is the hook type from the earlier lessons in this module. It decides by running code and costs only execution time and no tokens. A shell hook runs locally and returns instantly. If the condition is expressible as a script, this is the answer.
 
 ## Rung two: the prompt hook
 
-When the decision needs a model to read and weigh, `type: "prompt"` sends your prompt plus the event JSON to a Claude model for a single-turn yes/no. No script, no tools, just a judgment.
+When the decision needs a model to read and weigh, `type: "prompt"` sends your prompt plus the event JSON to a Claude model for a single-turn yes/no.
 
 ```json
 {
@@ -81,7 +81,7 @@ When the judgment needs to look at more than the event JSON, when it has to read
 }
 ```
 
-It returns the same `{ "ok", "reason" }` shape and blocks per event the same way, except that it has no `continueOnBlock` field: a blocking agent hook always behaves as if that were set. The difference is that it can gather evidence first, which is what lets it answer questions a single prompt cannot. Agent hooks are **experimental**, so treat the config and capabilities as subject to change.
+It returns the same `{ "ok", "reason" }` shape and blocks per event the same way, except that it has no `continueOnBlock` field: a blocking agent hook always behaves as if that were set. The difference is that it can gather evidence first, which is what lets it answer questions a single prompt cannot. Agent hooks are experimental, so treat the config and capabilities as subject to change.
 
 ## The other two handlers
 
@@ -105,8 +105,9 @@ way it would read a shell hook's stdout:
 Environment variables interpolate into `headers` only when named in
 `allowedEnvVars`, and anything unlisted becomes an empty string. If
 `allowedHttpHookUrls` is set at any settings level, the URL has to match it. A
-non-2xx response is a non-blocking error: the action proceeds and the transcript
-shows a notice.
+non-2xx response is a non-blocking error by default: the action proceeds and the
+transcript shows a notice. Set `"onFailure": "block"` on the hook to block the
+action instead.
 
 `type: "mcp_tool"` calls a tool on an MCP server that is already connected, and
 parses the tool's text output the same way:
@@ -122,8 +123,9 @@ parses the tool's text output the same way:
 
 Values in `input` substitute from the event JSON by path, so
 `${tool_input.file_path}` is the file the tool event is about. The server has to
-be connected already, because a hook never triggers a connection or an OAuth
-flow. `Setup` always fires before the session's servers are available, so its
+be authenticated already, because a hook never starts an OAuth flow, and a
+server that is not connected when the hook calls it gives a non-blocking error.
+`Setup` always fires before the session's servers are available, so its
 `mcp_tool` hooks are skipped every time, and so are `SessionStart` hooks at
 launch: no tool is called, and the debug log records
 `mcp_tool hooks are not available for the 'SessionStart' hook event (no MCP client context)`.
@@ -133,12 +135,11 @@ servers get connected in the first place.
 
 Neither one spends tokens. A decision that needs real logic therefore does not
 have to climb to `prompt`: when the logic already lives in a service you run or a
-tool on a server you have connected, dispatching to it answers the question and
-stays on the zero-token tier.
+tool on a server you have connected, dispatching to it answers the question.
 
 ## The cost that decides the rung
 
-A shell hook spends nothing on the model. The moment you climb to a prompt or agent hook, every firing of that event spends tokens and latency, because a model runs each time. This is the rent from <LessonLink id="I2.1" />, now billed per event rather than per session.
+The moment you climb to a prompt or agent hook, every firing of that event spends tokens and latency, because a model runs each time. This is the rent from <LessonLink id="I2.1" />, now billed per event rather than per session.
 
 That matters most on hot events. A prompt hook on `PreToolUse` runs a model inference before potentially every tool call in a turn. An agent hook is worse: its latency scales with the number of tool calls it makes to verify the condition, so a single guard can add several seconds and a real bill to every edit. On a once-per-turn `Stop` hook the cost is bounded; on a per-tool-call `PreToolUse` hook it compounds.
 
@@ -152,7 +153,7 @@ So the choice is a cost choice as much as a capability one:
 | Prompt | one model judgment | tokens + latency, every fire | judgment needed, no tools |
 | Agent | a model with tools | tokens + latency, scaling with tool calls | judgment needs to inspect files |
 
-Climb only when the rung below cannot answer. A prompt hook doing string matching a shell hook could have done is pure waste; an agent hook doing what a prompt could is worse.
+A prompt hook doing string matching a shell hook could have done is pure waste; an agent hook doing what a prompt could is worse.
 
 ## Try It
 
@@ -161,12 +162,10 @@ Climb only when the rung below cannot answer. A prompt hook doing string matchin
 1. Add the prompt hook from rung two to `~/.claude/settings.json` (drop the `model` field to use the default fast model).
 2. Ask Claude to run a harmless command like `ls`. It should proceed, since the model returns `ok: true`.
 3. Ask it to run something the prompt would flag on security grounds. Watch it get blocked with the model's `reason`.
-4. Notice the latency: each command now waits on a model inference before running. That pause is the cost the table is about.
+4. Notice the latency: each command now waits on a model inference before running.
 
-**Success looks like:** a hook that blocks on a judgment no regex could express, and a felt sense of what it costs on every fire, the trade-off that decides whether to use one.
+**Success looks like:** a hook that blocks on a judgment no regex could express, and a felt sense of what it costs on every fire.
 
 ## Where next
 
 <LessonLink id="I4.5" /> closes the module: given a rule that keeps getting ignored, is the fix a better `CLAUDE.md` instruction, a skill, or a hook, and shell, prompt, or agent if it is a hook?
-
-<LessonLink id="I2.1" /> is the cost model this whole ladder rides on: every model-backed hook is context and latency spent per event, so the cheapest rung that works is the right one.

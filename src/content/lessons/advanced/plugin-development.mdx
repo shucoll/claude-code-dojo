@@ -6,10 +6,10 @@ type: "core"
 order: 1
 estimatedMinutes: 22
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["plugin-components", "plugin-manifest", "plugin-dev-loop", "plugin-evals"]
 references: ["I7.2", "I3.2", "I4.3", "I6.2", "A5.2"]
-docsSources: ["https://code.claude.com/docs/en/plugins", "https://code.claude.com/docs/en/plugins/create", "https://code.claude.com/docs/en/plugins/components", "https://code.claude.com/docs/en/plugins/manifest-reference", "https://code.claude.com/docs/en/plugin-evals"]
+docsSources: ["https://code.claude.com/docs/en/plugins/overview", "https://code.claude.com/docs/en/plugins/create", "https://code.claude.com/docs/en/plugins/components", "https://code.claude.com/docs/en/plugins/manifest-reference", "https://code.claude.com/docs/en/plugin-evals"]
 ---
 
 # Plugin development
@@ -22,7 +22,7 @@ A plugin someone else installs raises questions that one never did. A teammate r
 
 ## The concept
 
-A plugin is a directory whose subdirectory names are its API. Claude Code scans a fixed set of locations under the plugin root, loads whatever it finds there, and namespaces all of it under the plugin's name. A skill at `skills/review/SKILL.md` in a plugin named `my-plugin` becomes `/my-plugin:review` on every machine that installs it, with no registration step anywhere.
+A plugin is a directory. Claude Code scans a fixed set of locations under the plugin root, loads whatever it finds there, and namespaces all of it under the plugin's name. A skill at `skills/review/SKILL.md` in a plugin named `my-plugin` becomes `/my-plugin:review` on every machine that installs it, with no registration step anywhere.
 
 The manifest at `.claude-plugin/plugin.json` is how you depart from that: metadata, a component kept somewhere other than its default directory, a value you want to prompt the user for, or a component defined inline. A plugin whose files all sit in default locations can ship without a manifest at all.
 
@@ -66,7 +66,7 @@ Each component type has one default location. Add the directories you use and le
 | Executables | `bin/` | Binaries on the Bash tool's `PATH` while the plugin is enabled | n/a |
 | Settings | `settings.json` | Defaults applied while the plugin is enabled | `settings` |
 
-Four of these are worth a sentence each, because they have no standalone equivalent you would have met earlier.
+Four of these have no standalone equivalent you would have met earlier.
 
 `.lsp.json` maps a server name straight to its configuration, with no wrapper object, and each entry needs an `extensionToLanguage` map with at least one extension. Your plugin configures the connection and does not install the binary, so Claude Code starts `command` by name from the installer's `PATH`. When two enabled servers claim the same extension, the first one registered wins and the `/plugin` **Errors** tab warns about the other.
 
@@ -74,7 +74,7 @@ Four of these are worth a sentence each, because they have no standalone equival
 
 `monitors/monitors.json` holds an array of background shell commands. Whatever they print reaches Claude as notifications, which lets Claude react to a log line without being asked to watch the log. They start in interactive sessions only, never under `-p`, and they never receive user configuration values.
 
-`settings.json` at the plugin root accepts exactly two keys, `agent` and `subagentStatusLine`, and drops everything else. `agent` is the interesting one: it runs one of the plugin's own agents as the main thread, so the plugin ships a personality for the whole session rather than something Claude delegates to.
+`settings.json` at the plugin root accepts exactly two keys, `agent` and `subagentStatusLine`, and drops everything else. `agent` runs one of the plugin's own agents as the main thread, so that agent's system prompt, tool restrictions, and model apply to the whole session.
 
 Channels are the one component with no directory. A channel entry in the manifest binds to one of the plugin's own MCP servers and can prompt for its own configuration, which is how a plugin makes an outside system able to send messages into a session.
 
@@ -115,8 +115,6 @@ They are substituted in skill, command, and agent content, in hook and monitor c
 Quoting has one rule that bites. A hook `command` with no `args` runs through a shell, so wrap the expanded path in double quotes to keep it one word. A `command` with `args` passes each element through with no shell and needs no quoting.
 
 ## Walkthrough
-
-This builds a plugin that reviews release notes, loads it three different ways, breaks it deliberately to see where the error surfaces, and finishes by measuring whether it changes what Claude does.
 
 ### Scaffold a plugin that loads in every session
 
@@ -229,7 +227,7 @@ first-case  1.00  0.33  +0.67  6    $0.41
 Report: /Users/you/release-notes/evals/results/2026-09-10T17-02-11-482Z/report.html
 ```
 
-`Δ` is the column that justifies the plugin's existence. A case scoring 1.00 in both arms is a case Claude already handled, and the plugin is charging context for it.
+`Δ` is the `WITH` score minus the `W/OUT` score, which is what the plugin contributed. A case scoring 1.00 in both arms is a case Claude already handled, and the plugin is charging context for it.
 
 A case is two files you can read and edit. The prompt carries the run's limits in frontmatter:
 
@@ -270,7 +268,7 @@ claude plugin eval . \
 
 ## Use-case scenarios
 
-**You want one convention applied across twelve repositories.** Put the skill in a plugin and install the plugin in each, instead of copying `.claude/skills/` twelve times and watching the copies drift. The plugin is the thing that has a version.
+**You want one convention applied across twelve repositories.** Put the skill in a plugin and install the plugin in each, instead of copying `.claude/skills/` twelve times. Each copy can drift as people edit it, while the plugin has one version that every repository installs.
 
 **You want the language server your team relies on to arrive with the plugin.** Ship `.lsp.json` with the server's command and its extension map, and document the binary as a prerequisite. The plugin configures the connection and cannot install the tool.
 
@@ -293,9 +291,9 @@ The cost is paid by every installer on every turn. For each skill, agent, and co
 
 ## Pitfalls
 
-**Component directories inside `.claude-plugin/`.** The plugin loads, validation passes, and the components are missing. Only `plugin.json` belongs in that folder. Move `skills/`, `commands/`, `agents/`, and `hooks/` up to the plugin root and run `/reload-plugins`.
+**Component directories inside `.claude-plugin/`.** Move `skills/`, `commands/`, `agents/`, and `hooks/` up to the plugin root and run `/reload-plugins`.
 
-**A manifest key that silently replaces a populated folder.** Setting `commands`, `agents`, `outputStyles`, `workflows`, `experimental.themes`, or `experimental.monitors` stops the default directory being scanned. Look for `Default <folder>/ folder is ignored because the manifest sets "<key>"` in `claude plugin list`, and list the default folder among the paths to keep it.
+**A manifest key that silently replaces a populated folder.** Look for `Default <folder>/ folder is ignored because the manifest sets "<key>"` in `claude plugin list`, and list the default folder among the paths to keep it.
 
 **A hook matcher written against an MCP server name.** A tool from a server your plugin declares is named `mcp__plugin_<plugin>_<server>__<tool>`, and a matcher on the server name alone never fires. Write the full tool name. The same name is what permission rules need.
 
@@ -306,8 +304,6 @@ The cost is paid by every installer on every turn. For each skill, agent, and co
 **Expecting the `userConfig` dialog while developing.** It is part of installing through `/plugin` in a session. `--plugin-dir` does not show it and neither does `claude plugin install`. Run `/plugin configure <plugin-name>` with the plugin loaded, or pass `--config KEY=VALUE` from the shell.
 
 ## Try It
-
-Fifteen minutes, ending with a number that tells you whether your plugin is doing anything.
 
 Scaffold a plugin with `claude plugin init notes-helper --with skills`, then open the skill it wrote under `skills/` and give it a `description` that names a task you actually ask for, phrased the way you would phrase it.
 

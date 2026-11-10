@@ -6,11 +6,11 @@ type: "milestone"
 order: 2
 estimatedMinutes: 45
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-27"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A7.1"]
 teaches: ["ci-wiring", "layered-review-deployment", "review-tuning"]
 references: ["A2.2", "A2.3", "I8.4", "A7.3"]
-docsSources: ["https://code.claude.com/docs/en/github-actions", "https://code.claude.com/docs/en/code-review", "https://code.claude.com/docs/en/ultrareview", "https://code.claude.com/docs/en/security-guidance", "https://github.com/anthropics/claude-code/blob/main/plugins/code-review/commands/code-review.md"]
+docsSources: ["https://code.claude.com/docs/en/github-actions", "https://code.claude.com/docs/en/code-review", "https://code.claude.com/docs/en/ultrareview", "https://code.claude.com/docs/en/security-guidance", "https://github.com/anthropics/claude-plugins-official/blob/main/plugins/code-review/commands/code-review.md"]
 ---
 
 # CI integration
@@ -33,11 +33,11 @@ Choose the layer that reviews PulseBoard's pull requests before you install anyt
 
 | Layer | Runs on | Available on | Cost | Reads your review policy from |
 |---|---|---|---|---|
-| Code Review | every pull request, per the trigger you set | Team and Enterprise, without ZDR | $15 to $25 per review, billed as usage credits | `REVIEW.md` and `CLAUDE.md` |
-| Ultrareview | the pull requests you choose, when you run it | a claude.ai sign-in, without ZDR | $5 to $25 per review as usage credits, after three free runs on Pro and Max | nothing documented beyond the change itself |
+| Code Review | every pull request, per the trigger you set | Team and Enterprise, without ZDR | billed on token usage as usage credits, with no flat per-review price | `REVIEW.md` and `CLAUDE.md` |
+| Ultrareview | the pull requests you choose, when you run it | a claude.ai sign-in, without ZDR | $5 to $25 per review as usage credits, after three free runs on Pro, Max, and Ultra | nothing documented beyond the change itself |
 | The action running the `code-review` plugin | every pull request, per the workflow's triggers | every plan | GitHub Actions minutes plus tokens | `CLAUDE.md` files only |
 
-On Team or Enterprise, the real choice is between the first two rows: every pull request reviewed on a trigger, or a deeper, verified review on the pull requests you judge risky. Everywhere else, the third row is your pull request layer, and ultrareview can still sit on top of it as an escalation if you sign in with claude.ai.
+On Team or Enterprise, choose between the first two rows: every pull request reviewed on a trigger, or a deeper, verified review on the pull requests you judge risky. Everywhere else, the third row is your pull request layer, and ultrareview can still sit on top of it as an escalation if you sign in with claude.ai.
 
 Start `RUNBOOK.md` at the repository root. Later milestones add to it, and by the end of the module it is how someone else operates PulseBoard. Its first section records this decision:
 
@@ -53,7 +53,7 @@ Start `RUNBOOK.md` at the repository root. Later milestones add to it, and by th
 - Where its review policy lives, and what that policy cannot change:
 ```
 
-Fill in the first line now and the rest as you build. For the cost line, count last month's pull requests with `gh pr list --state merged --search "merged:>=YYYY-MM-DD" --limit 200 --json number --jq length`, using the date a month ago, and multiply by the per-review figure for your layer.
+Fill in the first line now and the rest as you build. For the cost line, count last month's pull requests with `gh pr list --state merged --search "merged:>=YYYY-MM-DD" --limit 200 --json number --jq length`, using the date a month ago, and multiply by the per-review figure for your layer; on Code Review, use the repository's **Average cost** column in the admin settings once a few reviews have run.
 
 ### 2. Connect the repository
 
@@ -179,7 +179,7 @@ Build the path you chose in step 1.
 
 #### Code Review
 
-An Owner of your Claude organization opens the Claude Code admin settings, finds the Code Review section, and runs **Setup**. Select the PulseBoard repository and set its Review Behavior to **Once after PR creation**. After every push multiplies the cost by the number of pushes, and a small team's pull requests rarely need more than one automatic pass: anyone with write access can comment `@claude review` for another. Then set a monthly spend cap for the Code Review service under the organization's usage settings, before the first bill decides it for you.
+An Owner of your Claude organization opens the Claude Code admin settings, finds the Code review section, and turns on **Allow code review**. Add the PulseBoard repository and set its **Review runs** to **Once after PR creation**. After every push multiplies the cost by the number of pushes, and a small team's pull requests rarely need more than one automatic pass: anyone with write access can comment `@claude review` for another. Then set a monthly spend cap for the Code Review service under the organization's usage settings.
 
 #### Ultrareview
 
@@ -225,8 +225,8 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
+          plugin_marketplaces: "https://github.com/anthropics/claude-plugins-official.git"
+          plugins: "code-review@claude-plugins-official"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
 ```
@@ -263,8 +263,8 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
-          plugins: "code-review@claude-code-plugins"
+          plugin_marketplaces: "https://github.com/anthropics/claude-plugins-official.git"
+          plugins: "code-review@claude-plugins-official"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
           claude_args: '--allowedTools "mcp__github_inline_comment__create_inline_comment"'
 ```
@@ -357,9 +357,9 @@ After the first review of a pull request, post Important findings only.
 
 </WhenLang>
 
-Test it on a real pull request. Local `/code-review` never reads `REVIEW.md`, so testing it there proves nothing either way.
+Code Review reads `REVIEW.md` from `main`, never from the pull request, and honors its severity, skip, and nit-cap rules only while `main` is protected, so add a branch protection rule to `main` after you push in step 6. Test it on a real pull request. Local `/code-review` never reads `REVIEW.md`, so testing it there proves nothing either way.
 
-On the action path, the plugin decides what reaches you. Its reviewers look for the root `CLAUDE.md` and any `CLAUDE.md` in a directory the pull request touches, flag only rule violations they can quote from those files, and post no style findings or nits at all ([the plugin's instructions](https://github.com/anthropics/claude-code/blob/main/plugins/code-review/commands/code-review.md)). Three consequences for PulseBoard:
+On the action path, the plugin decides what reaches you. Its reviewers look for the root `CLAUDE.md` and any `CLAUDE.md` in a directory the pull request touches, flag only rule violations they can quote from those files, and post no style findings or nits at all ([the plugin's instructions](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/code-review/commands/code-review.md)). Three consequences for PulseBoard:
 
 - Most of the priorities are already quotable. The root `CLAUDE.md` says every endpoint ships with a test, that data access goes through `data/`, and that the token comes from the environment.
 - The data-access rule in `.claude/rules/` is not in the files the plugin looks for, so anything only that rule says is invisible to the reviewer.
@@ -458,10 +458,10 @@ At the end of this stage you have:
 
 ## Reasoning recap
 
-Review layers compose when each one watches a moment the others cannot. Choosing a single layer is choosing which moments go unwatched, so the justification names the gap and the layer that covers it.
+Each review layer covers a different moment: the security-guidance plugin while Claude writes, Code Review or the action when a pull request opens, ultrareview on the pull requests you pick. The layer you chose leaves some of those moments unreviewed, so the justification names the gap and the layer that covers it.
 
 Before trusting a reviewer to enforce a rule, find out which files it reads.
 
-Moving Claude into CI moves your configuration with it. From here on, treat every hook and permission you wrote for your own sessions as CI behavior too, and give the runner whatever those hooks need to run.
+From here on, treat every hook and permission you wrote for your own sessions as CI behavior too.
 
 Next milestone, <LessonLink id="A7.3" />: a scheduled job that bumps dependencies and opens a pull request while nobody is watching, and the guardrail document that has to exist before it may run.

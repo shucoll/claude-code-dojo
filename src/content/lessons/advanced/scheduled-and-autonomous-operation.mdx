@@ -6,7 +6,7 @@ type: "core"
 order: 4
 estimatedMinutes: 20
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-19"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A2.1"]
 teaches: ["autonomy-spectrum", "scheduled-tasks", "routines", "unattended-guardrails"]
 references: ["B3.3", "I4.1", "A1.5", "A3.2"]
@@ -73,9 +73,9 @@ Underneath, `/loop` uses three tools you can also drive in plain language: `Cron
 in 45 minutes, check whether the integration tests passed
 ```
 
-Three behaviors to plan around. The scheduler adds deterministic **jitter**, so a recurring task fires up to 30 minutes late, or up to half the interval for sub-hourly tasks, and a one-shot on the hour or half hour fires up to 90 seconds early. The offset comes from the task id, so it is stable. Pick a minute like `3 9 * * *` over `0 9 * * *` when timing matters.
+Three behaviors to plan around. The scheduler adds deterministic **jitter**, so a recurring task fires up to 30 minutes late, or up to half the interval for sub-hourly tasks, and a one-shot on the hour or half hour fires up to 90 seconds early. The offset comes from the task id, so it is stable. Pick a minute like `3 9 * * *` over `0 9 * * *` when a one-shot's timing matters.
 
-Recurring tasks expire seven days after creation, firing one last time before deleting themselves. Treat that as a feature: it bounds how long a loop you forgot about can keep spending.
+Recurring tasks expire seven days after creation, firing one last time before deleting themselves, which bounds how long a loop you forgot about can keep spending.
 
 A fire that comes due while Claude is busy waits for the current turn to end, and missed intervals collapse: a task that skipped four of them fires a single time when Claude next goes idle.
 
@@ -83,13 +83,13 @@ Press `Esc` to stop a self-paced loop while it waits. Fixed-interval loops run u
 
 ### Desktop scheduled tasks, on your machine
 
-Created from the Desktop app's Code tab by choosing **Local** where a routine would choose **Cloud**. The schedule survives closing the session and restarting the machine, the minimum interval is one minute, and the run has what a local session has: your files, your MCP config files and connectors, and permission prompts you configure per task.
+Created from the **Scheduled** page in the Desktop app's Code tab by turning on **Only on this computer**, or by choosing **Local** where the app offers **Local** and **Cloud**. The schedule survives closing the session and restarting the machine, the minimum interval is one minute when you ask Claude to set the schedule and one hour in the forms, and the run has what a local session has: your files, your MCP config files and connectors, and permission prompts you configure per task.
 
 This is the row to pick when the work needs something that exists only on your disk.
 
 ### Cloud routines, on Anthropic's infrastructure
 
-A routine is a saved configuration: a prompt, one or more repositories, a cloud environment, and a set of connectors. Create one at `claude.ai/code/routines`, in the Desktop app, or from the CLI:
+A routine, called a cloud scheduled task in the docs, is a saved configuration: a prompt, one or more repositories, a cloud environment, and a set of connectors. Create one at `claude.ai/code/routines`, in the Desktop app, or from the CLI:
 
 ```prompt
 /schedule daily PR review at 9am
@@ -101,9 +101,9 @@ Three trigger types attach to one routine, in any combination:
 
 - **Schedule**: hourly, daily, weekdays, or weekly presets, or a custom cron set through `/schedule update`. The minimum interval is one hour and shorter expressions are rejected. A one-off timestamp fires once and then auto-disables.
 - **API**: a POST to the routine's `/fire` endpoint with a bearer token. An optional `text` field carries run-specific context such as an alert body.
-- **GitHub**: pull request and release events, with filters on author, title, base and head branch, labels, draft state, and merged state.
+- **GitHub**: pull request, release, and issue events, with pull request filters on author, title, base and head branch, labels, draft state, and merged state.
 
-Each run clones the repository fresh from its default branch, so a routine sees no local files and no uncommitted work, and pushes to `claude/`-prefixed branches. Runs are fully autonomous: there is no permission-mode picker, and every connector left attached can be used, writes included, without asking.
+Each run clones the repository fresh from its default branch, so a routine sees no local files and no uncommitted work, and pushes to `claude/`-prefixed branches. There is no permission-mode picker: each run starts in auto mode, so the classifier approves actions in your place, and every connector left attached can be used, writes included. A run still stops and waits for an answer on an ask rule or after repeated classifier blocks.
 
 Two facts about the fire payload matter for <LessonLink id="A3.1" />. The routine's saved prompt arrives as its assigned task, because it was stored ahead of time by an authorized session. The `text` you POST arrives wrapped in a `<routine-fire-payload>` block labeled as untrusted data, and the routine ignores it unless its own prompt says to act on it. Anyone holding the bearer token can send that text, which is why the wrapper exists.
 
@@ -178,7 +178,7 @@ claude --channels plugin:telegram@claude-plugins-official
 
 It is a research preview, and the flag does not appear in `claude --help`. Channels need Anthropic authentication through claude.ai or a Console API key and are unavailable on Bedrock, Agent Platform, and Foundry. Team and Enterprise organizations are blocked until an Owner sets `channelsEnabled`, and `allowedChannelPlugins` replaces the Anthropic-maintained plugin allowlist with your own. Being in `.mcp.json` grants nothing on its own: a server also has to be named in `--channels`.
 
-Every approved channel keeps a sender allowlist, bootstrapped by pairing. Anyone on that list can push messages, and if the channel declares permission relay, they can approve tool use in your session too, so the list is a list of people you trust with that authority.
+Every approved channel keeps a sender allowlist, bootstrapped by pairing. Anyone on that list can push messages, and if the channel declares permission relay, they can approve tool use in your session too, so add only senders you trust with that authority.
 
 Events arrive only while the session is open, so an always-on setup means a background process or a persistent terminal.
 
@@ -186,27 +186,27 @@ Events arrive only while the session is open, so an always-on setup means a back
 
 Autonomous Claude with broad permissions is the most dangerous misconfiguration in this level. Five controls, none of them optional once a run happens without you.
 
-**Sandbox it.** OS-level isolation holds regardless of what the model chose to run, which no permission rule can promise, because a rule is evaluated from the command string and an allowed command can do more than its name suggests. <LessonLink id="A3.2" /> covers it, and it is why A3 comes before running anything unattended.
+First, sandbox the run. OS-level isolation holds regardless of what the model chose to run, which no permission rule can promise, because a rule is evaluated from the command string and an allowed command can do more than its name suggests. <LessonLink id="A3.2" /> covers it, and it is why A3 comes before running anything unattended.
 
-**Narrow the permissions to the job.** `--allowedTools` with specific prefixes, as <LessonLink id="A2.1" /> taught, and `permissions.deny` in managed settings for anything that must never run, since deny is evaluated before the classifier and cannot be overridden by it or by stated intent. For a routine, the equivalents are the repositories you attach, the environment's network access, and removing every connector the run does not need.
+Second, narrow the permissions to the job: `--allowedTools` with specific prefixes, as <LessonLink id="A2.1" /> taught, and `permissions.deny` in managed settings for anything that must never run, since deny is evaluated before the classifier and cannot be overridden by it or by stated intent. For a routine, the equivalents are the repositories you attach, the environment's network access, and removing every connector the run does not need.
 
-**Leave nothing waiting for an answer.** `--permission-prompts none` denies what would have prompted and tells Claude not to retry, so a job fails rather than hanging. Pair it with `--permission-mode auto` or `dontAsk`.
+Third, leave nothing waiting for an answer. `--permission-prompts none` denies what would have prompted and tells Claude not to retry, so a job fails rather than hanging. Pair it with `--permission-mode auto` or `dontAsk`.
 
-**Cap the spend.** `--max-turns` bounds an agentic loop. A goal takes its bound from a clause in the condition. Routines have a daily run cap per account, and Code Review has a monthly spend cap in admin settings. The seven-day `/loop` expiry is this same idea built in.
+Fourth, cap the spend. `--max-turns` bounds an agentic loop. A goal takes its bound from a clause in the condition. Routines have hourly run limits per account, and Code Review has a monthly spend cap in admin settings.
 
-**Review the output.** Every mechanism here produces an artifact you read afterwards: a branch, a pull request, a run transcript, a comment. Keep the result reviewable rather than applied, which is why routines push to `claude/` branches instead of the default one.
+Fifth, review the output. Every mechanism here produces an artifact you read afterwards: a branch, a pull request, a run transcript, a comment. Keep the result reviewable rather than applied, which is why routines push to `claude/` branches instead of the default one.
 
 ## Pitfalls
 
-- **The loop stopped and you never noticed.** Recurring tasks expire seven days after creation, and a self-paced loop is not restored when you resume the session. Run `/loop` again after a resume, and recreate a long-lived recurring task before it expires, or move it to a routine or a desktop task.
+- **The loop stopped and you never noticed.** Either the seven-day expiry removed it, or you resumed the session, which does not restore a self-paced loop. Run `/loop` again after a resume, and recreate a long-lived recurring task before it expires, or move it to a routine or a desktop task.
 
-- **The 9am report arrives at 9:26.** Jitter offsets every recurring task by up to 30 minutes, derived from its id, so it is the same offset every day. Schedule `3 9 * * *` rather than `0 9 * * *` if a downstream system cares.
+- **The 9am report arrives at 9:26.** That is jitter, and the offset is the same every day. Moving the minute moves the run but keeps the delay, so if a downstream system cares, schedule early enough to absorb up to 30 minutes.
 
 - **The goal loops without progressing.** When Claude answers the evaluator several turns running with no tool use, Claude Code stops the loop, warns, and hands control back with the goal still set. The usual cause is a condition the transcript cannot demonstrate, such as one that needs a file read the evaluator never sees.
 
-- **The routine ignored the alert you POSTed.** Fire text arrives wrapped and labeled as untrusted data. The routine's saved prompt has to reference it explicitly, as in "investigate the alert described in the routine-fire-payload block", or the text sits there as inert context.
+- **The routine ignored the alert you POSTed.** The routine's saved prompt has to reference the fire text explicitly, as in "investigate the alert described in the routine-fire-payload block", or the text sits there as inert context.
 
-- **A green routine run did nothing.** Green means the session started and exited cleanly. Open the run and read the transcript: a blocked network request in a Trusted environment fails with `403` and `x-deny-reason: host_not_allowed`, and it shows up nowhere else.
+- **A green routine run did nothing.** Open the run and read the transcript: a blocked network request in a Trusted environment fails with `403` and `x-deny-reason: host_not_allowed`, and it shows up nowhere else.
 
 - **Auto mode blocks the same command every day.** Repeated denials for one destination mean the classifier lacks context about it. Add it to `autoMode.environment` rather than adding an allow rule per command, then run `claude auto-mode config` to confirm.
 
@@ -238,7 +238,7 @@ Yes. `claude -p "/goal CHANGELOG.md has an entry for every PR merged this week"`
 No, it composes with them. It approves tool calls within a turn and starts no turns of its own. A routine already runs autonomously without a mode picker, while a `/goal` run in Manual mode still stops at every prompt your settings do not cover.
 
 **What does a routine cost?**
-Routine runs draw down subscription usage like interactive sessions, plus a daily cap on how many runs can start per account. One-off runs do not count against that cap. With usage credits turned on, runs continue on metered overage past the cap.
+Routine runs draw down subscription usage like interactive sessions, plus hourly limits on how many runs can start, such as 100 scheduled runs per hour per account. One-off runs count against the same limit, and none of the hourly limits has overage. With usage credits turned on, runs continue on metered overage past your subscription usage limit.
 
 **How do I turn scheduling off entirely?**
 `CLAUDE_CODE_DISABLE_CRON=1` disables the scheduler, which removes the cron tools and `/loop` and stops already-scheduled tasks firing. Team and Enterprise Owners disable routines for everyone from the admin settings, which also hides `/schedule`.

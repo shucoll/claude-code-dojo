@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 12
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I6.2"]
 references: ["B2.5"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents", "https://code.claude.com/docs/en/commands"]
@@ -15,8 +15,6 @@ docsSources: ["https://code.claude.com/docs/en/sub-agents", "https://code.claude
 # Delegation patterns
 
 You can build subagents. Running them well is a separate skill: knowing when Claude will delegate without being asked, when to force it, whether to wait, how to run several at once, and how to talk to one that is already working.
-
-Seven patterns cover the operational layer.
 
 ## Automatic delegation
 
@@ -34,11 +32,9 @@ description: Expert code review specialist. Reviews changes for quality and secu
 
 The first names a role. The second names a trigger, and "use proactively" is a documented phrase for encouraging delegation. When an agent you built never fires, the description is the first thing to rewrite.
 
-Automatic delegation is a tendency rather than a guarantee. Claude weighs the request against the description and decides, so the same phrasing can delegate on Tuesday and not on Wednesday.
+Automatic delegation is a tendency rather than a guarantee. Claude weighs the request against the description and decides, so the same phrasing can delegate one time and not the next.
 
 ## Explicit invocation
-
-Three levels, escalating from a suggestion to a session-wide default.
 
 **Name it in your prompt.** Claude usually delegates, and still decides.
 
@@ -52,7 +48,7 @@ Use the test-runner subagent to fix the failing tests
 @"code-reviewer (agent)" look at the auth changes
 ```
 
-The mention controls which subagent runs, not what it is told. Your full message still goes to Claude, which writes the delegation prompt from what you asked. You can also type `@agent-code-reviewer` by hand; the typeahead will show file matches while you type, and the mention still resolves on submit.
+The mention controls which subagent runs. Your full message still goes to Claude, which writes the delegation prompt from what you asked. You can also type `@agent-code-reviewer` by hand; the typeahead will show file matches while you type, and the mention still resolves on submit.
 
 **Run the whole session as one.** The main thread takes on that agent's system prompt, tools, and model:
 
@@ -64,7 +60,7 @@ The agent's prompt replaces Claude Code's default entirely, which makes this a d
 
 ## Foreground and background
 
-Subagents run in the background by default. In an interactive session Claude cannot ask for the foreground at all, because fork mode is on; where fork mode is off, as in a `-p` run, Claude puts one in the foreground when it needs the result before it can continue.
+Subagents run in the background by default. In an interactive session Claude cannot ask for the foreground at all, because fork mode is on; in a `-p` run, or where fork mode is off, Claude puts one in the foreground when it needs the result before it can continue.
 
 | | Foreground | Background |
 |---|---|---|
@@ -74,7 +70,7 @@ Subagents run in the background by default. In an interactive session Claude can
 
 A background agent that hits a permission prompt does not stall silently: the prompt appears in your session labelled with which agent wants what, and pressing Esc denies that one call without killing the agent.
 
-Press **Ctrl+B** to background something already running. Asking Claude to place a task yourself ("run that in the background") only applies where fork mode is off, and `background: true` in an agent's frontmatter makes it always background, even when Claude wants the result immediately.
+Press `Ctrl+B` to background something already running. Asking Claude to place a task yourself ("run that in the background") only applies in a `-p` run or where fork mode is off, and `background: true` in an agent's frontmatter makes it always background, even when Claude wants the result immediately.
 
 One consequence of results arriving later: if you ask about a background agent before it finishes, Claude reports that it is still running rather than inventing an answer. `/tasks` lists running and recently completed agents.
 
@@ -90,7 +86,7 @@ Three agents work simultaneously, each in its own window, and Claude synthesizes
 
 The requirement is independence. If understanding the API layer depends on what the auth investigation concludes, parallel agents will each guess at the missing half and you will get three confident, partly wrong reports.
 
-Fan-out has a cost the single-agent case does not: every report returns to your window. Five detailed reports is a real context expense, so ask for summaries when you fan out wide. Delegation stops saving context the moment you request full accounts from six agents at once.
+Fan-out has a cost the single-agent case does not: every report returns to your window. Five detailed reports is a real context expense, so ask for summaries when you fan out wide.
 
 For parallelism that outlives a single task, agent teams in the Advanced level give each worker its own independent context.
 
@@ -125,7 +121,7 @@ Finished agents can be resumed rather than re-run. A resumed agent keeps its ful
 Continue that review and now check the authorization logic
 ```
 
-Claude reaches the agent by ID or name, and a completed agent auto-resumes in the background. Two limits: Explore and Plan are one-shot and return no ID, so continuing exploration means using `general-purpose` or a custom agent instead; and an agent you stopped yourself with `x` will not auto-resume, since stopping it was a decision. Type into its transcript to revive it.
+Claude reaches the agent by ID or name, and a completed agent auto-resumes in the background. Two limits: Explore and Plan are one-shot and return no ID, so continuing exploration means using `general-purpose` or a custom agent instead; and an agent you stopped yourself with `x` will not auto-resume. Type into its transcript to revive it.
 
 Agent transcripts live in separate files from your conversation, so they survive your main window compacting. They are also why resuming works after a restart, as long as you resume the same session.
 
@@ -150,17 +146,17 @@ The shared prompt cache makes a fork cheaper to start than an equivalent fresh s
 
 Reach for a fork when a named subagent would need too much background to be useful, or to try several approaches from this same point. A fork cannot spawn another fork.
 
-**Three commands with similar names.** `/branch` from <LessonLink id="B2.5" /> copies your session into a separate session you switch to. `/subtask` starts a forked subagent inside this session, which reports back. `/fork` is the older name for the forked subagent and now usually copies the session into a background session instead, so prefer the unambiguous two.
+Three commands have similar names. `/branch` from <LessonLink id="B2.5" /> copies your session into a separate session you switch to. `/subtask` starts a forked subagent inside this session, which reports back. `/fork` is the older name for the forked subagent and now usually copies the session into a background session instead, so prefer the unambiguous two.
 
 ## Pitfalls
 
-- **You fan out and your context fills anyway.** Six agents returning full reports is six reports in your window. Ask for summaries, or delegate sequentially.
+- **You fan out and your context fills anyway.** Ask for summaries, or delegate sequentially.
 
 - **You chain agents that needed to be one agent.** If the second agent keeps rediscovering what the first knew, the work was not separable. One agent doing both halves keeps the intermediate detail where it is useful.
 
 - **You wait on a background agent that already asked you something.** The prompt is in your session, labelled with the agent's name, and the agent is blocked until you answer it.
 
-- **You @-mention an agent and get a task it was not given.** The mention picks the agent; Claude writes the prompt. If the delegation prompt is wrong, the fix is in your message, not the mention.
+- **You @-mention an agent and get a task it was not given.** Claude wrote the delegation prompt from your message, so reword the message.
 
 - **You expect a resumed agent to know what happened in your conversation while it was idle.** It retains its own history, not yours. Anything that changed in the meantime has to travel in the follow-up.
 
@@ -182,5 +178,3 @@ Reach for a fork when a named subagent would need too much background to be usef
 ## Where next
 
 <LessonLink id="I6.4" /> settles which of these to reach for, including when the answer is none of them. Fresh context, copied context, and shared context each fit different tasks, and delegating one that needed your conversation produces confident wrong answers.
-
-<LessonLink id="B2.5" /> is where session-level branching was introduced, if the `/branch` and `/subtask` distinction is worth a second pass.

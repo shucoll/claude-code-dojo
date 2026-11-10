@@ -6,7 +6,7 @@ type: "milestone"
 order: 4
 estimatedMinutes: 45
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-27"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A7.3"]
 teaches: ["org-deployment", "version-pinning", "plugin-promotion"]
 references: ["A3.3", "A5.1", "A5.2", "I8.7", "A7.5"]
@@ -81,8 +81,8 @@ Save `governance/server-managed.json`. An Owner pastes it into the Claude Code m
 ```
 
 - The deny list covers secrets through two paths. `Read` rules stop the Read tool, and the `sandbox.credentials` entries stop a Bash command from reading the same directories. A deny rule written in a user's own settings would hold only until that user edited it.
-- `disableBypassPermissionsMode` removes the one mode that would skip every rule above it.
-- The MCP policy is an approved catalog: servers whose URL matches the GitHub MCP endpoint load, and nothing else does. The entry matches by `serverUrl` because a `serverName` entry matches whatever label a user typed, which is no control at all. `allowManagedMcpServersOnly` stops a user's own allowlist from widening it.
+- `disableBypassPermissionsMode` removes the mode that skips prompts and safety checks for every call the deny list does not name.
+- The MCP policy is an approved catalog: servers whose URL matches the GitHub MCP endpoint load, and nothing else does. The entry matches by `serverUrl` because a `serverName` entry matches whatever label a user typed, so a user could give any server an allowed name. `allowManagedMcpServersOnly` stops a user's own allowlist from widening it.
 - `managed-mcp.json` is deliberately absent. Its exclusive control blocks every server it does not define, plugin-provided servers included, so deploying it would switch off the GitHub server that `pulseboard-dev` ships.
 - `strictKnownMarketplaces` lists the only three marketplace sources plugins may come from, and `disableSideloadFlags` closes `--plugin-dir`, which the allowlist does not cover.
 - `requiredMinimumVersion` refuses to start any client older than 2.1.273, the first version that reads the MCP lock across managed sources. Several keys in this file do nothing on older clients, and nothing warns you when a key is ignored.
@@ -224,7 +224,7 @@ On Linux the directory is `/etc/claude-code/`. Start a session and check each ro
 - `/status` reads `Enterprise managed settings (file)`. If it lists the file under `Skipped sources`, a server payload from your organization won, so rehearse signed in to an account without one.
 - `/plugin` shows `pulseboard-dev@pulseboard-stable` and `security-guidance@claude-plugins-official` installed and enabled.
 - `/permissions` lists the managed deny rules.
-- `claude plugin marketplace add anthropics/claude-code` fails with `is blocked by enterprise policy`, followed by the allowed sources.
+- `claude plugin marketplace add anthropics/claude-plugins-community` fails with `is blocked by enterprise policy`, followed by the allowed sources.
 - `claude --plugin-dir ./pulseboard-dev` exits with a message naming `disableSideloadFlags`.
 
 Remove the file when you are done, since the sideload block also stops your own plugin development:
@@ -278,8 +278,8 @@ At the end of this stage you have:
 
 ## Reasoning recap
 
-Write governance for the least cautious member of the organization. Every rule that matters sits in a source that person cannot edit, and every lock you leave off is left off in writing, with the reason, so the policy's gaps are decisions someone made.
+Write governance for the least cautious member of the organization. Every rule that matters sits in a source that person cannot edit.
 
-A plugin is shipped once its upgrade story exists. That means a version that changes on every release, a channel that lets a small group take the risk first, a promotion rule with evidence behind it, and a rollback written down before anyone needs it.
+A plugin is ready to ship once it has an upgrade story: a version that changes on every release, a channel that lets a small group take the risk first, a promotion rule with evidence behind it, and a rollback written down before anyone needs it.
 
 Next milestone, <LessonLink id="A7.5" />: the measurement layer. You wire OpenTelemetry to a dashboard, analyze a week of usage, and write a cost-optimization pass whose savings claims come from the numbers.
