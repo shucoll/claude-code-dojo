@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I1.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/mcp"]
@@ -30,9 +30,9 @@ A server offers three kinds of thing:
 - **Resources**: readable content the server can hand over, addressed by a URI and pulled in with an `@` mention.
 - **Prompts**: canned prompt templates the server publishes, which show up in your `/` menu.
 
-The reason this is a standard rather than a pile of integrations is that the wrapping is somebody else's job. A team that runs a service writes one MCP server, and every MCP client can then use it. You are consuming that work, not doing it.
+The reason this is a standard rather than a pile of integrations is that the wrapping is somebody else's job. A team that runs a service writes one MCP server, and every MCP client can then use it.
 
-What MCP does not do is create a new trust model. An MCP tool call goes through the same permission machinery as every built-in tool, so the <LessonLink id="I1.2">rules you already wrote</LessonLink> apply, with MCP tools named `mcp__server__tool`. MCP widens the tool belt. It does not loosen the belt.
+MCP keeps the trust model you already have. An MCP tool call goes through the same permission machinery as every built-in tool, so the <LessonLink id="I1.2">rules you already wrote</LessonLink> apply, with MCP tools named `mcp__server__tool`.
 
 ## How it works
 
@@ -64,7 +64,7 @@ For a local server, everything after a `--` separator is the command Claude Code
 claude mcp add playwright -- npx -y @playwright/mcp@latest
 ```
 
-That separator is load-bearing. Without it, the flags meant for your server get eaten as flags to `claude mcp add`.
+Without the separator, the flags meant for your server get eaten as flags to `claude mcp add`.
 
 ### Where the config lands
 
@@ -80,7 +80,7 @@ Scope is fixed at add time, so moving a server means removing it and re-adding i
 
 ### What lands in the session
 
-Once a server is connected, its tools appear as `mcp__<server>__<tool>`: the `query` tool on a server you named `db` is `mcp__db__query`. That full name is what you write in a permission rule, a subagent's tool list, or a hook matcher, so the naming is not cosmetic.
+Once a server is connected, its tools appear as `mcp__<server>__<tool>`: the `query` tool on a server you named `db` is `mcp__db__query`. That full name is what you write in a permission rule, a subagent's tool list, or a hook matcher.
 
 The tool definitions themselves are not all loaded up front. Tool search is on by default, which means only tool names and the server's instructions load at startup, and Claude pulls in the full schema for a tool when it needs one. Connecting a server is cheap in context terms. <LessonLink id="I5.3" /> gets specific about the bill.
 
@@ -131,7 +131,7 @@ claude mcp add playwright -- npx -y @playwright/mcp@latest
 
 Three differences from the remote case: no `--transport` flag, since stdio is the default; the `--` separator before the command; and `-y` so `npx` installs without prompting.
 
-Check it again with `claude mcp list`. The first check often reports `✘ Failed to connect` while `npx` is still downloading the package. Wait and re-run rather than debugging a problem that is about to fix itself.
+Check it again with `claude mcp list`. The first check often reports `✘ Failed to connect` while `npx` is still downloading the package. Wait for the download to finish and run it again.
 
 Then:
 
@@ -153,9 +153,9 @@ A browser window opens and you watch it work, with tool calls labelled `playwrig
 
 - **You are fixing a rendering bug you can only describe.** A browser server (Playwright) lets Claude load the page, take the screenshot, and read the console itself, so the loop that used to run through you closes on its own.
 
-- **Your service has no CLI and a fiddly OAuth flow.** This is where MCP is at its strongest: the server handles the token dance once, and Claude gets structured results rather than scraped HTML.
+- **Your service has no CLI and a fiddly OAuth flow.** The server handles the token dance once, and Claude gets structured results rather than scraped HTML.
 
-- **Near-miss: you connect a git MCP server so Claude can commit.** `git` is already a first-class CLI, and Claude already has Bash. You have added a connection, a process, and a class of failure to do something that worked. <LessonLink id="I5.4" /> is the resolver for this exact temptation, and its answer is often "use the CLI."
+- **Near-miss: you connect a git MCP server so Claude can commit.** `git` is already a first-class CLI, and Claude already has Bash. You have added a process and a new way to fail, to do something that already worked. <LessonLink id="I5.4" /> is the resolver for this temptation, and its answer is often "use the CLI."
 
 ## When to use / when not to use
 
@@ -172,8 +172,6 @@ A browser window opens and you watch it work, with tool calls labelled `playwrig
 - You would be connecting it speculatively. Every server is a process or connection that can fail at startup, another auth to renew, and more tools competing for Claude's attention when it picks one.
 - You have not read what the server does. A server's output enters your context, which makes a third-party server part of your trust boundary. <LessonLink id="I5.3" /> closes on that.
 
-The cost is real but rarely where people expect it. It is not primarily context, because tool search keeps the startup footprint small. It is startup latency, one more moving part in your setup, and, for servers you did not write, trust.
-
 ## Pitfalls
 
 - **You forget the `--` before a local server's command.** Symptom: the server is added but the stored command is wrong or truncated, and it never connects. `claude mcp get <name>` shows you the command Claude Code actually saved. Remove and re-add with the separator in place.
@@ -182,7 +180,7 @@ The cost is real but rarely where people expect it. It is not primarily context,
 
 - **You hand-write a JSON entry with a `url` but no `type`.** Claude Code reads a typeless entry as a stdio server and skips it, reporting that the entry needs `"type": "http"`. Always set `type` on remote servers.
 
-- **You edit `.mcp.json` and nothing changes.** That file is read at session start. Restart the session. If the servers still do not appear, run `/mcp` and look for a parse warning, since malformed entries are skipped quietly.
+- **You edit `.mcp.json` and nothing changes.** That file is read at session start. Restart the session. If the servers still do not appear, run `claude mcp list` and look for a parse warning, since malformed entries are skipped and the warning names the offending field.
 
 - **A server connects but exposes no tools.** Usually a missing environment variable, such as an API key. Pass it with `--env KEY=value` at add time, or in the entry's `env` field, and check the server's docs for what it expects.
 
@@ -225,6 +223,6 @@ No. They are ordinary tools with the name `mcp__server__tool`, checked deny-then
 
 <LessonLink id="I5.2" /> takes the scope question seriously: which of the three files a server belongs in, how a committed `.mcp.json` shares servers with a team, how the OAuth flow runs for a remote server, and how to keep tokens out of committed config.
 
-<LessonLink id="I5.3" /> attaches the bill. What connecting servers actually costs now that tool search is the default, what happens when a tool returns more output than fits, and the security posture for servers you did not write.
+<LessonLink id="I5.3" /> covers what connecting servers actually costs now that tool search is the default, what happens when a tool returns more output than fits, and the security posture for servers you did not write.
 
-<LessonLink id="I5.4" /> is the resolver behind the near-miss above: MCP server, CLI through Bash, or a skill, and the cases where the honest answer is not MCP.
+<LessonLink id="I5.4" /> is the resolver behind the near-miss above: MCP server, CLI through Bash, or a skill.

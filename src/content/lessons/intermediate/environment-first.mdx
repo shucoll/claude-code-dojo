@@ -6,7 +6,7 @@ type: "milestone"
 order: 1
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["environment-as-deliverable", "permission-policy", "config-before-code"]
 prerequisites: ["I1.4", "I2.3", "I3.4", "I4.5", "I5.4", "I6.4", "I7.4"]
 references: ["I1.2", "I1.3", "I2.2"]
@@ -17,19 +17,19 @@ docsSources: ["https://code.claude.com/docs/en/settings", "https://code.claude.c
 
 Welcome to the project. Over seven milestones you will build **PulseBoard**, a local dashboard for the health of a GitHub repository: issue and pull-request velocity, stale-issue triage, and generated release notes. It reads one repository through the GitHub API and shows you where the project actually stands.
 
-You are building two things at once, and the second is the point of the module. One is the dashboard. The other is the **configured environment that builds it**: the `CLAUDE.md`, the permission policy, the skills, the hooks, the subagents, the plugin. By the end, that environment is a deliverable in its own right, versioned and installable, and this first milestone establishes the habit the rest depend on: the environment comes before the code.
+You are building two things at once. One is the dashboard. The other is the configured environment that builds it: the `CLAUDE.md`, the permission policy, the skills, the hooks, the subagents, the plugin. By the end, that environment is a deliverable in its own right, versioned and installable, and this first milestone establishes the habit the rest depend on: the environment comes before the code.
 
-**Pick your language before you start.** PulseBoard is built twice, once in JavaScript and once in Python, and the whole module follows the one you choose. Use the language switcher (top right) to select **JavaScript** or **Python**; your choice carries through all seven milestones, and every prompt, file, and command below changes to match it.
+Pick your language before you start. PulseBoard is built twice, once in JavaScript and once in Python, and the whole module follows the one you choose. Use the language switcher (top right) to select **JavaScript** or **Python**; your choice carries through all seven milestones, and every prompt, file, and command below changes to match it.
 
 <WhenLang is="javascript">
 
-You will build PulseBoard as a **Node + Express** server that reads GitHub through `@octokit/rest`, caches what it fetches in **SQLite**, and serves a plain static page for the dashboard. No front-end framework, no build step, nothing to deploy.
+You will build PulseBoard as a Node + Express server that reads GitHub through `@octokit/rest`, caches what it fetches in SQLite, and serves a plain static page for the dashboard, with no front-end framework and no build step. It runs locally, so there is nothing to deploy.
 
 </WhenLang>
 
 <WhenLang is="python">
 
-You will build PulseBoard as a **Flask** server that reads GitHub through the `requests` library, caches what it fetches in **SQLite**, and serves a plain static page for the dashboard. No front-end framework, no build step, nothing to deploy.
+You will build PulseBoard as a Flask server that reads GitHub through the `requests` library, caches what it fetches in SQLite, and serves a plain static page for the dashboard, with no front-end framework and no build step. It runs locally, so there is nothing to deploy.
 
 </WhenLang>
 
@@ -56,7 +56,7 @@ Sort every action into one of four buckets:
 
 The fourth bucket is the posture itself. Leaving something unlisted is a decision: it prompts, and you promote it into `allow` deliberately the first time it comes up. A policy that starts narrow and grows on purpose is safer than one that starts broad to save typing.
 
-One line of the policy cannot be written as a permission rule, and noticing why is worth more than the rule. **Migrations must be protected from being rewritten, but new ones must still be created.** A path deny like `Edit(migrations/**)` cannot tell those apart; it blocks both. That is the boundary from <LessonLink id="I1.2" />: a rule carves by path, and "new file yes, existing file no" is a distinction between operations, not paths. So the migration guard waits for <LessonLink id="I8.4" />, where a hook can allow a new file and block edits to an existing one. For now the policy protects `.env`, and the written conventions declare migrations untouchable so the promise is on record before the enforcement exists.
+One line of the policy cannot be written as a permission rule. Migrations must be protected from being rewritten, but new ones must still be created. A path deny like `Edit(migrations/**)` cannot tell those apart; it blocks both. That is the boundary from <LessonLink id="I1.2" />: a rule carves by path, and "new file yes, existing file no" is a distinction between operations. So the migration guard waits for <LessonLink id="I8.4" />, where a hook can allow a new file and block edits to an existing one. For now the policy protects `.env`, and the written conventions declare migrations untouchable so the promise is on record before the enforcement exists.
 
 ### 2. Write `CLAUDE.md` before any code
 
@@ -128,7 +128,7 @@ Keep it to what is true everywhere, every session. The two conventions about `.e
 
 ### 3. Split the slice-specific conventions into `.claude/rules/`
 
-One convention above does not belong in `CLAUDE.md`, because it is only true for part of the tree. The rule that "no route touches GitHub or the database directly" matters when Claude is editing a route or the data layer, and nowhere else. Loading it every session is the bloat <LessonLink id="I2.2" /> warned about. A path-scoped rule loads only when Claude reads a matching file.
+One convention above does not belong in `CLAUDE.md`, because it is only true for part of the tree. The rule that "no route touches GitHub or the database directly" matters when Claude is editing a route or the data layer, and nowhere else. Loading it every session is the bloat <LessonLink id="I2.2" /> warned about. A path-scoped rule loads only when Claude reads or writes a matching file.
 
 <WhenLang is="javascript">
 
@@ -182,7 +182,7 @@ paths:
 
 </WhenLang>
 
-The `paths:` frontmatter is what earns it a place in `rules/`. The rule is absent from context until Claude opens the data layer, then it arrives alongside the file it governs. The files it names do not exist yet; the rule waits for them.
+The `paths:` frontmatter is what earns it a place in `rules/`. The rule is absent from context until Claude opens the data layer, then it arrives alongside the file it governs. The files it names do not exist yet; the rule starts loading once Claude creates them.
 
 ### 4. Implement the permission policy
 
@@ -247,7 +247,7 @@ Write the buckets from step 1 into `.claude/settings.json`. This is the committe
 
 </WhenLang>
 
-The allow list names the app's files rather than opening the whole tree. When a later milestone adds a route file the list does not cover, editing it will prompt, and you promote it then. That friction is the deny-by-default posture working as intended.
+The allow list names the app's files rather than opening the whole tree. When a later milestone adds a route file the list does not cover, editing it will prompt, and you promote it then.
 
 Add a `.gitignore` so secrets and the cache never reach the remote:
 
@@ -284,8 +284,8 @@ At the end of this stage you have:
 
 ## Reasoning recap
 
-The lesson of this milestone is that **environment design is engineering, and it comes first**. At the beginner level `CLAUDE.md` was a note to your future self. Here the environment is a system with parts that enforce each other: the written convention in `CLAUDE.md` records the intent, the scoped rule delivers it at the right moment, the permission policy blocks what must never happen, and the hooks and subagents in later milestones enforce the promises a permission rule cannot keep. Building it first is what makes every later milestone cheaper, because each one drops into a project that already knows its own standards.
+At the beginner level `CLAUDE.md` was a note to your future self. Here the environment is a system with parts that enforce each other: the written convention in `CLAUDE.md` records the intent, the scoped rule delivers it at the right moment, the permission policy blocks what must never happen, and the hooks and subagents in later milestones enforce the promises a permission rule cannot keep. Building it first is what makes every later milestone cheaper, because each one drops into a project that already knows its own standards.
 
-The permission policy also surfaced a real boundary. Protecting `.env` is a job a deny rule does completely. Protecting migrations is not, because "new files yes, edits no" splits by operation, and a permission rule only sees the path. Finding that limit here, on paper, is what sends the migration guard to <LessonLink id="I8.4" /> as a hook instead of a rule that would block your own build.
+Designing the permission policy on paper also found the migration boundary before a rule could block your own build.
 
 Next milestone, <LessonLink id="I8.2" />: you connect Claude to the repository you just pushed, adding the GitHub MCP server at project scope, and make the honest case for why MCP earns its place here over the `gh` CLI.

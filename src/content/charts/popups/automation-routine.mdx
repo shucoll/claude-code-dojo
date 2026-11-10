@@ -7,6 +7,7 @@ one or more repositories, an environment, and a set of connectors.
 **Machine on:** no. **Session open:** no.
 
 Each run clones the repository fresh from its default branch, so there are no
-local files and no uncommitted work. The minimum interval is one hour. Runs are
-fully autonomous: there is no permission-mode picker, and every connector you
-leave attached can be used without asking.
+local files and no uncommitted work. The minimum interval is one hour. There is
+no permission-mode picker: each run starts in auto mode, so the classifier
+approves actions in your place, including writes through every connector you
+leave attached.

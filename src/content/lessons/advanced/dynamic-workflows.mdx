@@ -6,7 +6,7 @@ type: "core"
 order: 5
 estimatedMinutes: 18
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-18"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A1.1"]
 teaches: ["dynamic-workflows", "who-holds-the-plan", "scale-test", "workflow-cost-bounds"]
 references: ["I3.1", "I6.1", "A4.1"]
@@ -46,17 +46,15 @@ Dynamic workflows are available on all paid plans, with Anthropic API access, an
 | Scale | a few tasks per turn | same as subagents | a handful of long-running peers | dozens to hundreds per run |
 | Interruption | restarts the turn | restarts the turn | teammates keep running | resumable in the same session |
 
-The "where intermediate results live" row is what the scale row follows from. Results held in script variables do not compete with your conversation, so the run can be as wide as the work is.
-
 ### Three ways in
 
-**Run a bundled one.** `/deep-research` ships with Claude Code and investigates a question across many sources, cross-checking claims before reporting:
+The first is to run a bundled workflow. `/deep-research` ships with Claude Code and investigates a question across many sources, cross-checking claims before reporting:
 
 ```prompt
 /deep-research What changed in the Node.js permission model between v20 and v22?
 ```
 
-**Ask for one.** Include the keyword `ultracode` in a prompt you type, or just ask in your own words:
+The second is to ask for one. Include the keyword `ultracode` in a prompt you type, or just ask in your own words:
 
 ```prompt
 ultracode: audit every API endpoint under src/routes/ for missing auth checks
@@ -64,7 +62,7 @@ ultracode: audit every API endpoint under src/routes/ for missing auth checks
 
 The keyword is an opt-in only from real keyboard input: the interactive prompt, an IDE extension panel, a Remote Control client, or an Agent SDK application that stamps your input as human. It does not start a workflow from a `-p` prompt, a scheduled task, a webhook payload, or a relayed pull request comment. That restriction is the reason an attacker cannot put `ultracode` in a PR comment and spend your tokens.
 
-**Let Claude decide.** `/effort ultracode` pairs `xhigh` reasoning with automatic workflow orchestration, so Claude plans a workflow for every substantive task in the session. One request can become several workflows in a row, one to understand the code, one to change it, one to verify. It lasts for the session; `/effort high` returns you to routine work.
+The third is to let Claude decide. `/effort ultracode` turns on automatic workflow orchestration at whatever effort level the session runs at, so Claude plans a workflow for every substantive task in the session. One request can become several workflows in a row, one to understand the code, one to change it, one to verify. It lasts for the session; `/effort ultracode off` returns you to routine work.
 
 ### Watching, pausing, and resuming
 
@@ -154,7 +152,7 @@ When it finishes, the report arrives in your session with its sources cited and 
 
 ### Ask for one on your own repository
 
-Start narrow. The cost advice below is easier to follow when the first run is one directory:
+Start narrow, with one directory:
 
 ```prompt
 use a workflow to audit every route handler under src/routes/ for missing authentication checks, and adversarially verify each finding before reporting it
@@ -172,9 +170,9 @@ Once the run does what you wanted, open `/workflows`, select it, and press `s`. 
 
 **A migration too large to hold in one context.** Discover the files, transform each in its own isolated copy, verify each result.
 
-**A loop with a stopping condition.** Run a checker, fix what failed, repeat until it passes or two rounds make no progress. The condition lives in the script rather than in Claude's judgment.
+**A loop with a stopping condition.** Run a checker, fix what failed, repeat until it passes or two rounds make no progress.
 
-**Findings you do not want to trust on one pass.** The verification lives in the script, so it runs every time rather than when you remember to ask for it.
+**Findings you do not want to trust on one pass.** Each finding goes to independent agents that try to refute it, and only what survives reaches the report.
 
 **A three-step task with a decision in the middle.** This is the near-miss. A run takes no input once it starts, so a workflow cannot stop and ask which option you prefer. Split it into one workflow per stage, with your sign-off between them.
 
@@ -193,24 +191,24 @@ The test is scale. A workflow is a script, but Claude wrote it and subagents exe
 
 A single run can use meaningfully more tokens than doing the same task in conversation, and it counts against your plan's usage and rate limits. Four things bound it.
 
-- **Run a slice first.** One directory instead of the repository, or a narrow question instead of a broad one. The `/workflows` view shows each agent's token usage as the run progresses, and you can stop it there without losing completed work.
-- **Set a size guideline.** `workflowSizeGuideline` tells Claude how many agents to aim for: `small` is fewer than 5, `medium` fewer than 10, `large` fewer than 50, and `unrestricted` lets Claude size it to the task. The default is `medium`, or `small` on Pro. It is advice to Claude rather than a cap, so a prompt calling for a different scale still overrides it.
-- **Watch for the warning.** A run scheduling more than 25 agents, or projecting more than 1.5 million tokens, shows a `Large workflow` warning on its progress line. The warning is advisory and does not pause anything. Choosing a size guideline replaces the 25-agent threshold with that guideline's count, and sessions with ultracode on never see the warning, since turning it on already opted you in.
-- **Check your model first.** Workflow agents pick up your session's model when nothing else assigns one, so a large run started while you are on the strongest model is expensive by default. Ask Claude to use a smaller model for stages that do not need the strongest one.
+- Run a slice first: one directory instead of the repository, or a narrow question instead of a broad one. The `/workflows` view shows each agent's token usage as the run progresses, and you can stop it there without losing completed work.
+- `workflowSizeGuideline` tells Claude how many agents to aim for: `small` is fewer than 5, `medium` fewer than 10, `large` fewer than 50, and `unrestricted` lets Claude size it to the task. The default is `medium`, or `small` on Pro. It is advice to Claude rather than a cap, so a prompt calling for a different scale still overrides it.
+- A run scheduling more than 25 agents, or projecting more than 1.5 million tokens, shows a `Large workflow` warning on its progress line. The warning is advisory and does not pause anything. Choosing a size guideline replaces the 25-agent threshold with that guideline's count, and sessions with ultracode on never see the warning, since turning it on already opted you in.
+- Check your model before a large run. Workflow agents pick up your session's model when nothing else assigns one, so a large run started while you are on the strongest model is expensive by default. Ask Claude to use a smaller model for stages that do not need the strongest one.
 
-The runtime's caps on concurrent agents and agents per run are what bound a runaway script, rather than anything you configure.
+The runtime's caps on concurrent agents and agents per run bound a runaway script.
 
 One cost detail connects forward to <LessonLink id="A4.1" />: agents in a fan-out share a prompt-cache prefix when they match on model, effort, agent type, tools, schema, and working directory. Claude Code holds all but the first agent until the first response begins, up to five seconds, so the rest read that cached prefix instead of each paying to process it. Workflow agents also sit outside the main conversation's cache bucket, so their cache holds five minutes rather than an hour unless `subagentPromptCacheTtl` is set to `1h`.
 
 ## Pitfalls
 
-- **You start a huge run to find out what it costs.** Run one directory first, read the per-agent token figures in `/workflows`, then multiply.
+- **You start a huge run to find out what it costs.** Measure a one-directory run first, then multiply.
 
 - **You relaunch a failed run without reading the failure.** A failure early in a 200-agent run can repeat most of it, so the reflex is expensive. Read why it failed first.
 
-- **You leave the session and lose the run.** Exiting stops a running workflow unless you choose `Move to background and exit`. The saved results stay under the session's directory, so a session you resume can replay them, but a fresh session has nothing to relaunch.
+- **You leave the session and lose the run.** Backgrounding the session or exiting Claude Code, `Move to background and exit` included, leaves a running workflow stopped until Claude relaunches it. In a background session, ask Claude there to relaunch it. The saved results stay under the session's directory, so a session you resume can replay them, but a fresh session has nothing to relaunch.
 
-- **`ultracode` stays on and every task becomes a workflow.** `/effort ultracode` applies to the whole session, so routine work starts costing workflow money. Drop back to `/effort high` when the large task is done.
+- **`ultracode` stays on and every task becomes a workflow.** `/effort ultracode` applies to the whole session, so routine work starts costing workflow money. Turn it off with `/effort ultracode off` when the large task is done.
 
 - **You edit a saved script and nothing changes.** Run `/reload-skills` to re-read the workflow directories, then invoke it again. Before editing, run `/workflow-authoring` to load the script-writing reference.
 
@@ -247,6 +245,6 @@ For yourself, toggle Dynamic workflows off in `/config`, set `"disableWorkflows"
 
 ## Where next
 
-<LessonLink id="A1.6" /> resolves the four mechanisms against each other. The row that decides between them is who holds the plan, and this lesson is the only one where the answer is not Claude.
+<LessonLink id="A1.6" /> resolves the four mechanisms against each other. Its second question, who holds the plan, is the one that separates a workflow script from turn-by-turn judgment.
 
-<LessonLink id="A4.2" /> takes up `ultracode` from the other side, as one point on the effort scale rather than a way to start a workflow.
+<LessonLink id="A4.2" /> takes up `ultracode` from the other side, as a toggle in the `/effort` menu rather than a way to start a workflow.

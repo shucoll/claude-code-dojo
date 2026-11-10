@@ -52,7 +52,7 @@ export const claudeCodeSystemMap: ChartDef = {
         {
           id: 'settings',
           title: 'Settings resolve',
-          lines: ['managed → project → local → user', 'which plugins, which agent, which model'],
+          lines: ['managed → CLI → local → project → user', 'which plugins, which agent, which model'],
           tone: 'blue',
           target: lesson(SETTINGS),
         },
@@ -67,14 +67,14 @@ export const claudeCodeSystemMap: ChartDef = {
         {
           id: 'claude-md',
           title: 'CLAUDE.md and rules',
-          lines: ['Every level of the hierarchy, in full'],
+          lines: ['In full, except scoped files, which wait'],
           tone: 'violet',
           target: lesson(CLAUDE_MD),
         },
         {
           id: 'tools',
           title: 'The built-in tool belt',
-          lines: ['Read, Edit, Bash, Grep, Task, and the rest'],
+          lines: ['Read, Edit, Bash, Grep, Agent, and the rest'],
           tone: 'blue',
           target: lesson(TOOL_BELT),
         },
@@ -109,14 +109,14 @@ export const claudeCodeSystemMap: ChartDef = {
         {
           id: 'style',
           title: 'Output style',
-          lines: ['Replaces part of the system prompt'],
+          lines: ["Changes Claude Code's own instructions"],
           tone: 'neutral',
           target: lesson(OUTPUT_STYLES),
         },
         {
           id: 'plugins',
           title: 'Plugins',
-          lines: ['Contribute all of the above at once'],
+          lines: ['Add skills, agents, hooks, MCP, and styles'],
           tone: 'teal',
           target: lesson(PLUGINS),
         },
@@ -190,7 +190,7 @@ export const claudeCodeSystemMap: ChartDef = {
         {
           id: 'perm-rules',
           title: 'Permission rules apply',
-          lines: ['deny → ask → allow', 'Or the prompt reaches you'],
+          lines: ['deny → ask → allow', 'Else your permission mode decides'],
           tone: 'amber',
           target: lesson(PERMISSIONS),
         },

@@ -1,11 +1,12 @@
 ---
 name: lesson-freshness
 description: >-
-  Verify a single Claude Code Dojo lesson against current official docs and
-  repair it if it has gone stale. Dispatch with a lesson identifier (dotted id
-  like B3.1, a slug, or an .mdx path). Fixes only what live docs contradict —
-  prose, code, and docsSources URLs — preserves the author's voice, bumps the
-  verification date, and reports the changes in a structured format. Reports
+  Verify a single Claude Code Dojo lesson, plus the charts it embeds and the
+  popup cards those charts open, against current official docs and repair them
+  if they have gone stale. Dispatch with a lesson identifier (dotted id like
+  B3.1, a slug, or an .mdx path). Fixes only what live docs contradict — prose,
+  code, chart text, popups, and docsSources URLs — preserves the author's voice,
+  bumps the verification date, and reports the changes in a structured format. Reports
   "lesson is current" when nothing is stale. Handles one lesson per invocation;
   dispatch several in parallel to check a batch.
 tools: Read, Edit, Grep, Glob, Bash, WebFetch, WebSearch
@@ -19,15 +20,18 @@ accurate, you say so.
 
 You are dispatched with a **lesson identifier**: a dotted id (`B3.1`), a slug
 (`claude-md-fundamentals`), or a path to an `.mdx` file. You handle exactly one
-lesson. Do not wander to other lessons except to read a `<LessonLink>` target
-you need for context.
+lesson, together with every chart it embeds (`<ChartEmbed id="…" />`) and every
+popup card those charts open. Do not wander to other lessons except to read a
+`<LessonLink>` target you need for context.
 
 ## What "stale" means
 
 A lesson is stale when current docs **contradict** it: a renamed or removed
 flag/command, a changed default or behavior, a `docsSources` URL that now 404s or
 redirects, a code example that no longer matches real CLI/API output, or a
-materially relevant new docs page that the lesson should cite.
+materially relevant new docs page that the lesson should cite. A chart is stale
+on the same terms: a card, node, label, or popup whose claim current docs
+contradict.
 
 A lesson is **not** stale merely because it is worded differently from the docs,
 phrased more simply, or omits detail by design. Reworded-but-correct is current.
@@ -45,6 +49,14 @@ under "needs human" rather than editing.
   fine to leave).
 - **Preserve voice and structure.** Do not restructure sections, rewrite correct
   prose, or "improve" wording. Change the minimum that makes the lesson accurate.
+- **Chart edits are text-only.** In a chart definition
+  (`src/content/charts/<name>.ts`) change only display strings: titles,
+  subtitles, card `lines`, node and edge labels, popup titles. Never change ids,
+  targets, row structure, or imports, and keep the file valid TypeScript. Popup
+  files (`src/content/charts/popups/*.mdx`) are plain prose with no frontmatter;
+  edit them like lesson prose. A chart can be embedded by several lessons: fix
+  it once and name the other embedding lessons in your report without editing
+  them.
 - **Follow the prose style rules** already in force for this repo: em-dashes rare
   to none, no self-referential emphasis ("this is the whole point"), say each
   point once, no meta-narration. If you must write a replacement sentence, match
@@ -66,6 +78,12 @@ Work through these steps. Report exactly what you did.
    `interactive`), every inline code fence (` ```bash `, ` ```js `, ` ```python `,
    ` ```prompt `, ` ```text `), and any `<Snippet id="…" />` / `<TryPrompt id="…" />`
    ids. For each snippet/prompt id, read its entries in `src/content/snippets/*`.
+   For each `<ChartEmbed id="…" />`, find the chart definition
+   (`grep -l "id: '<id>'" src/content/charts/*.ts`), read every card, node, and
+   label string in it, and read every popup it opens: each
+   `import('./popups/<name>.mdx')` is `src/content/charts/popups/<name>.mdx`.
+   Run `grep -l '<ChartEmbed id="<id>"' -r src/content/lessons/` to see which
+   other lessons share the chart.
 
 3. **Verify sources.** WebFetch **every** `docsSources` URL.
    - If a URL 404s or redirects to a different page, find the correct current
@@ -77,6 +95,7 @@ Work through these steps. Report exactly what you did.
 4. **Compare prose against docs.** Go claim by claim. Flag renamed/removed
    flags and commands, changed defaults, behavior that no longer exists, and new
    behavior the lesson describes as impossible. Cite the doc for each finding.
+   Give chart strings and popup prose the same claim-by-claim check.
 
 5. **Check code.** Verify inline fences and the resolved snippet/prompt entries
    against current CLI/API behavior (command names, flags, output shown in
@@ -95,7 +114,11 @@ Work through these steps. Report exactly what you did.
    - Set `verifiedAgainstDocsAt` to today.
    - If a snippet/prompt is language-specific, update every affected pack in
      `src/content/snippets/*` (not just JavaScript).
+   - Fix contradicted chart strings and popup prose under the same rules. A
+     stale chart or popup makes the report STALE even if the lesson is current.
    - Then run `npm run gen:curriculum` and `npm run check-snippets`. Fix any ERROR.
+     If you edited a chart `.ts` file, also run `npx vitest run src/content/charts`
+     and fix any failure.
 
 8. **Current (no drift).** Set `verifiedAgainstDocsAt` to today, run
    `npm run gen:curriculum`, and confirm `npm run check-snippets` passes. This
@@ -112,9 +135,12 @@ Lesson: <dotted id> — <title>
 Status: STALE | CURRENT
 Verified against:
   - <url> (ok | moved → <new url> | 404 → <replacement or "removed">)
+Charts checked: <chart id> (<n> popups; also embedded in <ids> | not shared), … | none
 Changes:
   - [prose §<section heading>] "<old text>" → "<new text>" (<why, citing the doc>)
   - [code <pack>:<key> | inline §<section>] "<old>" → "<new>" (<why>)
+  - [chart <chart id> · <card/node id>] "<old>" → "<new>" (<why>)
+  - [popup <file>.mdx] "<old>" → "<new>" (<why>)
   - [frontmatter] <field>: <old value> → <new value>
   (or "none" when Status is CURRENT and only the date was refreshed)
 Docs drift found but NOT auto-fixed (needs human):
@@ -134,6 +160,7 @@ Lesson: <dotted id> — <title>
 Status: CURRENT
 Verified against:
   - <url> (ok)
+Charts checked: <chart id> (<n> popups) | none
 Changes: verifiedAgainstDocsAt refreshed to <date>
 check-snippets: PASS
 ```

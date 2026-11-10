@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-26"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["sdk-vs-cli", "carries-over-inventory", "setting-sources", "four-way-choice", "build-vs-configure"]
 references: ["B1.2", "I7.3", "A2.1", "A6.2", "A6.3"]
 docsSources: ["https://code.claude.com/docs/en/agent-sdk/overview", "https://code.claude.com/docs/en/agent-sdk/claude-code-features", "https://code.claude.com/docs/en/agent-sdk/quickstart", "https://platform.claude.com/docs/en/managed-agents/overview"]
@@ -47,7 +47,7 @@ for await (const message of query({
 }
 ```
 
-Install the package with `npm install @anthropic-ai/claude-agent-sdk` in a project whose `package.json` sets `"type": "module"`, save the file as `summarize.ts`, and run it with `npx tsx summarize.ts`. The SDK needs Node.js 18 or later.
+Install the package with `npm install @anthropic-ai/claude-agent-sdk` in a project whose `package.json` sets `"type": "module"`, save the file as `summarize.ts`, and run it with `npx tsx summarize.ts`. The SDK needs Node.js 18.14 or later.
 
 </WhenLang>
 
@@ -109,7 +109,7 @@ A few inputs load regardless of this option, including managed policy settings, 
 
 ### What stays behind
 
-- **The person at the keyboard.** Nobody answers a permission prompt inside a library call. What you would have approved interactively becomes an option set in advance or a callback your code supplies, which <LessonLink id="A6.2" /> builds.
+- **Interactive permission prompts.** Nobody answers a permission prompt inside a library call. What you would have approved interactively becomes an option set in advance or a callback your code supplies, which <LessonLink id="A6.2" /> builds.
 - **<LessonLink id="A1.4">Agent teams</LessonLink>.** The docs describe them as a CLI feature where one session leads, and no SDK option configures one. Subagents do carry over.
 - **Skills defined in code.** Skills load only from `SKILL.md` files on disk, and the SDK has no API for registering one programmatically.
 - **Some hook events in Python.** The TypeScript SDK supports hook events the Python SDK does not, including `SessionStart`, `SessionEnd`, `TeammateIdle`, and `TaskCompleted`.
@@ -141,13 +141,13 @@ The second cut is build versus buy:
 
 A `claude -p` script already sits on the first answer, in CLI notation. It graduates to library code when the script has to act during the run: a permission decision that depends on runtime data, a hook that answers from your application's state, tools defined in your own code, or a typed message stream your service consumes as it arrives. If every decision can be made before the run starts, the shell script is the smaller program.
 
-Choosing the Agent SDK also makes you the operator of the process, its sandbox, and its credentials. <LessonLink id="A6.3" /> is what that operation involves.
+Choosing the Agent SDK also makes you the operator of the process, its sandbox, and its credentials.
 
 ## Use-case scenarios
 
 **A nightly job that bumps dependencies and opens a pull request.** No person directs it, so it leaves the first cut. On the second cut it lands on the Agent SDK in its CLI notation. A scheduled `claude -p` run with an allow-list and `--permission-mode dontAsk` makes every decision before it starts, and nothing mid-run needs your code. Keep the shell script. Running unattended does not by itself call for a program.
 
-**The bug-triage agent in your support tool.** A customer files a report; the agent reads the relevant code, picks a label, and files a GitHub issue. Whether it may run `gh issue create` depends on which repository the report belongs to, which only your service knows. That decision happens mid-run inside your application, and the result has to come back as structured data your service stores: Agent SDK. <LessonLink id="A6.2" /> builds this agent. If the job shrank to labeling report text without reading any code, it would need no tools, and a single Client SDK call would do.
+**The bug-triage agent in your support tool.** A customer files a report; the agent reads the relevant code, picks a label, and files a GitHub issue. Whether it may run `gh issue create` depends on which repository the report belongs to, which only your service knows. That decision happens mid-run inside your application, and the result has to come back as structured data your service stores: Agent SDK. If the job shrank to labeling report text without reading any code, it would need no tools, and a single Client SDK call would do.
 
 **A "fix it for me" feature in a hosted product.** Each customer gets an agent that clones their repository into a sandbox, works for up to an hour, pauses for the customer's answer, and resumes later. Your team runs no sandbox fleet and does not want to. Long-running, asynchronous, stateful sessions in a sandbox Anthropic operates is the Managed Agents row. Check two things before committing. Managed Agents is in beta. And because it stores session history and sandbox state server-side, it is not currently eligible for Zero Data Retention or HIPAA BAA coverage. If a customer contract requires either, the answer moves back to the Agent SDK on infrastructure you operate.
 

@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["tool-belt", "risk-tiers", "reading-transcripts"]
 references: ["B1.1", "B2.3"]
 docsSources: ["https://code.claude.com/docs/en/tools-reference", "https://code.claude.com/docs/en/permissions"]
@@ -25,7 +25,7 @@ That gap is now costing you. To write permission rules, restrict a subagent, or 
 
 ## The concept
 
-Claude has a fixed set of built-in tools. It chooses which to use; you almost never name one while working. What matters is that every tool falls into a **risk tier**, and the tier predicts the prompt.
+Claude has a fixed set of built-in tools. It chooses which to use; you almost never name one while working. Every tool falls into a **risk tier**, and the tier predicts the prompt.
 
 There are four tiers, plus one special case:
 
@@ -39,7 +39,7 @@ Every permission prompt in <LessonLink id="B1.3" /> was one of these tools stopp
 
 ## The belt, by risk tier
 
-The map groups the tools you will actually see in a transcript. Read-only is safe by default; each tier below it asks before a different kind of side effect. Everything after this section walks the tiers one at a time.
+The map groups the tools you will actually see in a transcript. Read-only is safe by default; each tier below it asks before a different kind of side effect.
 
 <ChartEmbed id="tool-belt-map" />
 
@@ -67,13 +67,13 @@ In a transcript they look like this:
   ⎿ Read 43 lines
 ```
 
-No prompt appeared because nothing changed. One nuance to carry forward: Read, Grep, and Glob still prompt when a path sits *outside* your project and additional directories. The tier is "read-only," not "read-anywhere."
+No prompt appeared because nothing changed. Read, Grep, and Glob do still prompt when a path sits *outside* your project and additional directories.
 
 ### Writes files: the first gate
 
-These change files on disk, so each one asks before it acts (in manual mode; in auto mode a classifier answers instead of you).
+These change files on disk, so each one asks before it acts (in manual mode; auto mode approves edits inside your working directory without asking).
 
-- **`Edit`** does an exact find-and-replace inside one file. It is literal, not fuzzy: the text it is replacing must match character for character and appear exactly once. Claude normally has to have read the file first, though newer models can skip that when reading it would not have prompted anyway. What it can break is the file it edits, if the replacement is wrong.
+- **`Edit`** does an exact find-and-replace inside one file: the text it is replacing must match character for character and appear exactly once. Claude normally has to have read the file first, though newer models can skip that when reading it would not have prompted anyway. What it can break is the file it edits, if the replacement is wrong.
 - **`Write`** creates a new file or overwrites an existing one with entire new contents. It does not merge or append. Overwriting an existing file follows the same read-first rule as `Edit`, and for notebooks and partially read files the read is always required.
 - **`NotebookEdit`** edits one Jupyter notebook cell at a time. Its permission rules use the same path format as `Edit`.
 
@@ -88,11 +88,11 @@ These change files on disk, so each one asks before it acts (in manual mode; in 
        3. No, tell Claude what to do differently
 ```
 
-The prompt names the tool's target. Approving an edit lasts until the session ends, then Claude asks again, exactly as <LessonLink id="B1.3" /> described.
+The prompt names the tool's target. Approving an edit lasts until the session ends, then Claude asks again, as <LessonLink id="B1.3" /> described.
 
 ### Runs commands: the widest tool
 
-- **`Bash`** runs shell commands. This is the most capable and the most dangerous tool on the belt, because it can do anything your terminal can: run tests, install packages, delete files, push to git, call the network. Two details matter. First, Bash runs a built-in set of read-only commands (`ls`, `cat`, `git status`) *without* a prompt, so a Bash line with no prompt is normal, not a bypass. Second, anything with side effects prompts, and the prompt shows you the command.
+- **`Bash`** runs shell commands. This is the most capable and the most dangerous tool on the belt, because it can do anything your terminal can: run tests, install packages, delete files, push to git, call the network. Two rules decide when it prompts. First, Bash runs a built-in set of read-only commands (`ls`, `cat`, `git status`) *without* a prompt. Second, anything with side effects prompts, and the prompt shows you the command.
 - **`PowerShell`** is the same idea for PowerShell, native on Windows and opt-in elsewhere.
 - **`Monitor`** runs a command in the background and reacts to its output (tailing a log, polling CI). It obeys the same permission rules as Bash.
 
@@ -108,35 +108,35 @@ The prompt names the tool's target. Approving an edit lasts until the session en
        3. No, tell Claude what to do differently
 ```
 
-The first command read state and ran silently; the second has consequences and stopped. Notice that "don't ask again" for a shell command is remembered permanently for that command in that project, unlike a file edit. That asymmetry is the seed of <LessonLink id="I1.2">permission rules</LessonLink>, the next lesson in this module.
+The first command read state and ran silently; the second has consequences and stopped. Notice that "don't ask again" for a shell command is remembered permanently for that command in that project, unlike a file edit. Claude Code stores that approval as a <LessonLink id="I1.2">permission rule</LessonLink>, which you can also write by hand.
 
 ### Leaves your machine: the network tier
 
-- **`WebFetch`** takes a URL and a question, fetches the page, and answers the question using a small fast model. It is **lossy by design**: Claude receives the model's answer, not the raw page. It prompts the first time it reaches a new domain (a preapproved set of documentation sites is exempt).
+- **`WebFetch`** takes a URL and a question, fetches the page, and answers the question using a small fast model. It is lossy by design: Claude receives the model's answer, not the raw page. It prompts before each fetch unless your rules already allow the domain (a preapproved set of documentation sites is exempt).
 - **`WebSearch`** runs a web search and returns result titles and URLs. It does not read the pages; Claude follows up with `WebFetch` to read one.
 
 ```text
-⏺ WebFetch(https://code.claude.com/docs/en/hooks)
-  ⎿ Claude wants to fetch code.claude.com
+⏺ WebFetch(https://example.com/changelog)
+  ⎿ Claude wants to fetch example.com
 
      ❯ 1. Yes
-       2. Yes, and don't ask again for code.claude.com
+       2. Yes, and don't ask again for example.com
        3. No
 ```
 
-The prompt names the domain, not the full URL, because approval is granted per domain.
+The "don't ask again" option names the domain, not the full URL: choosing it lets later fetches from that domain run without a prompt.
 
 ### Delegation: the tool that hides a whole session
 
-**`Agent`** hands a task to a subagent that runs in its own separate context window and returns a single result. Launching it does not prompt. The subagent then uses these same tools, and *its* calls are checked against your rules as they happen. The catch for reading transcripts: you see the launch and the final result, never the subagent's intermediate work. A short `Agent(...)` line can represent a great deal of activity you did not watch. Subagents get <LessonLink id="I6.1">their own module</LessonLink> later; for now, know that an `Agent` line is a closed door, not an idle one.
+**`Agent`** hands a task to a subagent that runs in its own separate context window and returns a single result. Launching it does not prompt. The subagent then uses these same tools, and *its* calls are checked against your rules as they happen. The catch for reading transcripts: you see the launch and the final result, not the subagent's intermediate work, which stays in its own transcript. A short `Agent(...)` line can represent a great deal of activity you did not watch. Subagents get <LessonLink id="I6.1">their own module</LessonLink> later.
 
 ### The long tail
 
-Beyond these, the belt carries a set of session-control tools: task-list and scheduling tools, plan-mode toggles, MCP resource readers, and so on. They manage the session rather than your code, most run without a prompt, and you never need to memorize them. Two you will meet later: `Skill` runs a skill (<LessonLink id="I3.1">Module I3</LessonLink>), and `Agent` you just met. When a real tool matters, its own lesson introduces it.
+Beyond these, the belt carries a set of session-control tools: task-list and scheduling tools, plan-mode toggles, MCP resource readers, and so on. They manage the session rather than your code, most run without a prompt, and you never need to memorize them. One you will meet later is `Skill`, which runs a skill (<LessonLink id="I3.1">Module I3</LessonLink>). When a real tool matters, its own lesson introduces it.
 
 ## Reading the prompt: tool to tier
 
-The whole system reduces to one habit. When a prompt appears, its first words name the tool, and the tool names the tier:
+When a prompt appears, its first words name the tool, and the tool names the tier:
 
 | The prompt says | Tool | Tier | What it wants to do |
 |---|---|---|---|
@@ -145,7 +145,7 @@ The whole system reduces to one habit. When a prompt appears, its first words na
 | "wants to fetch …" | `WebFetch` | Leaves your machine | reach a URL |
 | (no prompt) | `Read` / `Grep` / `Glob` | Read-only | look, without changing anything |
 
-Once the tier is second nature, you read a transcript the way you read a diff: not word by word, but by spotting the two or three lines that actually did something and confirming they were what you asked for.
+With the tiers learned, you can read a transcript the way you read a diff: spot the two or three lines that actually did something and confirm they were what you asked for.
 
 ## Checking your belt
 
@@ -161,17 +161,17 @@ Claude answers with a plain-language summary. For the exact names of tools added
 /mcp
 ```
 
-You do not need this often. It matters when a tool you expected is missing (a subagent restricted it, a deny rule removed it, or your platform never had it) and you want to confirm what is actually loaded rather than guess.
+You need this when a tool you expected is missing (a subagent restricted it, a deny rule removed it, or your platform never had it) and you want to confirm what is actually loaded.
 
 ## Pitfalls
 
-These are all misreadings of a transcript, and each one sends people chasing a problem that is not there.
+These are all misreadings of a transcript.
 
 - **"No prompt appeared, so nothing happened."** Read-only tools and Bash's read-only commands run silently by design. Silence means the action was safe, not that it was skipped. Look for the result line, not the prompt.
-- **"It read `.env`, my secrets are compromised."** `Read` looks; it does not transmit. Reading a file changes nothing and sends nothing off your machine. The exposure to worry about is a secret you *paste into the conversation*, not a file Claude opens locally.
+- **"It read `.env`, my secrets are compromised."** Reading a file changes nothing on disk. It does put the file's contents into the conversation, the same exposure as pasting a secret in, so if Claude should never see a file, deny reading it with a rule like `Read(.env)`.
 - **"WebFetch says the page doesn't mention X, so it doesn't."** WebFetch returns a fast model's answer to a specific question, not the page. A "no" often means the extraction prompt did not ask the right thing. Have Claude fetch again with a sharper prompt, or read the raw page another way.
 - **"My search found nothing, so the code isn't there."** `Grep` skips gitignored files; `Glob` does not. A Grep that comes up empty may simply be ignoring a gitignored file where the match lives.
-- **"The `Agent` line finished instantly, so it did nothing."** A subagent's work never shows in your transcript. The single result line can stand in for an entire session of tool calls you did not see.
+- **"The `Agent` line finished instantly, so it did nothing."** Subagents start in the background by default, so the `Agent` line returns as soon as the subagent launches. Its result reaches Claude in a later turn.
 
 ## Try It
 
@@ -180,7 +180,7 @@ These are all misreadings of a transcript, and each one sends people chasing a p
 1. Start Claude and ask, `What tools do you have access to?` Read the answer and sort the names into the four tiers in your head. Anything you cannot place is probably a session-control tool from the long tail.
 2. Ask Claude to find something: `Where is the main entry point defined?` Watch the transcript. Which tool fired: `Grep`, `Glob`, or a `grep`/`find` search through `Bash`? Did it prompt? (It should not.)
 3. Ask it to run a read-only command like `git status`, then something with a side effect like running the test suite. Confirm the first ran silently and the second named `Bash` in a prompt.
-4. Ask it to fetch a documentation URL. Confirm the prompt names the **domain**, not the full URL.
+4. Ask it to fetch a page from a site that is not a documentation site (many documentation sites are preapproved and fetch without asking). Confirm the "don't ask again" option names the domain, not the full URL.
 
 **Success criteria:** for any tool call you saw, you can state its tier, and before Claude takes its next step you can predict whether it will prompt.
 
@@ -188,7 +188,7 @@ These are all misreadings of a transcript, and each one sends people chasing a p
 
 **Do I ever call these tools myself?** No. Claude chooses them while working. You name tools directly only when you configure the agent: in permission rules, in a subagent's tool list, and in hook matchers. Those are the next several lessons.
 
-**Why did `Read` prompt me once?** The path was outside your project and additional directories. Inside them, Read, Grep, and Glob are silent; outside, they ask, because that write-and-read boundary is the security line.
+**Why did `Read` prompt me once?** The path was outside your project and additional directories. Inside them, Read, Grep, and Glob are silent; outside, they ask first.
 
 **What are all the tools my summary listed that aren't on the map?** Session-control tools: task lists, scheduling, plan mode, MCP resource access. They act on the session, not your code, and mostly run without a prompt. The map deliberately shows only the tools whose behavior you need to read.
 
@@ -198,6 +198,6 @@ These are all misreadings of a transcript, and each one sends people chasing a p
 
 ## Where next
 
-You can now read a transcript by tier and predict its prompts. The obvious next move is to stop clicking those prompts one by one: permission rules let you pre-approve the safe tools and deny the dangerous ones by name, turning the tier awareness you just built into a written policy. That is <LessonLink id="I1.2" />, this module's next lesson.
+The next step is to stop clicking those prompts one by one: permission rules are a written policy that pre-approves the safe tools and denies the dangerous ones by name. That is <LessonLink id="I1.2" />, this module's next lesson.
 
-For the session side of the command surface, <LessonLink id="B2.3" /> is the companion to this lesson: it maps the slash commands that act on your session, where this one maps the tools that act on your code. And <LessonLink id="B1.1" /> is where the whole idea of an agent using tools began.
+For the session side of the command surface, <LessonLink id="B2.3" /> is the companion to this lesson: it maps the slash commands that act on your session, where this one maps the tools that act on your code. <LessonLink id="B1.1" /> covers the agent loop that calls these tools.

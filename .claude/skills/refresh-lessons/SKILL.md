@@ -82,16 +82,23 @@ For each lesson in the window:
   the id:
 
   > Verify lesson `<id>` against current official Claude Code docs and repair it
-  > if stale, following your normal workflow. **Override:** do NOT run `git`,
-  > `npm run gen:curriculum`, or `npm run check-snippets` — the orchestrator runs
-  > gen:curriculum and check-snippets once after the whole batch. Still edit the
-  > lesson (and its snippet packs) directly, and still set `verifiedAgainstDocsAt`
-  > to today. Return only your structured report, with actual `"old" → "new"`
-  > quotes in every prose/code change entry.
+  > if stale, following your normal workflow, including the charts it embeds and
+  > their popups. **Override:** do NOT run `git`, `npm run gen:curriculum`,
+  > `npm run check-snippets`, or vitest — the orchestrator runs those once after
+  > the whole batch. Still edit the lesson (and its snippet packs, charts, and
+  > popups) directly, and still set `verifiedAgainstDocsAt` to today. Return only
+  > your structured report, with actual `"old" → "new"` quotes in every change
+  > entry.
 
 The override matters: agents edit 10 **different** `.mdx` files concurrently
 (safe), but 10 concurrent `gen:curriculum` runs would race on the shared
 `src/content/curriculum.ts`. Only you regenerate, once per batch.
+
+**Shared charts.** Two lessons in the same window can embed the same chart
+(`grep -o '<ChartEmbed id="[^"]*"'` over the window's files). Give that chart to
+the first of them only, and add to the other lesson's prompt: "Skip chart
+`<id>`; another agent in this batch is checking it." Otherwise two agents edit
+the same chart file at once.
 
 ### 4b. Wait, then regenerate + validate once
 
@@ -101,7 +108,9 @@ Wait for **every** dispatched agent in the window to finish. Then run:
 npm run gen:curriculum && npm run check-snippets
 ```
 
-Capture the check result (PASS, or FAIL with the errors).
+If any agent edited a chart `.ts` file, also run
+`npx vitest run src/content/charts && npx tsc -b`. Capture the check result
+(PASS, or FAIL with the errors); a chart test or type failure counts as FAIL.
 
 ### 4c. Handle a failed check
 

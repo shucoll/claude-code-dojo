@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 16
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-18"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["worktrees", "parallel-isolation", "subagent-worktree-isolation", "checkout-hygiene"]
 references: ["B2.5", "I6.4"]
 docsSources: ["https://code.claude.com/docs/en/worktrees", "https://code.claude.com/docs/en/common-workflows"]
@@ -117,6 +117,8 @@ Claude Code enforces the isolation. While a session is in a worktree, Claude Cod
 - **Git redirects.** A command that aims git back at the main checkout is blocked, whether through `git -C`, `--git-dir`, a `GIT_DIR` or `GIT_WORK_TREE` variable, or a `cd` before the git call.
 - **Command shape.** A command is blocked when Claude Code cannot verify from the command text that any git it runs stays inside the worktree, for example when the command name is computed at runtime or the syntax will not parse. You cannot turn this check off.
 
+None of the four tracks which files a shell command writes. A `cp` or shell redirect into the main checkout that runs no git there is not refused; your permission and sandbox settings govern it like any other command.
+
 Claude receives each refusal as a tool error that names the worktree and says how to proceed, which usually means splitting one clever line into plain separate commands.
 
 ### Cleanup
@@ -162,7 +164,7 @@ $ git worktree list
 /home/you/project/.claude/worktrees/fix-timezone     4e5f6a7 [worktree-fix-timezone]
 ```
 
-Neither session can see the other's edits, and neither can reach your main checkout.
+Neither session can see the other's edits, and neither can edit your main checkout through its file tools or point git at it.
 
 ### Meeting the enforcement
 
@@ -172,13 +174,11 @@ Ask the pagination session to look at something in the main checkout:
 Compare our new pagination code against the version on main in the original checkout.
 ```
 
-Claude tries a command pointed at the main checkout and gets a refusal instead of a result:
+If Claude runs a command from the main checkout or points git at it, it gets a refusal instead of a result:
 
 ```text
-Error: this session is isolated in the worktree
-/home/you/project/.claude/worktrees/api-pagination
-The command's working directory resolves to the main checkout.
-Run it inside the worktree, or compare against the branch with plain git.
+This session is isolated in the worktree /home/you/project/.claude/worktrees/api-pagination,
+but this command's working directory resolved to the shared checkout. Refusing to run it …
 ```
 
 Claude reads the error and reaches for `git diff main` inside the worktree, which is the same comparison without leaving the isolation.
@@ -214,13 +214,13 @@ Commit in each worktree, push the branch, then exit the session. Claude Code fin
 
 **Two unrelated tasks in one repository.** Run each in its own `--worktree` session. The isolation costs you nothing here, because the tasks were never going to touch the same files anyway and you get real concurrency instead of turn-taking.
 
-**Reviewing a pull request without disturbing your work.** `claude --worktree "#1234"` puts the branch in a separate directory. Your own half-finished tree stays exactly as you left it, with nothing to stash.
+**Reviewing a pull request without disturbing your work.** `claude --worktree "#1234"` puts the branch in a separate directory. Your own half-finished tree stays exactly as you left it, so you do not have to stash it first.
 
 **A mechanical refactor across many files while you keep working.** Give the job to a subagent with `isolation: worktree`. Without the isolation it would be editing the files you are reading.
 
 **A subagent that needs your unpushed work.** Set `worktree.baseRef` to `"head"`. The default branches from the remote, so a subagent would start from a tree that does not contain the commits you are asking it to build on.
 
-**Splitting one refactor across two sessions.** This is the near-miss. Both sessions want the same files, so worktrees give you two diverging copies and a merge to do afterwards. Worktrees isolate work; they do not combine it. Keep a single-file-set change in one session.
+**Splitting one refactor across two sessions.** Both sessions want the same files, so worktrees give you two diverging copies and a merge to do afterwards. Keep a single-file-set change in one session.
 
 ## When to use / when not to use
 
@@ -237,15 +237,15 @@ Below two concurrent tasks, none of that pays for itself.
 
 ## Pitfalls
 
-- **The worktree cannot find `.env`.** Tests fail immediately on missing configuration, or Claude starts writing code to work around a database it cannot reach. The file was gitignored, so it was never checked out. Add a `.worktreeinclude` listing it, then recreate the worktree; the file is copied when the worktree is created, so an existing worktree will not pick it up.
+- **The worktree cannot find `.env`.** Tests fail immediately on missing configuration, or Claude starts writing code to work around a database it cannot reach. Add a `.worktreeinclude` listing it, then recreate the worktree; the file is copied when the worktree is created, so an existing worktree will not pick it up.
 
-- **You read an enforcement refusal as a bug.** A command comes back refused with a message about the main checkout, and the obvious conclusion is that something is broken. Nothing is. The command-shape check in particular fires on one-liners whose git target cannot be parsed, and it cannot be switched off. Have Claude rewrite it as separate plain commands.
+- **You read an enforcement refusal as a bug.** A command comes back refused with a message about the main checkout. The refusal comes from one of the isolation checks, and the command-shape check in particular fires on one-liners whose git target cannot be parsed. Have Claude rewrite it as separate plain commands.
 
 - **Worktrees pile up because they hold uncommitted work.** The sweep skips anything with changed files, untracked files, or unpushed commits, so a worktree you abandoned mid-task stays forever. Check `git worktree list` occasionally and clear the dead ones with `git worktree remove --force`.
 
 - **A repository with no commits.** `--worktree` fails with `Failed to resolve base branch "HEAD": git rev-parse failed`, because a worktree is created from an existing commit. Make the initial commit first.
 
-- **You ran `-p` with `--worktree` and nothing was cleaned up.** Non-interactive runs have no exit prompt, so their worktrees and the locks taken on them stay until a later session's sweep. Remove them yourself in scripts that create them.
+- **You ran `-p` with `--worktree` and nothing was cleaned up.** The worktrees stay on disk, and the lock taken on each one holds until a later session's sweep releases it. Remove them yourself in scripts that create them.
 
 ## Try It
 
@@ -255,7 +255,7 @@ Below two concurrent tasks, none of that pays for itself.
 2. Start two sessions in two terminals: `claude --worktree one` and `claude --worktree two`.
 3. In each, ask Claude to create a file named after the worktree and print the current branch.
 4. From the main checkout, run `git worktree list`, then look inside both directories.
-5. In session one, ask Claude to read or edit a file by its path in the main checkout, and read the refusal it gets.
+5. In session one, ask Claude to edit a file by its path in the main checkout, and read the refusal it gets.
 6. Exit both sessions and answer the cleanup prompts, keeping one worktree and removing the other.
 7. Run `git worktree list` again.
 
@@ -264,7 +264,7 @@ Below two concurrent tasks, none of that pays for itself.
 ## FAQ
 
 **Do my worktrees share anything with the main checkout?**
-Three things. The repository's `.git` directory, which is why `git commit` works from inside a worktree even with the sandbox on. Plugins installed at project scope, so you do not reinstall them per worktree. And permission approvals: choosing "Yes, and don't ask again" in a worktree session saves the rule to the main checkout's `.claude/settings.local.json`, so it applies everywhere and survives that worktree's removal.
+Four things. The repository's `.git` directory, which is why `git commit` works from inside a worktree even with the sandbox on. Plugins installed at project scope, so you do not reinstall them per worktree. And permission approvals: choosing "Yes, and don't ask again" in a worktree session saves the rule to the main checkout's `.claude/settings.local.json`, so it applies everywhere and survives that worktree's removal. And untracked skills, agents, and commands: when the worktree has no `.claude/skills` directory of its own, typically because yours is gitignored, the session loads the main checkout's project skills, and the same holds for `.claude/agents` and `.claude/commands`.
 
 **What happens when I resume a session that was in a worktree?**
 Claude Code returns it there, for interactive resumes and for `--continue` and `--resume` under `-p`. It verifies first that the worktree is still a checkout genuinely separate from the main one, and declines to re-enter one that fails the check. Launching from inside the worktree is the common reason it cannot vouch for it; launch from the main checkout instead.
@@ -282,6 +282,6 @@ Inside `.claude/worktrees/` it can switch directly, leaving the previous one on 
 
 <LessonLink id="A1.2" /> puts a control surface over what you just did by hand. Sessions dispatched from agent view move themselves into a worktree before they edit anything, so the isolation you configured here becomes the default for backgrounded work.
 
-<LessonLink id="A1.3" /> answers the question this lesson creates. Worktrees buy isolation by cutting sessions off from each other, and findings still have to cross back somehow.
+<LessonLink id="A1.3" /> answers the question this lesson creates. Worktrees cut sessions off from each other's files, so a finding in one session reaches another only when Claude sends it as a message.
 
 <LessonLink id="I6.4" /> asked when to delegate at all. <LessonLink id="A1.6" /> re-asks it with worktrees in hand, because whether tasks touch the same files is one of the three questions that decides which parallel mechanism you want.

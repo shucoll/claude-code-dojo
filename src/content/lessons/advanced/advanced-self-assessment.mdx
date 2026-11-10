@@ -6,7 +6,7 @@ type: "checkpoint"
 order: 4
 estimatedMinutes: 45
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-27"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A1.6", "A2.4", "A3.4", "A4.4", "A5.3", "A6.3"]
 teaches: ["self-assessment"]
 references: ["A1.6", "A2.1", "A3.3", "A7.3", "A7.4"]
@@ -126,7 +126,7 @@ Every spec line maps to something you can point at in the script:
 | 4 | `--tools ""` removes every tool from Claude's context |
 | 5 | `--permission-prompts none` with `--permission-mode dontAsk` |
 | 6 | `--max-turns` |
-| 7 | Checking the exit code before `jq` reads stdout, and `set -o pipefail` so a failed `claude` fails the pipe |
+| 7 | Checking the exit code before `jq` reads stdout, `set -o pipefail` so a failed `claude` fails the pipe, and checking that `structured_output` is present, because a run can end without one |
 | 8 | `jq '.total_cost_usd'` redirected to stderr |
 
 Prove line 7 rather than asserting it. Break the schema on purpose, run the script, and confirm the exit status is non-zero and stdout is empty. A script that prints an error message where the JSON should be passes every happy-path run and then corrupts whatever consumes it.
@@ -139,7 +139,7 @@ The three planted anti-patterns:
 |---|---|---|
 | `limiter` and `wiring` both own `src/api/router.ts` | Teams have no worktree isolation, so two teammates editing one file means one silently overwrites the other | <LessonLink id="A1.4" />, and the file-contention question in <LessonLink id="A1.6" /> |
 | Tasks 1 to 4 form a single chain | A teammate can claim only an unblocked task, so one works while three wait, and you pay for all four | <LessonLink id="A1.4">A1.4</LessonLink>'s sequential near-miss |
-| The lead builds the settings page | A lead that starts implementing is a failure <LessonLink id="A1.4" /> tells you to correct by telling it to wait for its teammates, and this plan builds that failure in | <LessonLink id="A1.4">A1.4</LessonLink>'s troubleshooting list |
+| The lead builds the settings page | A lead that starts implementing is a failure <LessonLink id="A1.4" /> tells you to correct by telling it to wait for its teammates, and this plan builds that failure in | <LessonLink id="A1.4">A1.4</LessonLink>'s pitfalls list |
 
 What to run instead: the chain answers the tree's coordination question on its own. No teammate needs to tell another anything that changes its work, so this is one session doing tasks 1 to 3 in order, with a test-writing subagent at the end if you want its reading kept out of your context. The settings page is a separate job, and a second session in its own worktree runs it alongside.
 

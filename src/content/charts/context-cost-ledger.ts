@@ -104,7 +104,7 @@ export const contextCostLedger: ChartDef = {
         },
       ],
       caption:
-        'Two thirds of startup is the system prompt and CLAUDE.md. Skills and MCP servers, the two features learners worry about most, are the two smallest lines on the board.',
+        'Three quarters of startup is the system prompt and CLAUDE.md. Skills and MCP servers, the two features learners worry about most, add up to less than a tenth of the total.',
     },
     { kind: 'connector', label: 'all of it, against the window' },
     {

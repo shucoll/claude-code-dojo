@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I2.1"]
 references: ["B2.2", "I2.1"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents", "https://code.claude.com/docs/en/how-claude-code-works"]
@@ -18,15 +18,15 @@ docsSources: ["https://code.claude.com/docs/en/sub-agents", "https://code.claude
 
 You ask Claude to find every place a deprecated function is still called. It greps, finds forty hits, reads a dozen files to check which ones are real, and comes back with a tidy answer. The answer takes four sentences. Getting there took thirty tool results, and all thirty are now sitting in your conversation.
 
-Twenty minutes later the session compacts, and the plan you agreed on before the search is the thing that got summarized away. The search output survived; your decisions did not.
+Twenty minutes later the session compacts, and the summary keeps the search output but loses the plan you agreed on before the search.
 
-<LessonLink id="B2.2" /> named this pressure and <LessonLink id="I2.1" /> measured it. Neither offered a way out beyond spending less. There is a structural way out.
+<LessonLink id="B2.2" /> named this pressure and <LessonLink id="I2.1" /> measured it, but neither offered a way out beyond spending less. Subagents move the spending into a separate window.
 
 ## The concept
 
 A subagent is a second Claude with its own context window, working on one task you hand it, returning only what it concluded.
 
-It is a delegate rather than a copy. It does not see your conversation, your earlier tool results, or the files Claude already read. You give it a task, it does the messy work somewhere else, and a summary arrives in your conversation. The forty grep hits and the dozen file reads happen in a window you never look at, and that window is discarded when the task ends.
+It is a delegate rather than a copy. It does not see your conversation, your earlier tool results, or the files Claude already read. A fork is the exception: it inherits the whole conversation, and <LessonLink id="I6.4" /> covers when Claude uses one. You give a subagent a task, it does the messy work somewhere else, and a summary arrives in your conversation. The forty grep hits and the dozen file reads happen in a window you never look at, and that window is discarded when the task ends.
 
 The asymmetry between what goes in and what comes back is where the saving comes from. A subagent takes a paragraph and can return a paragraph, having burned a hundred thousand tokens in between that you never pay for in your own window.
 
@@ -34,14 +34,14 @@ The asymmetry between what goes in and what comes back is where the saving comes
 
 ### What the subagent starts with
 
-A fresh window, not a copy of yours. Its starting context holds:
+Its starting context holds:
 
 | Loaded | Detail |
 |---|---|
 | System prompt | the agent's own prompt plus environment details, not Claude Code's full system prompt |
 | Task message | the delegation prompt Claude writes when handing off |
 | `CLAUDE.md` | every level of the hierarchy the main conversation loads |
-| Git status | a snapshot from the start of the parent session |
+| Git status | a snapshot taken when the subagent starts |
 | Preloaded skills | full content of any skill the agent definition names |
 
 Explore and Plan are the exceptions: they skip `CLAUDE.md` and git status to stay fast and cheap. The main conversation reads their results with full `CLAUDE.md` context, so project rules usually still apply to what happens with the findings. When a rule has to reach the subagent itself, put it in the request: "search the API layer, ignore `vendor/`."
@@ -50,11 +50,9 @@ Three things never cross the boundary. Your output style does not shape a subage
 
 ### What comes back
 
-The final report, and nothing else.
+Only the final report reaches your conversation. Tool calls, file contents, intermediate reasoning, and false starts stay in the subagent's transcript, which is a separate file on disk under `~/.claude/projects/`. Those transcripts survive your main conversation compacting, since they were never in it.
 
-Tool calls, file contents, intermediate reasoning, and false starts stay in the subagent's transcript, which is a separate file on disk under `~/.claude/projects/`. Those transcripts survive your main conversation compacting, since they were never in it.
-
-Claude Code scans that final report before Claude reads it. A subagent may have read files, web pages, or command output nobody reviewed, and text from those sources can carry instructions aimed at your conversation. The scan does not remove or reword anything; it defuses text imitating Claude Code's own output and flags reports that mention permission settings. It is a tripwire rather than a filter, which is why restricting what a subagent can reach still matters.
+Claude Code scans that final report before Claude reads it. A subagent may have read files, web pages, or command output nobody reviewed, and text from those sources can carry instructions aimed at your conversation. The scan does not remove or reword anything; it defuses text imitating Claude Code's own output and flags reports that mention permission settings. Because the scan blocks nothing, limit what a subagent can reach in the first place.
 
 ### The built-in subagents
 
@@ -93,7 +91,7 @@ Read src/legacy/shim.ts         → 180 lines
 Grep "formatLegacyDate" --type test → 12 matches
 ```
 
-Then four sentences of conclusion. Run `/context` afterwards and the conversation-messages bar has grown by several thousand lines of file content you will never read, ask about, or reference again. It stays there, competing with your actual work, until compaction removes something.
+Then four sentences of conclusion. Run `/context` afterwards and the conversation-messages bar has grown by several thousand lines of file content you will not look at again. It stays there, competing with your actual work, until compaction removes something.
 
 ### With delegation
 
@@ -125,7 +123,7 @@ Both runs answer the question. The difference shows up an hour later, when one s
 
 - **You delegate a small task and wait longer than doing it yourself.** A subagent starts cold and spends its first turns gathering context you already had. For a single file read, delegation is pure overhead.
 
-- **You fan out five subagents and your context fills anyway.** Every report returns to your window. Five detailed reports is a real cost, and asking each agent for a summary rather than a full account is the difference between delegation saving context and merely relocating it.
+- **You fan out five subagents and your context fills anyway.** Every report returns to your window. Five detailed reports is a real cost, so ask each agent for a summary rather than a full account.
 
 - **You expect the subagent to know your output style or your preferences.** It runs its own system prompt. Formatting instructions live in the request or in the agent's definition.
 
@@ -147,7 +145,7 @@ Both runs answer the question. The difference shows up an hour later, when one s
 Both. Claude delegates automatically when a task matches a subagent's description, which is why searches often go to Explore without you saying anything. Naming a subagent in your prompt makes it likely; <LessonLink id="I6.3" /> covers the full range from a suggestion to a guarantee.
 
 **Can I watch a subagent while it works?**
-Yes. Subagents run in the background, appearing in a panel below your prompt where you can open a transcript and follow along. In an interactive terminal Claude cannot pull one into the foreground to block on it; it can only do that in `-p` runs and the SDK.
+Yes. Subagents run in the background, appearing in a panel below your prompt where you can open a transcript and follow along. In an interactive terminal Claude cannot pull one into the foreground to block on it unless you turn fork mode off by setting `CLAUDE_CODE_FORK_SUBAGENT` to `0`; in `-p` runs and the SDK it can do that without the change.
 
 **Does a subagent cost extra tokens?**
 It spends tokens in its own window, and those are billed. What it saves is your context, which is a different resource. A delegated search may cost more tokens in total and still be the cheaper choice, because the tokens it spends leave when it does while the ones it saves would have stayed all session.
@@ -162,4 +160,4 @@ Ask for it and Claude can resume the same subagent, which still holds its full t
 
 <LessonLink id="I6.2" /> builds your own: a code reviewer with a restricted tool set that can read but not write, which is <LessonLink id="I2.1" />'s context argument and a least-privilege argument arriving at the same design.
 
-<LessonLink id="I6.4" /> answers the question this lesson deliberately left open. Delegation is a context tool rather than a virtue, and some tasks get worse when you hand them off.
+<LessonLink id="I6.4" /> answers the question this lesson deliberately left open: some tasks get worse when you hand them off.

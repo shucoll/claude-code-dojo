@@ -21,7 +21,7 @@ export const permissionRuleShapes: ChartDef = {
       items: [
         { id: 'edit-src', title: 'Edit(src/**)', tone: 'blue', lines: ['Edit anything under src/'] },
         { id: 'read-env', title: 'Read(.env)', tone: 'blue', lines: ['A bare name matches at any depth'] },
-        { id: 'edit-docs', title: 'Edit(/docs/**)', tone: 'blue', lines: ['A single / anchors to the project root'] },
+        { id: 'edit-docs', title: 'Edit(/docs/**)', tone: 'blue', lines: ['In project settings, / anchors to the project root'] },
         { id: 'read-abs', title: 'Read(//**/.env)', tone: 'blue', lines: ['// is a real filesystem-absolute path'] },
       ],
       caption: 'gitignore syntax, not regex: * spans one path segment, ** crosses directories.',

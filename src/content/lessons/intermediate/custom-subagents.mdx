@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I6.1"]
 references: ["I1.2", "I1.4", "I3.1", "I5.1"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents"]
@@ -24,7 +24,7 @@ The built-in subagents from <LessonLink id="I6.1" /> gave you isolation. They di
 
 A custom subagent is a markdown file: YAML frontmatter that configures the delegate, and a body that becomes its system prompt.
 
-The file is a job description. The frontmatter says what the worker is allowed to touch, which model it thinks with, and when to call it in. The body says how to do the job. Once written, "review my changes" reaches a specialist with your standards preloaded and a tool set that makes the wrong outcome impossible rather than unlikely.
+The file is a job description. The frontmatter says what the worker is allowed to touch, which model it thinks with, and when to call it in. The body says how to do the job. Once written, "review my changes" reaches a specialist with your standards preloaded and a tool list that makes the wrong outcome impossible rather than unlikely.
 
 ## How it works
 
@@ -60,9 +60,9 @@ You are a senior code reviewer. Report findings by priority and
 never modify files.
 ```
 
-`/agents` no longer opens a creation wizard; running it prints a reminder to ask Claude or edit the directory directly. Asking Claude tends to be faster anyway, since it writes the frontmatter and you correct it.
+`/agents` does not open a creation wizard; running it prints a reminder to ask Claude or edit the directory directly. Asking Claude tends to be faster anyway, since it writes the frontmatter and you correct it.
 
-Only `name` and `description` are required. `description` is load-bearing beyond documentation: Claude reads it to decide when to delegate, so "reviews code" invites nothing and "use proactively after writing or modifying code" invites a lot.
+Only `name` and `description` are required. Claude reads `description` to decide when to delegate, so "reviews code" invites nothing and "use proactively after writing or modifying code" invites a lot.
 
 ### The frontmatter worth knowing now
 
@@ -99,7 +99,7 @@ Both fields accept server-level MCP patterns. `mcp__github` or `mcp__github__*` 
 
 A restriction that names nothing real fails loudly: if no entry in `tools` resolves, the subagent refuses to launch and reports the entries it could not match, rather than starting with an empty tool belt and returning something confusing.
 
-A few tools depend on the main conversation's UI and never reach a subagent even when listed: `AskUserQuestion`, `EnterPlanMode`, `ScheduleWakeup`, `WaitForMcpServers`, and `ExitPlanMode` unless the agent's `permissionMode` is `plan`. A delegate cannot stop and ask you a question, which is worth knowing when you write its prompt: give it a rule for ambiguity rather than expecting it to check in.
+A few tools depend on the main conversation's UI and never reach a subagent even when listed: `AskUserQuestion`, `EnterPlanMode`, `ScheduleWakeup`, `WaitForMcpServers`, and `ExitPlanMode` unless the agent's `permissionMode` is `plan`. A delegate cannot stop and ask you a question, so its prompt needs a rule for ambiguity.
 
 ### Choosing a model
 
@@ -123,7 +123,7 @@ skills:
   - error-handling-patterns
 ```
 
-This is <LessonLink id="I3.1" />'s procedures baked into a worker rather than discovered mid-task. The subagent starts already knowing your conventions instead of spending turns finding out.
+This is <LessonLink id="I3.1" />'s procedures baked into a worker. The subagent starts already knowing your conventions instead of spending turns finding out.
 
 It controls preloading, not access. Without the field the subagent can still discover and invoke project, user, and plugin skills through the Skill tool. To stop that, drop `Skill` from `tools` or add it to `disallowedTools`.
 
@@ -160,7 +160,7 @@ memory: project
 
 `project` is the recommended default, since it makes what the agent learns shareable through version control. With memory enabled the agent's system prompt gains instructions for reading and writing that directory plus the opening stretch of its `MEMORY.md`, and Read, Write, and Edit turn on automatically so it can maintain its own notes.
 
-That last part deserves a second look on a read-only agent. Memory grants write access to the memory directory's tooling, so an agent you built to never touch your code now holds Write and Edit. Worth accepting deliberately rather than discovering.
+On a read-only agent, that last part hands back the tools you removed: an agent you built to never touch your code now holds Write and Edit.
 
 Memory works when the agent is told to use it. Put the instruction in the body:
 
@@ -181,7 +181,6 @@ name: code-reviewer
 description: Expert code review specialist. Reviews changes for quality, security, and maintainability. Use proactively immediately after writing or modifying code.
 tools: Read, Grep, Glob, Bash
 model: inherit
-memory: project
 ---
 
 You are a senior code reviewer for this codebase.
@@ -189,8 +188,7 @@ You are a senior code reviewer for this codebase.
 When invoked:
 1. Run `git diff` to see what changed
 2. Focus only on modified files
-3. Check your memory for issues this team has hit before
-4. Begin the review immediately, without asking what to look at
+3. Begin the review immediately, without asking what to look at
 
 Review for:
 - Error handling on every path that can fail
@@ -203,11 +201,9 @@ Report findings in three groups: Critical (must fix), Warnings
 (should fix), Suggestions (consider). Give a specific fix for each.
 
 You do not modify files. If a fix is obvious, describe it.
-
-After the review, add any recurring pattern you noticed to your memory.
 ```
 
-Every line of frontmatter is doing work. `tools` has no Write or Edit, so "you do not modify files" is enforced rather than requested. `model: inherit` keeps review judgment on whatever you chose for the session. `memory: project` lets the reviewer accumulate the team's recurring mistakes, committed alongside the agent that learns them. The `description` says "proactively" and "immediately after writing code," which is what gets it invoked without you asking.
+`tools` has no Write or Edit, so "you do not modify files" is enforced rather than requested. `model: inherit` keeps review judgment on whatever you chose for the session. There is no `memory` line, since memory would switch Write and Edit back on. The `description` says "proactively" and "immediately after writing code," which is what gets it invoked without you asking.
 
 Make some changes, then:
 
@@ -215,7 +211,7 @@ Make some changes, then:
 @"code-reviewer (agent)" review my changes
 ```
 
-What returns is the review, not the diff it read:
+What returns is the review:
 
 ```text
 ● code-reviewer(review my changes)
@@ -232,8 +228,6 @@ What returns is the review, not the diff it read:
 
   Suggestions (1)
   - `doWork` in src/lib/queue.ts:12 says nothing about what it does.
-
-  Memory updated: unhandled rejection on refresh paths, third occurrence.
 ```
 
 The eleven tool calls and the diff never entered your window.
@@ -264,7 +258,7 @@ report that instead of changing it.
 Report what you added, what you deliberately did not cover, and why.
 ```
 
-Writing tests means writing files, so Write and Edit are in. "Do not modify the code under test" cannot be enforced by tool restriction, since the same Edit tool serves both, so it lives in the prompt where it is a strong instruction rather than a guarantee. Worth being honest about the difference: the reviewer cannot edit your code, while the test writer is asked not to.
+Writing tests means writing files, so Write and Edit are in. "Do not modify the code under test" cannot be enforced by tool restriction, since the same Edit tool serves both, so it lives in the prompt where it is a strong instruction rather than a guarantee. The reviewer cannot edit your code; the test writer is asked not to.
 
 ```prompt
 @"test-writer (agent)" add tests for the new session refresh logic
@@ -274,9 +268,9 @@ Writing tests means writing files, so Write and Edit are in. "Do not modify the 
 
 ## Use-case scenarios
 
-**You want reviews that get stricter over time.** Give the reviewer `memory: project` and tell it to record recurring issues. Six weeks in, it opens each review already knowing the three mistakes your team keeps making, and that knowledge is in version control rather than in one person's head.
+**You want reviews that get stricter over time.** Give the reviewer `memory: project`, accepting the Write and Edit that come with it, and tell it to record recurring issues. Six weeks in, it opens each review already knowing the three mistakes your team keeps making, and that knowledge is in version control.
 
-**You want a delegate that cannot touch production.** Build a read-only investigator: `tools: Read, Grep, Glob` and nothing else. No Bash means no `curl`, no deploy script, no `psql`. Isolation limits what it costs you; the tool list limits what it can do.
+**You want a delegate that cannot touch production.** Build a read-only investigator: `tools: Read, Grep, Glob` and nothing else. No Bash means no `curl`, no deploy script, no `psql`.
 
 **You want browser testing without browser tools in your main window.** Define the Playwright server inline under `mcpServers` in a `browser-tester` agent. Your main session's tool belt stays unchanged, which is the cost control from <LessonLink id="I5.3" /> applied per delegate.
 
@@ -307,13 +301,13 @@ Writing tests means writing files, so Write and Edit are in. "Do not modify the 
 
 - **The agent edits files you told it not to touch.** Instructions in the body are guidance; the tool list is enforcement. If it must not write, remove Write and Edit rather than asking twice.
 
-- **You add a tool to your session and the subagent silently gains it.** That is `disallowedTools` inheriting new capability by design. Allowlist anything you want held still.
+- **You add a tool to your session and the subagent silently gains it.** Allowlist anything you want held still.
 
 - **A new agent file does nothing until you restart.** The directory did not exist when the session started, so the watcher is not covering it. Subsequent edits to that file are picked up live.
 
 - **Two agent files share a `name`.** Only one loads, chosen by filesystem read order rather than by anything you can predict. `/doctor` reports duplicates in the same directory. Identity comes from `name`, so renaming the file does not fix it.
 
-- **You preload a skill and assume you have restricted the agent to it.** `skills` controls what starts loaded, not what can be reached. Restrict through `tools` or `disallowedTools`.
+- **You preload a skill and assume you have restricted the agent to it.** The Skill tool is still there. Restrict through `tools` or `disallowedTools`.
 
 ## Try It
 
@@ -324,7 +318,7 @@ Writing tests means writing files, so Write and Edit are in. "Do not modify the 
 3. Make a small change with an obvious flaw: a caught error that is swallowed, or a value logged that should not be.
 4. Invoke it: `@"code-reviewer (agent)" review my changes`.
 5. Read the report, then run `/context` again and compare. The report is in your window; the diff and the file reads are not.
-6. Ask it to fix what it found. It cannot, and the refusal comes from the tool list rather than from politeness.
+6. Ask it to fix what it found. It cannot, because its `tools` field has no Write or Edit.
 7. Change `model: inherit` to `model: haiku` and rerun without restarting. Compare the review's depth, and decide which the job deserves.
 
 **Success looks like:** a reviewer you did not have to instruct, a context window that barely moved, and a delegate that is structurally unable to edit your code.

@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-15"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B2.1"]
 teaches: ["context-window", "compaction", "usage-check"]
 references: ["B1.1"]
@@ -22,22 +22,20 @@ interactive:
 
 An hour into a good session, something changes. Claude re-reads a file it opened earlier. It forgets the naming convention you spelled out at the start. It suggests a fix you already rejected. Nothing broke, and Claude did not get worse at coding.
 
-It ran out of room to remember.
-
-This is the one mental model everything else in this course hangs off. Once you have it, the difference between `/clear` and `/compact`, why subagents exist, why `CLAUDE.md` is worth writing, and why long sessions degrade all stop being separate facts and become the same fact seen from different angles.
+It ran out of room to remember. That one limit explains the difference between `/clear` and `/compact`, why subagents exist, why `CLAUDE.md` is worth writing, and why long sessions degrade.
 
 ## The concept
 
 The **context window** is the session's working memory: everything Claude can see at this moment, all at once.
 
-It is not a database and it is not storage. Think of it as a desk. Everything Claude needs has to be on the desk: your instructions, the files it opened, the output of the tests it ran, the conversation so far. Claude takes in the whole desk in an instant, but the desk is a fixed size. When it fills, something comes off.
+Think of it as a desk. Everything Claude needs has to be on the desk: your instructions, the files it opened, the output of the tests it ran, the conversation so far. Claude takes in the whole desk in an instant, but the desk is a fixed size. When it fills, something comes off.
 
 That size is measured in **tokens**, each roughly three quarters of a word. A 200,000-token window is the baseline, and newer models run up to one million, several of them by default. Either way it is finite, and everything competes for the same surface.
 
 Two consequences follow:
 
-- **Everything Claude does costs space.** Reading is not free.
-- **Nothing carries between sessions on its own.** Every new session starts with an empty desk. Only things that reload, like `CLAUDE.md`, come back.
+- Everything Claude does costs space, reading included.
+- Nothing carries between sessions on its own. Every new session starts with an empty desk. Only things that reload, like `CLAUDE.md`, come back.
 
 ## How it works
 
@@ -45,7 +43,7 @@ Four things share the window, and they are wildly unequal in size.
 
 **Startup** loads before you type: Claude's system prompt, your environment and git state, your `CLAUDE.md` files, saved memory, and the names of available skills and MCP tools. It is small, and you never see it.
 
-**Your conversation** is every prompt you send and every reply Claude writes. Individually cheap, and it never shrinks on its own.
+**Your conversation** is every prompt you send and every reply Claude writes. Each message is cheap, but the conversation never shrinks on its own.
 
 **File reads** are usually the largest consumer, and the most surprising. When Claude reads a file it loads the *entire* file, not just the part it needed, and that file stays in the window for the rest of the session. Reading a dozen files to understand one feature can half-fill a window before you change a single line.
 
@@ -53,14 +51,14 @@ Four things share the window, and they are wildly unequal in size.
 
 ### When the window fills
 
-Claude does not simply stop. It **compacts**, in two stages, and the order matters:
+Claude does not simply stop. It **compacts**, in two stages:
 
-1. It clears older **tool output** first, since it is bulky and rarely worth keeping once Claude has acted on it.
-2. If that is not enough, it **summarizes the conversation**, replacing it with a structured account of what you asked for, what was decided, and the code that mattered.
+1. It clears older tool output first, since it is bulky and rarely worth keeping once Claude has acted on it.
+2. If that is not enough, it summarizes the conversation, replacing it with a structured account of what you asked for, what was decided, and the code that mattered.
 
-Startup then reloads automatically, and Claude Code re-reads up to five of the files it touched most recently. This is why a session recovers so much room the moment compaction fires, and it is the mechanical answer to "why did Claude forget?"
+Startup then reloads automatically, and Claude Code re-reads up to five of the files it touched most recently. That is why a session recovers so much room the moment compaction fires, and why Claude "forgets" detail that did not make the summary.
 
-What survives: your requests, the key decisions, important code snippets, and everything in startup. What is lost: most raw file contents, tool output, exact wording, and **detailed instructions you gave early in the conversation**. That last one is the trap. If a rule matters, a message from an hour ago is the wrong place to keep it. `CLAUDE.md` reloads every time; your conversation does not.
+What survives: your requests, the key decisions, important code snippets, and everything in startup. What is lost: most raw file contents, tool output, exact wording, and detailed instructions you gave early in the conversation. If a rule matters, a message from an hour ago is the wrong place to keep it. `CLAUDE.md` reloads every time; your conversation does not.
 
 You can steer compaction rather than just suffer it. Run `/compact focus on the API changes` to bias the summary, or put a line in `CLAUDE.md` such as "when compacting, always preserve the list of modified files and any test commands" to name what must always be kept.
 
@@ -70,7 +68,7 @@ Here is a window partway through a real session, and the same window immediately
 
 ## Watching a session fill
 
-You do not have to guess how full you are. `/context` shows exactly what is occupying the window right now, broken down by category.
+You do not have to guess how full you are. `/context` shows what is occupying the window right now, broken down by category.
 
 The habit worth building is checking *before* it becomes a problem rather than after Claude starts acting confused. Start a session in the repo you cloned in <LessonLink id="B2.1" /> and check immediately:
 
@@ -92,7 +90,7 @@ Then check again:
 /context
 ```
 
-The jump is almost entirely file reads. That one question, which felt cheap to ask, was the most expensive thing you did. Ask a narrow question instead, like "what does `@src/index.js` export?", and the cost barely moves. That contrast is the skill: **how you phrase a request determines what it costs.**
+The jump is almost entirely file reads. That one question, which felt cheap to ask, was the most expensive thing you did. Ask a narrow question instead, like "what does `@src/index.js` export?", and the cost barely moves. How you phrase a request determines what it costs.
 
 > **Try it.** In your cloned repo from <LessonLink id="B2.1" />, run `/context` on a fresh session and note the percentage used. Ask Claude to explain the codebase, then run `/context` again. **Success criteria:** you can say which category grew the most, and roughly by how much. Nothing here writes to disk, so it is safe to run anywhere.
 
@@ -101,11 +99,11 @@ The jump is almost entirely file reads. That one question, which felt cheap to a
 You will usually feel these before you check the number. Any of them is a cue to run `/context`.
 
 - **Claude re-reads a file it already read.** The earlier read was cleared.
-- **It forgets a rule you stated early on.** The conversation was summarized and your instruction did not make the cut. That rule belongs in `CLAUDE.md`.
+- **It forgets a rule you stated early on.** The conversation was summarized and your instruction did not make the cut.
 - **It repeats a suggestion you already rejected.** Your rejection was in the part that got compressed.
-- **Answers get vaguer, or it loses the thread of a multi-step task.** It is working from a summary, not the detail.
-- **A "Conversation compacted" message appears.** Less a symptom than the event itself. If it fires mid-task, expect to restate where you were.
-- **Compaction fires over and over.** A single file or command output is so large that the window refills immediately after each summary. Claude gives up after a few attempts rather than looping forever. Stop feeding it the giant thing.
+- **Answers get vaguer, or it loses the thread of a multi-step task.** It is working from a summary that dropped the detail.
+- **A "Conversation compacted" message appears.** The message means compaction just ran. If it fires mid-task, expect to restate where you were.
+- **Compaction fires over and over.** A single file or command output is so large that the window refills immediately after each summary. Claude Code stops auto-compacting after a few attempts rather than looping forever. Stop feeding it the giant thing.
 
 The fix is rarely "start over." It is usually to finish the current milestone, write down where you are, then reset deliberately. Which reset to reach for is the subject of <LessonLink id="B2.4" />.
 
@@ -117,14 +115,14 @@ The fix is rarely "start over." It is usually to finish the current milestone, w
 
 **Why does Claude "forget"?** Because the window filled and compaction ran. It cleared tool output, then replaced the conversation with a summary. Detail from early in the session, including instructions you gave, may not have survived.
 
-**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads, plus a re-read of up to five recently touched files. Lost are most raw file contents, tool output, exact wording, and early instructions. One quiet exception: skill descriptions do not reload, so only skills you actually invoked are preserved.
+**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads, plus a re-read of up to five recently touched files. Lost are most raw file contents, tool output, exact wording, and early instructions.
 
 **How do I check how full my session is?** Run `/context`. It breaks the window down by category, so you can see what is really eating it, and it flags context-heavy tools and bloated memory files.
 
-**Can I just get a bigger window?** Often you already have one: newer models run up to a million tokens, several by default. It buys headroom, not a different mental model. A bigger desk still fills, and everything above still applies.
+**Can I just get a bigger window?** Often you already have one: newer models run up to a million tokens, several by default. It buys headroom. A bigger desk still fills, and everything above still applies.
 
 **How do I stop a rule from being forgotten?** Put it in `CLAUDE.md`. It reloads after every compaction and at the start of every session, which conversation history does not. That is the subject of the next module.
 
 ## Where next
 
-Nearly everything from here refers back to this lesson. <LessonLink id="B2.3" /> introduces `/context` alongside the handful of other commands you will reach for daily. <LessonLink id="B2.4" /> resolves the beginner's canonical confusion, `/clear` versus `/compact` versus a fresh session, entirely in terms of what each one does to the window you just learned to read. Later, when you meet subagents, `CLAUDE.md`, and prompt caching, each turns out to be a different answer to the same question: how do you keep the desk clear enough to think on?
+<LessonLink id="B2.3" /> introduces `/context` alongside the handful of other commands you will reach for daily. <LessonLink id="B2.4" /> compares `/clear`, `/compact`, and a fresh session by what each one does to the context window. Later lessons on subagents, `CLAUDE.md`, and prompt caching each deal with what sits in this window.

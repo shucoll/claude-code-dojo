@@ -6,7 +6,7 @@ type: "milestone"
 order: 6
 estimatedMinutes: 60
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-27"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A7.5"]
 teaches: ["sdk-deployment", "credential-proxy-in-practice", "exit-artifacts"]
 references: ["A6.1", "A6.2", "A6.3", "A7.5"]
@@ -508,7 +508,7 @@ The proxy is Caddy, configured in one file. Save `triage/Caddyfile`:
 }
 ```
 
-It has three jobs, and each one is a row of the boundaries table:
+The two ports enforce the credential rows of the boundaries table, and one setting keeps model responses streaming:
 
 - Port 8080 is the agent's only way out. Model requests get the real API key in place of the placeholder the agent sends, `POST /github/issues` is rewritten to your repository's issues endpoint with the GitHub token attached, and `/otel/*` goes to your collector. Every other request gets a 403, so a prompt-injected agent asking for any other URL is refused and logged.
 - `flush_interval -1` passes the model's streamed responses through as they arrive, without buffering them.

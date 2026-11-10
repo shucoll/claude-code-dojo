@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 13
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I1.1"]
 teaches: ["permission-rules", "allow-deny-ask", "rule-syntax"]
 references: ["B1.3", "B3.3"]
@@ -32,9 +32,7 @@ A permission rule is one line in a list. There are three lists, named for what t
 - **`deny`**: never run, block it outright.
 - **`ask`**: always prompt, even when something else would have auto-approved.
 
-Every tool call is checked against all three, in a fixed order: **deny first, then ask, then allow.** The first list that matches decides the outcome, and it stops there. So deny beats ask beats allow, always. Rule *specificity* does not change this: a broad `deny` beats a precise `allow`, because the bucket it lives in is checked first.
-
-That single sentence, **deny > ask > allow**, explains almost every permission surprise you will ever have.
+Claude Code checks every tool call against all three lists in a fixed order: deny first, then ask, then allow. The first list that matches decides the outcome, and it stops there. So deny beats ask beats allow, always. Rule *specificity* does not change this: a broad `deny` beats a precise `allow`, because Claude Code checks the deny list first.
 
 Rules live in your settings files and you manage them with the `/permissions` command, which lists every active rule and the file it came from. There are three files, and <LessonLink id="I1.3">the next lesson</LessonLink> maps them properly; for now the short version is enough:
 
@@ -56,9 +54,9 @@ A rule is either a bare tool name or `Tool(specifier)`. The bare name matches ev
 - `Bash(npm run *)` matches any command starting with `npm run `.
 - `Bash(* --version)` matches any command ending in ` --version`.
 
-One detail carries most of the confusion: **the space before `*` enforces a word boundary.** `Bash(ls *)` matches `ls -la` but not `lsof`; `Bash(ls*)` matches both. Claude Code is also shell-aware, so a rule has to match *each* subcommand of a compound command independently: `Bash(safe-cmd *)` does not authorize `safe-cmd && rm -rf .`. Read-only commands (`ls`, `cat`, `git status`, and the rest of the built-in set) never need a rule; they never prompt in the first place.
+The space before `*` enforces a word boundary: `Bash(ls *)` matches `ls -la` but not `lsof`, and `Bash(ls*)` matches both. Claude Code is also shell-aware, so a rule has to match *each* subcommand of a compound command independently: `Bash(safe-cmd *)` does not authorize `safe-cmd && rm -rf .`. Read-only commands (`ls`, `cat`, `git status`, and the rest of the built-in set) never need a rule; they never prompt in the first place.
 
-**Reads and writes files (Read, Edit).** Paths follow [gitignore](https://git-scm.com/docs/gitignore) syntax, not regex. `Edit` rules cover every file-editing tool; `Read` rules cover Grep, Glob, and `@`-mentions too. The anchor is the part people miss:
+**Reads and writes files (Read, Edit).** Paths follow gitignore syntax, not regex. `Edit` rules cover every file-editing tool; `Read` rules cover Grep, Glob, and `@`-mentions too. A path's prefix decides where it anchors:
 
 - `Read(.env)` matches any `.env` at or below the current directory (a bare name matches at any depth).
 - `Edit(src/**)` matches everything under `src/`.
@@ -74,11 +72,11 @@ One detail carries most of the confusion: **the space before `*` enforces a word
 
 ### How rules meet modes
 
-Permission *modes* from <LessonLink id="B3.3" /> set the broad posture for a session; rules are the fine-grained layer underneath. The two combine along one clean line: **deny and ask rules always hold; modes and allow rules can only ever loosen, never override them.** `acceptEdits` auto-accepts edits, but a `deny` on a path still blocks it. `bypassPermissions` skips prompts, but an explicit `ask` rule still stops to ask (and `rm -rf /` still trips the circuit breaker). Think of modes as how hard you are leaning on the gas, and deny/ask rules as walls that do not move.
+Permission *modes* from <LessonLink id="B3.3" /> set the broad posture for a session; rules are the fine-grained layer underneath. The two combine along one clean line: deny and ask rules always hold; modes and allow rules can only ever loosen, never override them. `acceptEdits` auto-accepts edits, but a `deny` on a path still blocks it. `bypassPermissions` skips prompts, but an explicit `ask` rule still stops to ask (and `rm -rf /` still trips the circuit breaker).
 
 ## Walkthrough: a starter policy
 
-Here is a policy worth typing into a real project. It allows your everyday commands, keeps one risky-but-routine action on a prompt, and hard-blocks the things you never want touched.
+The policy below allows your everyday commands, keeps one risky-but-routine action on a prompt, and hard-blocks the things you never want touched.
 
 ```json
 {
@@ -102,23 +100,23 @@ Here is a policy worth typing into a real project. It allows your everyday comma
 
 Read it top to bottom, but remember Claude Code reads it deny-first:
 
-- The **deny** list wins every tie. `Read(.env)` and `Read(.env.*)` stop Claude reading your secrets even though nothing here allows it, which makes the intent explicit and survives someone later adding a broad `Read` allow. `Bash(rm -rf *)` blocks the obvious recursive delete.
-- The **ask** list is for actions that are fine most of the time but that you want to see. `git push *` leaves your machine and rewrites a shared branch, so it prompts every time, and because ask beats allow, it keeps prompting even if you later allow `Bash(git *)` wholesale.
-- The **allow** list clears the daily friction: your test command, your run scripts, and edits inside `src/`.
+- The deny list wins every tie. `Read(.env)` and `Read(.env.*)` stop Claude reading your secrets. Reads inside the project never prompt, so without these rules Claude could open `.env` silently, and a deny also survives someone later adding a broad `Read` allow. `Bash(rm -rf *)` blocks the obvious recursive delete.
+- The ask list is for actions that are fine most of the time but that you want to see. `git push *` leaves your machine and rewrites a shared branch, so it prompts every time, and because ask beats allow, it keeps prompting even if you later allow `Bash(git *)` wholesale.
+- The allow list clears the daily friction: your test command, your run scripts, and edits inside `src/`.
 
 You do not have to hand-write this. The fastest way to grow a policy is to click **"Yes, and don't ask again"** on a prompt you trust; Claude Code writes the matching rule into `.claude/settings.local.json` for you, a command prefix for Bash or a domain for WebFetch. File edits are the exception: that approval lasts until the session ends instead of becoming a saved rule. Run `/permissions` any time to see what has accumulated and from which file, and to add or remove rules directly.
 
 ## Use-case scenarios
 
 - **You approve `npm test` every single session.** Add `Bash(npm test)` to `allow`. It runs silently from then on, in that project.
-- **You never want Claude reading credentials.** Add `Read(.env)` and `Read(.env.*)` to `deny`. Reliable against honest mistakes, though not a vault (see below).
-- **Edits in `src/` are fine, but migrations are sacred.** `allow` `Edit(src/**)` and `deny` `Edit(**/migrations/**)`. The deny wins wherever the two overlap, so you get freedom in `src/` and a wall around migrations.
+- **You never want Claude reading credentials.** Add `Read(.env)` and `Read(.env.*)` to `deny`.
+- **Edits in `src/` are fine, but migrations are off limits.** `allow` `Edit(src/**)` and `deny` `Edit(**/migrations/**)`. The deny wins wherever the two overlap, so Claude can edit `src/` without asking but cannot edit anything under a `migrations` directory.
 - **You want Claude to fetch your framework's docs but nothing else.** Add `WebFetch(domain:docs.example.com)` to `allow`. Other domains keep prompting.
-- **Near-miss:** you add `Bash(git *)` to `allow` to stop git prompts, and now `git push` runs unattended too. The fix is not to narrow the allow, it is to add `Bash(git push *)` to `ask`. Ask beats allow, so the broad convenience stays and the one dangerous verb comes back under your eye.
+- **Near-miss:** you add `Bash(git *)` to `allow` to stop git prompts, and now `git push` runs unattended too. The fix is to add `Bash(git push *)` to `ask` and leave the allow as it is. Ask beats allow, so every other git command stays silent and `git push` prompts again.
 
 ## When to use / when not to use
 
-**Reach for a rule when** the decision is stable: a command you approve constantly, an action you always forbid, a convention your whole team should share (put those in the committed `.claude/settings.json`). Rules also cost essentially nothing: they are enforced by the Claude Code harness, not loaded into the model's context, so a large policy is free in a way a large `CLAUDE.md` is not (a distinction <LessonLink id="I1.1">the tool belt</LessonLink> hinted at and I2 makes central).
+**Reach for a rule when** the decision is stable: a command you approve constantly, an action you always forbid, a convention your whole team should share (put those in the committed `.claude/settings.json`). Rules also cost essentially nothing: they are enforced by the Claude Code harness, not loaded into the model's context, so a large policy is free in a way a large `CLAUDE.md` is not (a distinction <LessonLink id="I1.1">the tool belt</LessonLink> hinted at and <LessonLink id="I2.1">Module I2</LessonLink> makes central).
 
 **Do not reach for a rule when:**
 
@@ -128,21 +126,19 @@ You do not have to hand-write this. The fastest way to grow a policy is to click
 
 ## Pitfalls
 
-These are the rule-syntax surprises that cost people the most time.
-
-- **The space before `*`.** `Bash(ls *)` and `Bash(ls*)` are different rules: the first requires a word boundary and matches only `ls`, the second also matches `lsof`, `lsblk`, and anything else starting `ls`.
+- **The space before `*`.** Dropping it widens the rule: `Bash(ls*)` also matches `lsof`, `lsblk`, and anything else starting `ls`.
 - **It is not regex.** Paths are gitignore patterns and Bash is glob matching. A `.` is literal, `*` spans one path segment (or, in Bash, any run of characters), `**` crosses directories. Writing `Read(.*env)` expecting regex will not do what you think.
-- **`/path` is not absolute.** A single leading slash anchors to the settings source that defines the rule. `Edit(/src)` in project settings means `<project>/src`, not `<project>/.claude/src` and not `/src` on your disk. Use `//` for a true absolute path.
+- **`/path` is not absolute.** `Edit(/src)` in project settings means `<project>/src`, not `<project>/.claude/src` and not `/src` on your disk. Use `//` for a true absolute path.
 - **A Bash deny cannot carry an exception.** `deny: Bash(aws *)` blocks every `aws` call, including one that also matches `allow: Bash(aws s3 ls)`. For Bash, deny is all-or-nothing; if you need a hole, do not deny that broadly. Path rules are the exception: within one settings file, a `Read` or `Edit` deny listed after a broader one can start with `!` to carve paths back out, the way `.gitignore` does. `deny: ["Read(*.env)", "Read(!sample.env)"]` blocks every `.env` file except `sample.env`. The carve-out only reaches rules from the same source, and it cannot reopen a file inside a directory blocked as a whole.
-- **Bare name versus scoped deny behave differently.** `deny: Bash` removes Bash from Claude entirely, so it never even tries to use it. `deny: Bash(rm *)` leaves Bash available and blocks only matching calls. Denying a whole tool by name is a bigger hammer than it looks.
-- **Compound commands split.** A rule is checked against each subcommand. Approving `git status && npm test` saves a rule for `npm test`, and a `Bash(safe *)` allow never covers `safe && something-else`.
+- **Bare name versus scoped deny behave differently.** `deny: Bash` removes Bash from Claude entirely, so it never even tries to use it. `deny: Bash(rm *)` leaves Bash available and blocks only matching calls.
+- **Compound commands split.** Approving `git status && npm test` saves a rule for each subcommand that needs approval, here `npm test`, rather than one rule for the whole string.
 
 ## Why did it ask? Why didn't it?
 
-Most real-world confusion is not "how do I write a rule" but "why did Claude Code do the opposite of what I expected." A short playbook:
+When Claude Code asks, blocks, or runs something you did not expect, work through these checks in order:
 
 1. **Run `/permissions` first.** It lists every active rule *and the file each came from*. The usual culprit is a rule you forgot in another scope, especially a user-level or managed one.
-2. **Recite the order: deny > ask > allow.** If it asked despite your allow, hunt for a matching `ask` rule (or a mode). If it blocked, a `deny` matched somewhere. If it ran silently and you did not expect it, an `allow` matched, or the command is on the built-in read-only list.
+2. **Recite the order: deny > ask > allow.** If it asked despite your allow, hunt for a matching `ask` rule (or a mode). If it blocked, a `deny` matched somewhere. If it ran silently and you did not expect it, an `allow` matched, the mode approved it, or the command is on the built-in read-only list.
 3. **Remember scope precedence.** A deny at *any* level beats an allow at *any* level. A user-level or organization-managed deny will override your project's allow, and no local setting can loosen it.
 4. **Read the pattern literally.** Re-check the space-before-`*` boundary, the `/path` anchor, and glob-not-regex. Launch with `--verbose` to see the exact command string and parameters Claude actually sent, which is often not quite what you pictured.
 5. **"Why didn't it ask before `git status`?"** Because read-only commands never prompt in any mode. If you genuinely want a prompt for one, add it to `ask`.
@@ -159,7 +155,7 @@ A complex Bash command arrives at the prompt with a plain-language explanation o
 4. **Ask:** add `Bash(git status)`. Run `git status` through Claude. A command that is normally silent now stops to ask you, which shows an `ask` rule overriding the read-only default.
 5. Run `/permissions` and confirm all three rules appear, each tagged with `settings.local.json` as its source.
 
-**Success criteria:** the allow ran silently, the deny refused without a prompt, the ask forced a prompt on a normally-automatic command, and you can point to where each rule lives.
+**Success criteria:** the allow ran silently, the deny refused without a prompt, the ask forced a prompt on a normally automatic command, and you can point to where each rule lives.
 
 ## FAQ
 
@@ -167,7 +163,7 @@ A complex Bash command arrives at the prompt with a plain-language explanation o
 
 **Can a rule use a regular expression?** No. Bash rules are glob patterns and file rules are gitignore patterns. This trips up anyone expecting regex; there is no `.*` or anchors, just `*` and `**`.
 
-**I allowed a command and it still asked. Why?** Something with higher precedence matched: an `ask` rule, a `deny` rule, or a mode. Run `/permissions` and apply deny > ask > allow. Also check that your allow pattern actually matches (the space-before-`*` boundary is the usual miss).
+**I allowed a command and it still asked. Why?** Something with higher precedence matched: an `ask` rule or a mode. A matching `deny` would block the call instead of asking. Run `/permissions` and apply deny > ask > allow. Also check that your allow pattern actually matches (the space-before-`*` boundary is the usual miss).
 
 **Do permission rules cost me context?** No. They are enforced by the harness and never enter the model's context window, unlike `CLAUDE.md` instructions. You can keep a large policy at no token cost.
 
@@ -177,4 +173,4 @@ A complex Bash command arrives at the prompt with a plain-language explanation o
 
 ## Where next
 
-You have turned the per-prompt clicking from <LessonLink id="B1.3" /> into a policy, and connected the fine-grained rules to the broad permission modes from <LessonLink id="B3.3" />. The open question is *which file* each rule belongs in, and what else lives alongside them. <LessonLink id="I1.3" /> tours the whole `.claude` directory and its three scopes, so you can decide with confidence where any piece of configuration should go. Later, when you need a guarantee a rule cannot make, <LessonLink id="I4.1">Module I4's hooks</LessonLink> are where "deny" becomes truly non-negotiable.
+You have turned the per-prompt clicking from <LessonLink id="B1.3" /> into a policy, and connected the fine-grained rules to the broad permission modes from <LessonLink id="B3.3" />. The open question is *which file* each rule belongs in, and what else lives alongside them. <LessonLink id="I1.3" /> answers it with a tour of the whole `.claude` directory and its three scopes. Later, when you need a guarantee a rule cannot make, <LessonLink id="I4.1">Module I4's hooks</LessonLink> run your own script on a tool call and can block it before it runs.

@@ -82,7 +82,7 @@ export const contextWindowSimulator: ChartDef = {
           title: 'Startup, reloaded',
           percent: 5,
           tone: 'blue',
-          lines: ['Reloads automatically, minus skill descriptions'],
+          lines: ['Reloads automatically'],
         },
         {
           id: 'summary',

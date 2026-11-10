@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-18"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A1.1"]
 teaches: ["agent-view", "dispatch", "background-sessions", "supervisor"]
 references: ["I6.3"]
@@ -19,7 +19,7 @@ docsSources: ["https://code.claude.com/docs/en/agent-view"]
 
 <LessonLink id="A1.1">Worktrees</LessonLink> solved collisions. They did not solve attention.
 
-Three isolated sessions means three terminals, and you can see at most one of them at a time. One finished twenty minutes ago and has been sitting idle since. Another stopped to ask a permission question and has been waiting just as long. You find out by cycling tabs and reading scrollback. Every session you add costs you another place to look, which is the part of parallel work that stops scaling first.
+Three isolated sessions means three terminals, and you can see at most one of them at a time. One finished twenty minutes ago and has been sitting idle since. Another stopped to ask a permission question and has been waiting just as long. You find out by cycling tabs and reading scrollback. Every session you add costs you another place to look.
 
 ## The concept
 
@@ -27,7 +27,7 @@ Agent view is one screen over every background session: what each one is doing, 
 
 A background session is a full Claude Code conversation that keeps running with no terminal attached to it. You dispatch a task, it works, and you come back when the row says it needs you.
 
-Agent view is a research preview, so its interface and keyboard shortcuts can change. The sessions it manages are ordinary Claude Code sessions, so nothing you dispatch is trapped inside the feature.
+Agent view is a research preview, so its interface and keyboard shortcuts can change. The sessions it manages are ordinary Claude Code sessions, so `claude --resume` can still reach them.
 
 ## How it works
 
@@ -37,7 +37,7 @@ Agent view is a research preview, so its interface and keyboard shortcuts can ch
 claude agents
 ```
 
-Sessions are grouped by state, in the order you would triage them: pinned first, then ready for review (sessions with an open pull request), needs input, working, and completed. `Ctrl+S` switches to grouping by directory instead, and that choice persists.
+Sessions are grouped by state, in the order you would triage them: pinned first, then ready for review (sessions with an open pull request that needs review or has failing checks), needs input, working, and completed. `Ctrl+S` switches to grouping by directory instead, and that choice persists.
 
 Each row carries a name, a one-line summary, its age, and a pull request number when it has one. The summary is written by a Haiku-class model so you can read what a session is doing without opening its transcript. It refreshes from the session's own output at most once every 15 seconds without costing a model request, gets rewritten when a turn ends, and is refreshed again every few minutes during long turns. With no Haiku model configured it falls back to the session's main model.
 
@@ -66,11 +66,11 @@ claude --agent code-reviewer --bg "address the review comments on PR 1234"
 
 ### How file edits are isolated
 
-A background session starts in your working directory. Before it edits anything, it moves itself into a worktree under `.claude/worktrees/`, and from that moment the four enforcement checks from <LessonLink id="A1.1" /> apply to it and to every subagent it spawns. You configure nothing for this; it is what a dispatched session does on its own.
+A background session starts in your working directory. Before it edits anything, it moves itself into a worktree under `.claude/worktrees/`, and from that moment the four enforcement checks from <LessonLink id="A1.1" /> apply to it and to every subagent it spawns. Dispatched sessions do this by default.
 
 A session that made changes in a worktree Claude created preserves the work before it finishes. It commits without asking, pushes when the repository has a remote, and opens a draft pull request when the task calls for one, which is where the `#1234` on the row comes from. It never pushes to `main` or `master`, never force-pushes, and never merges. If your `CLAUDE.md` says you handle git yourself, that wins and the session leaves the commit to you.
 
-Isolation is skipped in four cases: the session is already inside a linked worktree, the file being edited is already inside one, the working directory is not a git repository and no `WorktreeCreate` hook exists, or the write lands outside the working directory. Where isolation is impractical for a whole repository, turn it off in `.claude/settings.json`:
+Isolation is skipped in five cases: the session is one you moved to the background yourself with `/bg` or `←`, the session is already inside a linked worktree, the file being edited is already inside one, the working directory is not a git repository and no `WorktreeCreate` hook exists, or the write lands outside the working directory. Where isolation is impractical for a whole repository, turn it off in `.claude/settings.json`:
 
 ```json
 {
@@ -97,8 +97,6 @@ The supervisor is the background service that hosts these sessions so they keep 
 
 ### Names that are not each other
 
-Four commands sound like they do this lesson's job. Three of them do not.
-
 | You type | What it does |
 |---|---|
 | `claude agents` | opens agent view, the subject of this lesson |
@@ -110,9 +108,9 @@ Four commands sound like they do this lesson's job. Three of them do not.
 
 Pressing `←` on an empty prompt backgrounds the session you are in and opens agent view with that row selected.
 
-Work already in flight mostly comes along: background shell commands, backgrounded subagents, dynamic workflows, and scheduled tasks you created with `/loop` all keep running. So do your configuration flags, directories added with `/add-dir`, permission mode, model and effort changes, and a name you set with `/rename`.
+Work already in flight mostly comes along: background shell commands, backgrounded subagents, and scheduled tasks you created with `/loop` all keep running. So do your configuration flags, directories added with `/add-dir`, permission mode, model and effort changes, and a name you set with `/rename`.
 
-Two things stop. Running monitors do not carry over, and neither do shell commands that subagents started.
+A running dynamic workflow does not continue on its own: ask Claude in the background session to relaunch it. Running monitors stop, and so does a backgrounded subagent that owns one.
 
 ## Walkthrough
 
@@ -143,9 +141,9 @@ Update the README install section to match the current package scripts.
 The view fills in as the sessions work:
 
 ```text
-  WORKING
+  Working
   ✽ flaky-test          reading SettingsChangeDetector.test.ts, reproducing the failure   2m
-  ✽ eager-silver-moth   comparing README install steps against package.json scripts       40s
+  ✽ readme install      comparing README install steps against package.json scripts       40s
 ```
 
 Press `Space` on a row to peek at what it is doing without attaching. Press `Enter` to attach properly, and `←` to drop back to the view.
@@ -154,11 +152,11 @@ A session that hits a permission prompt moves itself to **Needs input** and wait
 
 ### Collect the results
 
-When the first finishes, its row moves to **Completed**, and if it changed files the row carries a pull request number:
+When the first finishes, its row moves to **Completed**, and if the task called for a pull request the row carries its number:
 
 ```text
-  READY FOR REVIEW
-  ✓ flaky-test          opened a draft PR fixing a race in the debounce timer   #218   14m
+  Completed
+  ✻ flaky-test          opened a draft PR fixing a race in the debounce timer   #218   14m
 ```
 
 The work is on a branch in its own worktree, committed and pushed, which is the commit-and-push behavior above. Nothing landed in your checkout while you were reading.
@@ -179,7 +177,7 @@ Close agent view entirely and run it again. The sessions are still there, becaus
 
 **The same conversation taken two directions.** `/fork` copies the session and backgrounds the copy. You keep exploring in the foreground while the copy writes up the version you already agreed on.
 
-**A dispatched session that needs your local uncommitted files.** This is the near-miss. Dispatched sessions isolate into a fresh worktree before editing, so your uncommitted work is not there. Either commit first, or set `worktree.bgIsolation` to `"none"` for that repository and accept that the session now edits your working copy directly.
+**A dispatched session that needs your local uncommitted files.** Dispatched sessions isolate into a fresh worktree before editing, so your uncommitted work is not there. Either commit first, or set `worktree.bgIsolation` to `"none"` for that repository and accept that the session now edits your working copy directly.
 
 ## When to use / when not to use
 
@@ -198,7 +196,7 @@ The cost is that every background session is a full session. Three dispatched ta
 
 - **You close agent view expecting the work to stop.** It does not. The supervisor keeps hosting every session. Stop one with `Ctrl+X` on its row or `claude stop <id>`, and stop everything with `claude daemon stop --any`.
 
-- **You background a session with a workflow mid-flight.** Claude Code warns you first, and the warning is worth reading: running subagents restart from the beginning and you pay for their tokens again. Let the workflow finish, then background.
+- **You background a session with a workflow mid-flight.** Claude Code first shows a `Background this session?` dialog saying how many subagents are still running. They restart from the beginning when Claude relaunches the workflow, and you pay for their tokens again. Let the workflow finish, then background.
 
 ## Try It
 
@@ -236,4 +234,4 @@ It starts in your working directory, so your `CLAUDE.md`, settings, and project-
 
 <LessonLink id="A1.4" /> moves the coordination from you to Claude. Where you dispatch tasks and check back here, a team has a lead that assigns them, and teammates that message each other without you in the middle.
 
-<LessonLink id="A2.4" /> takes the dispatch you just did by hand and puts it on a schedule, which is the same mechanism with nobody at the keyboard.
+<LessonLink id="A2.4" /> takes the dispatch you just did by hand and puts it on a schedule.

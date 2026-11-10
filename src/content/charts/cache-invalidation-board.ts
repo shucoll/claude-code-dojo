@@ -15,14 +15,14 @@ const popup = (title: string, content: () => Promise<{ default: ComponentType }>
  * configuration, because tool search defers MCP tool definitions and leaves the
  * request's tool list alone. They only cost something when tool definitions
  * load into the prefix. Effort sits in the same band for a different reason:
- * Opus 5.5 and Fable 5.1 keep the cache on an API key or a subscription, and
- * every other model rebuilds.
+ * Fable 5.1 and later, Opus 5.5, Sonnet 5.5, and Haiku 5.5 keep the cache on
+ * an API key or a subscription, and every other model rebuilds.
  */
 export const cacheInvalidationBoard: ChartDef = {
   id: 'cache-invalidation-board',
   title: 'What survives the prefix?',
   subtitle:
-    'Every action sorted by what it does to the cached prefix. The middle band depends on whether tool definitions sit in the prefix at all.',
+    'Every action sorted by what it does to the cached prefix. Most of the middle band depends on whether tool definitions sit in the prefix at all.',
   rows: [
     {
       kind: 'grid',
@@ -85,7 +85,7 @@ export const cacheInvalidationBoard: ChartDef = {
     },
     {
       kind: 'connector',
-      label: 'these four cost nothing in the default configuration, and everything when tool definitions load into the prefix',
+      label: 'these four cost nothing in the default configuration; the first three rebuild everything when tool definitions load into the prefix',
     },
     {
       kind: 'grid',
@@ -117,7 +117,7 @@ export const cacheInvalidationBoard: ChartDef = {
           id: 'effort-level',
           title: 'Changing effort level',
           tone: 'amber',
-          lines: ['Free on Opus 5.5 and Fable 5.1 with an API key or subscription'],
+          lines: ['Free on Fable 5.1+ and the 5.5 models with an API key or subscription'],
           target: popup('Changing effort level', () => import('./popups/cache-effort-level.mdx')),
         },
       ],
@@ -142,7 +142,7 @@ export const cacheInvalidationBoard: ChartDef = {
           id: 'fast-mode',
           title: 'Turning on fast mode',
           tone: 'rose',
-          lines: ['Once per conversation, billed at fast mode rates'],
+          lines: ['Its first request reads the whole history uncached, at fast mode rates'],
           target: popup('Turning on fast mode', () => import('./popups/cache-fast-mode.mdx')),
         },
         {

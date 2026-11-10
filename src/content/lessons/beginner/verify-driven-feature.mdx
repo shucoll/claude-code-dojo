@@ -6,7 +6,7 @@ type: "milestone"
 order: 4
 estimatedMinutes: 20
 volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B5.3"]
 teaches: ["acceptance-criteria", "verify-driven-prompting"]
 references: ["B4.1", "B4.2"]
@@ -15,7 +15,7 @@ docsSources: ["https://code.claude.com/docs/en/best-practices"]
 
 # Verify-driven feature
 
-Shelf can filter by tag. The last feature is **search**: find an item by its title. But the real subject of this milestone is not search, it is *how you ask for it*. You are not going to say "add search." You are going to say "add search that passes these exact checks, and prove it." That difference is the highest-leverage upgrade to your prompting in the whole level.
+Shelf can filter by tag. The last feature is search: find an item by its title. This milestone is mostly about *how you ask for it*. Instead of "add search," you are going to say "add search that passes these exact checks, and prove it." That difference is the highest-leverage upgrade to your prompting in the whole level.
 
 ## Goal for this stage
 
@@ -25,7 +25,7 @@ Build title search, `GET /items?q=<text>`, where the acceptance criteria live in
 - Searching `mat` finds `The Matrix` (**partial match**).
 - Searching `zzzzz` returns `[]` (**empty array, not an error, not null**).
 
-The artifact is a search endpoint that passes its own acceptance tests. The transferable skill is a prompt shape you will reuse for every feature you ever build.
+The artifact is a search endpoint that passes its own acceptance tests. The transferable skill is a prompt shape you can reuse for any feature.
 
 **Environment:** your Shelf repo, restored to working order at the end of <LessonLink id="B5.3" />.
 
@@ -33,9 +33,9 @@ The artifact is a search endpoint that passes its own acceptance tests. The tran
 
 ### 1. Decide what "correct" means before you prompt
 
-This is the habit from <LessonLink id="B4.1" />: name the finish line. Here it is unusually concrete, three cases you can check. Deciding them *before* writing the prompt is what separates "produces plausible code" from "produces code that demonstrably works." The plausible-looking version is the trap the best practices call the trust-then-verify gap: it returns something for every query and looks fine until a real search misses.
+This is the habit from <LessonLink id="B4.1" />: name the finish line. Here it is unusually concrete, three cases you can check. Deciding them *before* writing the prompt is what separates "produces plausible code" from "produces code that demonstrably works." The plausible-looking version is the trap the best practices describe as work that "looks done" but isn't: it returns something for every query and looks fine until a real search misses.
 
-Notice the criteria are chosen to be adversarial on purpose. "Case-insensitive" is only proven by searching lowercase `dune` for a capitalized `Dune`. "Empty on miss" is only proven by a query that matches nothing. Weak criteria prove nothing.
+The criteria are adversarial on purpose. "Case-insensitive" is only proven by searching lowercase `dune` for a capitalized `Dune`. "Empty on miss" is only proven by a query that matches nothing. Weak criteria prove nothing.
 
 ### 2. Put the criteria in the prompt, and demand proof
 
@@ -69,7 +69,7 @@ That single change does the work. The check now lives *inside* the prompt, so th
 
 ### 3. Read the tests before the code
 
-When Claude reports success, read the **test file first**, before the implementation. The tests are your acceptance criteria turned into something executable, and a green checkmark only means something if the tests assert what you actually asked for.
+When Claude reports success, read the test file first, before the implementation. The tests are your acceptance criteria turned into something executable, and a green checkmark only means something if the tests assert what you actually asked for.
 
 <WhenLang is="javascript">
 
@@ -108,7 +108,7 @@ def test_search_returns_empty_when_no_match(client):
 
 </WhenLang>
 
-Check the detail that carries the whole feature: the case-insensitive test searches lowercase `dune` for a capitalized `Dune`. A lazier test that searched `Dune` for `Dune` would pass while proving nothing. This is the one thing to verify by hand, that the test encodes your real criterion, not a weaker one that happens to be green.
+In the case-insensitive test, confirm the query is lowercase `dune`. A lazier test that searched `Dune` for `Dune` would pass while proving nothing. Confirming that each test encodes your real criterion is the one check to do by hand.
 
 ### 4. See the proof, then the implementation
 
@@ -165,7 +165,7 @@ The case-insensitivity you demanded comes free from SQLite's `LIKE`, which the t
 
 ### 5. Verify once by hand, then commit
 
-Trust the tests, but land the plane yourself with a single manual check:
+After the tests pass, make one manual check yourself:
 
 <WhenLang is="javascript">
 
@@ -193,7 +193,7 @@ Commit the feature and its tests together as one change.
 
 ## The artifact
 
-Shelf now has search, and it is proven, not assumed:
+Shelf now has search, and tests prove each behavior:
 
 - Case-insensitive title match.
 - Partial-title match.
@@ -203,8 +203,8 @@ Shelf now has search, and it is proven, not assumed:
 
 ## Reasoning recap
 
-A verification target is the single highest-leverage change you can make to how you prompt. Without one, "looks done" is the only signal available, and *you* become the verification loop, noticing every mistake by eye. Put the acceptance criteria in the prompt and demand proof, and the loop closes itself: Claude writes, runs, and iterates until the checks pass. This is the Verify step from <LessonLink id="B4.2" />, moved to the *start* of the task instead of tacked on at the end.
+With the acceptance criteria and a demand for proof in the prompt, Claude can tell "looks done" from "is done" without you. This is the Verify step from <LessonLink id="B4.2" />, moved to the *start* of the task instead of tacked on at the end.
 
-The subtle skill underneath it is reading the test, not just the checkmark. A passing test that does not encode your real criterion, one that searches `Dune` to "prove" case-insensitivity, is a green light on a broken feature. The criterion belongs in the prompt, the proof belongs in the test, and your job is to confirm the test actually matches the criterion. Do that, and a green suite means what it says.
+The part of verification that stays with you is reading the tests. The criterion goes in the prompt, Claude writes the test that proves it, and you confirm the test matches the criterion before trusting the green suite.
 
 Next milestone, <LessonLink id="B5.5" />: the feature work is nearly done, so you take on a longer job, rounding out edit and delete, that pushes the context window. You will practice keeping a long session healthy under pressure.

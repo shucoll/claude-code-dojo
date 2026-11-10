@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 18
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A5.1"]
 teaches: ["marketplace-schema", "plugin-sources", "versioning", "release-channels", "private-hosting"]
 references: ["I7.1", "A3.3", "A4.4", "A5.3", "A7.4"]
@@ -25,7 +25,7 @@ You push a fix and nobody receives it. You rename the plugin and every existing 
 
 A marketplace is a catalog. It is one JSON file, `.claude-plugin/marketplace.json`, that says what plugins exist and where each one is fetched from. Nothing is uploaded and nothing is hosted for you. Put the file in a repository people can read, and it is published.
 
-Two identifiers do the work. The marketplace's `name` is what users type after `@`, and each entry's `name` is what they type before it, which makes `code-formatter@your-marketplace` the address of a plugin anywhere in the world. Each user registers one marketplace per `name`, so those names are the namespace you are operating in.
+Two identifiers do the work. The marketplace's `name` is what users type after `@`, and each entry's `name` is what they type before it, which makes `code-formatter@your-marketplace` the plugin's install id. Each user registers one marketplace per `name`.
 
 ## Choosing a route
 
@@ -34,8 +34,6 @@ Two identifiers do the work. The marketplace's `name` is what users type after `
 | No marketplace | The people you send the folder or a `.zip` to | The plugin's folder | No. They load the copy you sent |
 | Your own marketplace | Anyone who can reach the repository, including a private one | A host with a `.claude-plugin/marketplace.json` listing your plugin | Off by default, and a user or admin turns it on |
 | Anthropic's directory | People who add it on claude.ai or in Cowork, and in their Claude Code sessions through account sync | A GitHub repository and a paid claude.ai plan to submit from | Yes, once the version you push is published |
-
-This lesson is about the middle row, which is where internal distribution lives.
 
 ## How it works
 
@@ -58,7 +56,7 @@ This lesson is about the middle row, which is where internal distribution lives.
 }
 ```
 
-Claude Code ignores an unknown top-level key or entry key instead of rejecting it, so a typo loads silently and costs you nothing but the feature you thought you had configured. `claude plugin validate` reports each one as a warning, which is the reason to run it after every edit.
+Claude Code ignores an unknown top-level key or entry key instead of rejecting it, so a typo loads silently and the misspelled setting has no effect. `claude plugin validate` reports each one as a warning, which is the reason to run it after every edit.
 
 A set of marketplace names is reserved, including `claude-plugins-official`, `claude-community`, and `claude-code-plugins`, along with names that merely imitate one. Those names are accepted only for marketplaces sourced from `github.com/anthropics/` repositories. Validation passes a reserved name and the add command is what refuses it, so this is a failure you find on someone else's machine rather than in CI.
 
@@ -86,13 +84,12 @@ The `npm` and `command` sources each do something at install time the others do 
 
 Users receive a new copy only when the plugin's computed version differs from the one they hold. That version comes from `plugin.json` first, and from the marketplace entry second.
 
-
-That leaves two workable release habits, and no third:
+That leaves two workable release habits:
 
 - **Bump `version` on every release.** Users stay on their cached copy until the string changes. Push commits without changing it and they receive nothing.
 - **Omit `version` entirely.** Leave it out of both `plugin.json` and the entry, and users track your commits instead.
 
-One case escapes the field. A plugin users load in place, from a marketplace added as a local directory, reads your current files at every session start whatever its version says.
+Some installs escape the field. A plugin users load in place, from a marketplace added as a local directory, reads your current files at every session start whatever its version says, and a `command` source's version always includes a hash of what the command produced.
 
 ### What an entry may declare, and when it wins
 
@@ -251,7 +248,7 @@ On a Team or Enterprise plan you can distribute the marketplace through organiza
 
 It is stricter than `/plugin marketplace add` about what it accepts. On github.com and gitlab.com the marketplace repository must be private or internal, only some source types are accepted, and a plugin with a top-level `bin/` directory is rejected while the rest of the marketplace syncs.
 
-The other half of org-scale rollout belongs to the administrator rather than to you. `extraKnownMarketplaces` registers the marketplace and `enabledPlugins` turns specific plugins on for everyone receiving those settings, and `autoUpdate` on the marketplace entry is how a fleet stays current without each person opting in. A repository can require the same thing for everyone who clones it: run `claude plugin marketplace add your-org/your-marketplace --scope project` once and commit the `.claude/settings.json` it writes.
+The other half of org-scale rollout belongs to the administrator rather than to you. `extraKnownMarketplaces` registers the marketplace and `enabledPlugins` turns specific plugins on for everyone receiving those settings, and `autoUpdate` on the marketplace entry is how a fleet stays current without each person opting in. A repository can register the marketplace for everyone who clones it and trusts the folder: run `claude plugin marketplace add your-org/your-marketplace --scope project` once and commit the `.claude/settings.json` it writes.
 
 ## Pitfalls
 
@@ -269,11 +266,9 @@ The other half of org-scale rollout belongs to the administrator rather than to 
 
 ## Try It
 
-Twenty minutes, ending with a rename that migrates cleanly.
-
 Take the plugin you built in the previous lesson and stand a marketplace up around it: `mkdir -p my-marketplace/.claude-plugin my-marketplace/plugins`, copy the plugin under `plugins/`, and write a catalog with one relative-path entry. Validate, add it with `claude plugin marketplace add ./my-marketplace`, and install from it.
 
-Prove the version rule to yourself. Edit a skill in the installed plugin, run `claude plugin update`, and observe that nothing changes because the version string did not. Bump `version` in `plugin.json`, update again, and watch the new copy arrive.
+Prove the in-place exception to yourself. Edit a skill under `my-marketplace/plugins/`, run `/reload-plugins` in a session, and observe that the edit arrives with no change to `version`.
 
 Then break the name on purpose. Change the entry's `name` to something the plugin's own `plugin.json` does not use, run `claude plugin validate` and note that it passes, then try to install by the manifest name and read the error. Put the names back in sync.
 
@@ -283,7 +278,7 @@ Finish with the migration. Rename the plugin properly: change both names, and ad
 
 **Can one repository hold both the plugin and its marketplace?** Yes. Save `marketplace.json` beside `plugin.json` in `.claude-plugin/` with one entry whose `source` is `"./"`, the repository root, and give the entry the same `name` as the manifest.
 
-**How do I pin users to an exact commit?** Set `sha` to a full 40-character lowercase SHA on a `github`, `url`, or `git-subdir` source. With both `ref` and `sha` set, the `sha` is what gets checked out, so the install survives the branch being deleted as long as the commit stays reachable. Some servers, such as AWS CodeCommit, cannot fetch a commit by SHA, and there the `ref` has to still exist.
+**How do I pin users to an exact commit?** Set `sha` to a full 40-character lowercase SHA on a `github`, `url`, or `git-subdir` source. Some servers, such as AWS CodeCommit, cannot fetch a commit by SHA, and there the `ref` has to still exist.
 
 **Can I show different plugins to different users?** No. Entries carry no audience field and everyone who adds the marketplace sees the whole catalog. Host separate marketplaces for separate audiences, which is the same mechanism release channels use.
 

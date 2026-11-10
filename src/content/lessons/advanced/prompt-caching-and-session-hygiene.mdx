@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 15
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["prompt-caching", "cache-invalidation", "cache-ttl", "session-hygiene"]
 references: ["B2.2", "I2.1", "A1.1", "A1.5", "A4.2", "A4.3"]
 docsSources: ["https://code.claude.com/docs/en/prompt-caching", "https://code.claude.com/docs/en/costs"]
@@ -70,7 +70,7 @@ Claude Code chooses per request, and every request falls into one of two buckets
 
 Once you pass your plan's usage limit and start drawing on usage credits, you are billed for that usage, so Claude Code drops the main conversation to the cheaper five-minute lifetime. To keep the hour there, or to get it on an API key at all, set `promptCacheTtl` to `1h`. The second bucket takes `subagentPromptCacheTtl`. Both accept `5m` or `1h`, both have matching environment variables (`CLAUDE_CODE_PROMPT_CACHE_TTL` and `CLAUDE_CODE_SUBAGENT_PROMPT_CACHE_TTL`), and both require Claude Code v2.1.242 or later.
 
-The second setting is the one automation touches. A fan-out of workflow agents or a long-running subagent gets five minutes by default even on a subscription, and that is the bucket most likely to sit idle between turns. In a fan-out of same-prefix agents, Claude Code holds all but the first for up to five seconds so their opening requests can read the prefix the first agent cached, which is the runtime doing for you what the TTL setting does across a longer gap. <LessonLink id="A1.5" /> is where that bill lands.
+The second setting is the one automation touches. A fan-out of workflow agents or a long-running subagent gets five minutes by default even on a subscription, and that is the bucket most likely to sit idle between turns. In a fan-out of same-prefix agents, Claude Code holds all but the first for up to five seconds so their opening requests can read the prefix the first agent cached. <LessonLink id="A1.5" /> is where that bill lands.
 
 ## What keeps the cache and what rebuilds it
 
@@ -86,9 +86,9 @@ Tool definitions sit in the system prompt layer, so what matters is whether a gi
 - Enabling or disabling a plugin keeps the cache for skills, commands, agents, hooks, monitors, and themes. Only a plugin that provides MCP servers can cost anything, under the same rule.
 - Denying a whole tool by bare name leaves the request's tool definitions unchanged, so the prefix survives. Claude Code enforces the rule when Claude attempts the call.
 
-Tools load into the prefix when tool search is unavailable or disabled, for a server or tool marked `alwaysLoad`, and for definitions kept upfront by threshold-based loading. In those configurations all three actions above rebuild the cache, and a server that drops and reconnects on its own does it without you touching anything.
+Tools load into the prefix when tool search is unavailable or disabled, for a server or tool marked `alwaysLoad`, and for definitions kept upfront by threshold-based loading. In those configurations all three actions above rebuild the cache, and a connected server that adds tools through a dynamic update does it without you touching anything.
 
-Effort is the fourth conditional entry on the board, for an unrelated reason. Changing it mid-session rebuilds the cache on most models and keeps it on Opus 5.5 and Fable 5.1 with an API key or a Claude subscription. <LessonLink id="A4.2" /> carries the rest of that decision.
+Effort is the fourth conditional entry on the board, for an unrelated reason. Changing it mid-session rebuilds the cache on most models and keeps it on Fable 5.1 and later, Opus 5.5, Sonnet 5.5, and Haiku 5.5 with an API key or a Claude subscription. <LessonLink id="A4.2" /> carries the rest of that decision.
 
 ### Two ways to abandon a path
 
@@ -124,7 +124,7 @@ Run `/compact` at task boundaries. Waiting for auto-compaction to fire means it 
 
 Reach for `/rewind` when you are abandoning a path rather than summarizing one. It lands on a prefix that is already cached.
 
-Turn fast mode on at the start of a session if you are going to turn it on at all. The header costs one uncached read of the whole history, billed at fast mode rates, once per conversation. Deep into a long session is the most expensive moment to pay it.
+Turn fast mode on at the start of a session if you are going to turn it on at all. The first time you turn it on in a conversation, the next request reads the whole history uncached, billed at fast mode rates. Deep into a long session is the most expensive moment to pay it.
 
 Expect the first turn back from a break to be slow. After a gap longer than the TTL there is no prefix left to read. On a subscription within plan usage that gap is an hour; everywhere else it is five minutes until you set `promptCacheTtl`.
 
@@ -178,8 +178,4 @@ Then run the control. If you have an MCP server configured, disable it mid-sessi
 
 ## Where next
 
-Context was memory in <LessonLink id="B2.2" /> and a budget in <LessonLink id="I2.1" />. This lesson priced it.
-
 <LessonLink id="A4.2" /> takes the two settings that sit outside the layer table, model and effort, and turns them into an assignment strategy. <LessonLink id="A4.3" /> exports the numbers you just read into somewhere you can watch them across a team.
-
-<LessonLink id="A1.1" /> and <LessonLink id="A1.5" /> both read differently now: one parallelizes across directories, the other is where `subagentPromptCacheTtl` earns a line in a settings file.

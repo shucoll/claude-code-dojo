@@ -5,8 +5,8 @@ title: "Feature sprint using everything"
 type: "milestone"
 order: 6
 estimatedMinutes: 30
-volatility: "stable"
-verifiedAgainstDocsAt: "2026-09-17"
+volatility: "evolving"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["end-to-end-pipeline", "system-map-from-inside"]
 prerequisites: ["I8.5"]
 references: ["I7.3"]
@@ -20,7 +20,7 @@ That map is <LessonLink id="I7.3" /> seen from the inside. You read it there as 
 
 ## Goal for this stage
 
-Build stale-issue triage, a dashboard view listing open issues with no recent activity, end to end through the pipeline: plan, implement, let the gates hold, convene the review board, ship. Introduce nothing new. Alongside the working feature, write down which mechanism did what, so the abstract system map becomes a record of a sprint you actually ran.
+Build stale-issue triage, a dashboard view listing open issues with no recent activity, end to end through the pipeline: plan, implement, let the gates hold, convene the review board, ship. Alongside the working feature, write down which mechanism did what.
 
 **Environment:** the PulseBoard repository with everything from <LessonLink id="I8.1">I8.1</LessonLink> through <LessonLink id="I8.5">I8.5</LessonLink> in place and committed.
 
@@ -58,16 +58,16 @@ Build the plan: a migration under migrations/ creating an issues table, a functi
 
 As Claude works, the environment acts on its own:
 
-- Opening the data layer loads the path-scoped **data-access rule** from <LessonLink id="I8.1" />, so the GitHub fetch lands in the data module and not in the route.
-- The new file under `migrations/` is **allowed** by the protect hook from <LessonLink id="I8.4" />, because it does not exist yet. The "new yes, edits no" logic waves the new migration through while still freezing the ones already shipped.
-- Every file Claude writes is **auto-formatted** by the `PostToolUse` hook before you see it.
-- If Claude reaches for `.env` to read the token directly, the **permission deny** stops it, and the data module reads the token the sanctioned way instead.
+- Opening the data layer loads the path-scoped data-access rule from <LessonLink id="I8.1" />, so the GitHub fetch lands in the data module and not in the route.
+- The new file under `migrations/` is allowed by the protect hook from <LessonLink id="I8.4" />, because it does not exist yet. The "new yes, edits no" logic waves the new migration through while still freezing the ones already shipped.
+- Every file Claude writes is auto-formatted by the `PostToolUse` hook before you see it.
+- If Claude reaches for `.env` to read the token directly, the permission deny stops it, and the data module reads the token the sanctioned way instead.
 
 None of that needed a reminder in your prompt. The standards are in the environment, so they apply to a feature written months after you set them.
 
 ### 3. Let the gates decide when it is done
 
-When Claude judges the work finished, the `Stop` hook from <LessonLink id="I8.4" /> runs the suite. If the new endpoint has no test, or a test is red, the turn cannot end and Claude goes back to it. Watch this happen at least once: "done" is not Claude's opinion here, it is a green suite.
+When Claude judges the work finished, the `Stop` hook from <LessonLink id="I8.4" /> runs the suite. If a test is red, the turn cannot end and Claude goes back to it. Watch this happen at least once: in this project, "done" means a green suite.
 
 Boot it and confirm the feature is real before trusting the green check:
 
@@ -117,7 +117,7 @@ The commit runs clean; the push pauses for your confirmation, because `git push`
 
 ### 6. Write the map from inside
 
-Now the second deliverable. Look back over the sprint and name the mechanism behind each moment. This is the table from <LessonLink id="I7.3" />, filled in with a real run:
+For the second deliverable, look back over the sprint and name the mechanism behind each moment:
 
 | Moment in the sprint | Mechanism | Built in |
 |---|---|---|
@@ -128,7 +128,7 @@ Now the second deliverable. Look back over the sprint and name the mechanism beh
 | Every edit came out formatted | `PostToolUse` hook | <LessonLink id="I8.4" /> |
 | A direct `.env` read was refused | permission deny | <LessonLink id="I8.1" /> |
 | The turn could not end on a red suite | `Stop` hook | <LessonLink id="I8.4" /> |
-| Review happened cold, in a window that could not edit | code-reviewer subagent | <LessonLink id="I8.5" /> |
+| Review happened cold, in a window built to report rather than edit | code-reviewer subagent | <LessonLink id="I8.5" /> |
 | The push paused for a human | `ask` rule | <LessonLink id="I8.1" /> |
 
 ## The artifact
@@ -136,15 +136,15 @@ Now the second deliverable. Look back over the sprint and name the mechanism beh
 At the end of this stage you have:
 
 - A working stale-issue triage feature: a migration, a data-layer function, a `/api/stale` endpoint, a dashboard section, and tests, all shipped to GitHub.
-- The feature built through the full pipeline with no new configuration written.
+- The feature, built through the full pipeline with only the configuration from earlier milestones.
 - A filled-in map naming which mechanism handled each part of the sprint.
 
 **Done looks like:** `curl /api/stale?days=30` returns stale issues from the tracked repository, the suite is green, the review board has passed the change, and you can point at each mechanism that shaped it without re-reading a lesson.
 
 ## Reasoning recap
 
-This milestone taught nothing new on purpose. Everything that made the sprint smooth was built in an earlier milestone, and the payoff of building the environment first is a feature sprint where the environment does a share of the work silently. You wrote a prompt about issues and staleness; the formatting, the path discipline, the secret protection, the test gate, and the review all happened around it.
+Everything that made the sprint smooth was built in an earlier milestone, and the payoff of building the environment first is a feature sprint where the environment does a share of the work silently. You wrote a prompt about issues and staleness; the formatting, the path discipline, the secret protection, the test gate, and the review all happened around it.
 
-That is the argument for treating the environment as a deliverable, made concrete. A configured project is not a tidier version of an unconfigured one. It is one where standards hold without anyone holding them, so attention goes to the feature instead of to the rules the feature has to follow. The system map in <LessonLink id="I7.3" /> described that as a design. You just ran it.
+That is the argument for treating the environment as a deliverable. In a configured project the standards apply on every run without you restating them, so your attention goes to the feature instead of to the rules the feature has to follow.
 
-Next milestone, <LessonLink id="I8.7" />: you package this entire environment, the skills, hooks, agents, and MCP config, into a plugin, and install it into a clean clone to prove the whole thing is reproducible by anyone.
+Next milestone, <LessonLink id="I8.7" />: you package the reusable half of this environment, the skills, hooks, agents, and MCP config, into a plugin, and load it into a clean clone to prove the whole thing is reproducible by anyone.

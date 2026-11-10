@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 16
 volatility: "volatile"
-verifiedAgainstDocsAt: "2026-09-18"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A1.1", "A1.2"]
 teaches: ["cross-session-messaging", "agent-discovery", "inbound-controls", "message-is-not-consent"]
 references: ["I6.4", "B2.5"]
@@ -75,12 +75,12 @@ Claude sets `notify_when_idle` on the `SendMessage` call, either attached to a m
 
 When one session messages another, Claude Code tells the receiving Claude that the text came from another session rather than from you, and holds it to four limits:
 
-- **It cannot approve anything.** A message never counts as your consent, so it cannot answer a pending permission prompt on your behalf.
-- **It cannot change configuration.** The receiving Claude is instructed never to change permission settings, `CLAUDE.md`, or other configuration because another session asked it to.
-- **Commands in the text do not run.** A `/compact` in a message arrives as the characters `/compact`. Claude Code never executes it.
-- **Permission prompts still fire.** If acting on the message needs a permission the receiving session lacks, you get the same prompt you would get for any other work.
+- A message never counts as your consent, so it cannot answer a pending permission prompt on your behalf.
+- The receiving Claude is instructed never to change permission settings, `CLAUDE.md`, or other configuration because another session asked it to.
+- Commands in the text do not run. A `/compact` in a message arrives as the characters `/compact`, and Claude Code never executes it.
+- Permission prompts still fire. If acting on the message needs a permission the receiving session lacks, you get the same prompt you would get for any other work.
 
-The boundary holds in the other direction too. Claude is instructed never to ask another session to do something that was denied in its own session, or that its own permission rules would block, and to bring that back to you instead. Messaging moves information between sessions; it does not move authority.
+The boundary holds in the other direction too. Claude is instructed never to ask another session to do something that was denied in its own session, or that its own permission rules would block, and to bring that back to you instead.
 
 ### Controlling what arrives
 
@@ -129,7 +129,7 @@ Stop receiving with `crossSessionInbound` set to `refuse`. Stop sending and list
 }
 ```
 
-Denying `SendMessage` also removes messaging to subagents and agent-team teammates, since one tool serves all three. A refusing session looks no different from the outside, in its own `/status` or in other sessions' rosters, so confirm it by reading the settings that apply rather than by testing from elsewhere.
+Denying `SendMessage` also removes messaging to subagents and agent-team teammates, since one tool serves all three. A refusing session looks no different from the outside, in its own `/status` or in the rosters of other sessions on the same machine, so confirm it by reading the settings that apply rather than by testing from elsewhere.
 
 ## Walkthrough
 
@@ -199,11 +199,11 @@ The first line is that session's own name. The other worktree session is a row b
 
 **A question one session already answered.** Rather than re-deriving a decision in a second session, have the first send the conclusion across.
 
-**Moving a whole conversation.** This is the near-miss. Messaging sends text only, so a message asking another session to "continue what I was doing" hands it a sentence and none of the context behind it. Resume the session instead.
+**Moving a whole conversation.** Messaging sends text only, so a message asking another session to "continue what I was doing" hands it a sentence and none of the context behind it. Resume the session instead.
 
 ## When to use / when not to use
 
-Messaging is for independent sessions you start and steer yourself. For everything adjacent, Claude Code has a feature built for that exact shape, and reaching for messaging instead is the common mistake:
+Messaging is for independent sessions you start and steer yourself. Each adjacent case has its own feature in Claude Code:
 
 | What you actually want | Use |
 |---|---|
@@ -222,7 +222,7 @@ The cost is small but not zero. A delivered message counts toward usage like a p
 
 - **You expect a container and its host to talk.** They cannot see each other's sockets, so neither appears in the other's roster. Two sessions inside the same container can message each other normally.
 
-- **You deny `SendMessage` to stop cross-session traffic and lose more than you meant.** The same tool serves subagents and agent-team teammates, so the deny rule silently removes messaging to those as well.
+- **You deny `SendMessage` to stop cross-session traffic and lose more than you meant.** Messaging to subagents and agent-team teammates stops too, with no warning.
 
 - **You read a stalled session as a failed message.** The message arrived and Claude acted on it. The permission prompt in front of you comes from the receiving session's own rules.
 
@@ -237,7 +237,7 @@ The cost is small but not zero. A delivered message counts toward usage like a p
 5. From session one, ask Claude to have session two change a setting in `CLAUDE.md`, then read what session two does with that request.
 6. Set `crossSessionInbound` to `refuse` in session two's settings, restart it, and send another message.
 
-**Success looks like:** step 4 shows text only, with no files attached; step 5 ends with session two declining to change configuration on another session's say-so; and step 6 delivers nothing while the sending session gets a notice back that the receiver is not accepting messages.
+**Success looks like:** step 4 shows text only, with no files attached; step 5 ends with session two declining to change configuration on another session's say-so; and step 6 delivers nothing to session two.
 
 ## FAQ
 
