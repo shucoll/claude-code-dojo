@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 13
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I1.1"]
 teaches: ["permission-rules", "allow-deny-ask", "rule-syntax"]
 references: ["B1.3", "B3.3"]
@@ -102,7 +102,7 @@ Here is a policy worth typing into a real project. It allows your everyday comma
 
 Read it top to bottom, but remember Claude Code reads it deny-first:
 
-- The **deny** list wins every tie. `Read(.env)` and `Read(.env.*)` stop Claude reading your secrets even though nothing here allows it, which makes the intent explicit and survives someone later adding a broad `Read` allow. `Bash(rm -rf *)` blocks the obvious recursive delete.
+- The **deny** list wins every tie. `Read(.env)` and `Read(.env.*)` stop Claude reading your secrets. Reads inside the project never prompt, so without these rules Claude could open `.env` silently, and a deny also survives someone later adding a broad `Read` allow. `Bash(rm -rf *)` blocks the obvious recursive delete.
 - The **ask** list is for actions that are fine most of the time but that you want to see. `git push *` leaves your machine and rewrites a shared branch, so it prompts every time, and because ask beats allow, it keeps prompting even if you later allow `Bash(git *)` wholesale.
 - The **allow** list clears the daily friction: your test command, your run scripts, and edits inside `src/`.
 
@@ -142,7 +142,7 @@ These are the rule-syntax surprises that cost people the most time.
 Most real-world confusion is not "how do I write a rule" but "why did Claude Code do the opposite of what I expected." A short playbook:
 
 1. **Run `/permissions` first.** It lists every active rule *and the file each came from*. The usual culprit is a rule you forgot in another scope, especially a user-level or managed one.
-2. **Recite the order: deny > ask > allow.** If it asked despite your allow, hunt for a matching `ask` rule (or a mode). If it blocked, a `deny` matched somewhere. If it ran silently and you did not expect it, an `allow` matched, or the command is on the built-in read-only list.
+2. **Recite the order: deny > ask > allow.** If it asked despite your allow, hunt for a matching `ask` rule (or a mode). If it blocked, a `deny` matched somewhere. If it ran silently and you did not expect it, an `allow` matched, the mode approved it, or the command is on the built-in read-only list.
 3. **Remember scope precedence.** A deny at *any* level beats an allow at *any* level. A user-level or organization-managed deny will override your project's allow, and no local setting can loosen it.
 4. **Read the pattern literally.** Re-check the space-before-`*` boundary, the `/path` anchor, and glob-not-regex. Launch with `--verbose` to see the exact command string and parameters Claude actually sent, which is often not quite what you pictured.
 5. **"Why didn't it ask before `git status`?"** Because read-only commands never prompt in any mode. If you genuinely want a prompt for one, add it to `ask`.
@@ -167,7 +167,7 @@ A complex Bash command arrives at the prompt with a plain-language explanation o
 
 **Can a rule use a regular expression?** No. Bash rules are glob patterns and file rules are gitignore patterns. This trips up anyone expecting regex; there is no `.*` or anchors, just `*` and `**`.
 
-**I allowed a command and it still asked. Why?** Something with higher precedence matched: an `ask` rule, a `deny` rule, or a mode. Run `/permissions` and apply deny > ask > allow. Also check that your allow pattern actually matches (the space-before-`*` boundary is the usual miss).
+**I allowed a command and it still asked. Why?** Something with higher precedence matched: an `ask` rule or a mode. A matching `deny` would block the call instead of asking. Run `/permissions` and apply deny > ask > allow. Also check that your allow pattern actually matches (the space-before-`*` boundary is the usual miss).
 
 **Do permission rules cost me context?** No. They are enforced by the harness and never enter the model's context window, unlike `CLAUDE.md` instructions. You can keep a large policy at no token cost.
 

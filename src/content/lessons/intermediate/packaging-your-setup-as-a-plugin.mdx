@@ -6,10 +6,10 @@ type: "core"
 order: 2
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I7.1", "I6.2"]
 references: ["I1.3", "I3.2", "I4.3"]
-docsSources: ["https://code.claude.com/docs/en/plugins", "https://code.claude.com/docs/en/plugins-reference"]
+docsSources: ["https://code.claude.com/docs/en/plugins/create", "https://code.claude.com/docs/en/plugins/manifest-reference"]
 ---
 
 # Packaging your setup as a plugin
@@ -101,7 +101,7 @@ Any path in a hook command or an MCP server config has to be rewritten. Inside a
 
 Plugin skills are prefixed by the plugin name. A `deploy` skill becomes `/acme-workflow:deploy`. Muscle memory built on `/deploy` stops working, which is a real cost of converting and the reason to keep genuinely personal shortcuts standalone.
 
-Agents behave differently from skills when both copies exist. A `.claude/agents/` definition overrides a same-named plugin agent, so an unremoved original silently shadows the packaged one. Skills do not override; both remain available under different names.
+Agents are namespaced the same way, so `reviewer` becomes `acme-workflow:reviewer`. While the originals stay in `.claude/`, both copies of each skill and agent remain available under different names. Hooks carry no prefix, so a hook left in `.claude/settings.json` and also shipped in `hooks/hooks.json` runs twice on every event.
 
 ## Walkthrough: converting your setup
 
@@ -144,7 +144,7 @@ That session gets the plugin from your working directory, and a local copy takes
 
 **7. Verify each component.** The skill under its namespaced name, the agent listed in `/context` under Custom Agents, and the hook by triggering an edit. Run `/reload-plugins` after each change rather than restarting.
 
-**8. Remove the originals** from `.claude/`, or the agent keeps loading from there and your plugin copy stays shadowed.
+**8. Remove the originals** from `.claude/` and the `hooks` block from `.claude/settings.json`, or the old skill and agent keep loading beside the plugin's copies and every hook runs twice.
 
 ### The lighter path
 
@@ -192,7 +192,7 @@ Publishing to a marketplace, dependency management, and distribution at scale ar
 
 - **The hook fires and nothing happens.** Its command still points at a path from the old project. Rewrite it to `${CLAUDE_PLUGIN_ROOT}` and confirm the script was copied into the plugin, not just referenced.
 
-- **Your agent behaves like the old version.** The original is still in `.claude/agents/` and overriding the plugin's. Delete it.
+- **Your agent behaves like the old version.** The original is still in `.claude/agents/`, loading as `reviewer` beside the plugin's `acme-workflow:reviewer`, and Claude can delegate to either. Delete it.
 
 - **The skill will not run under its old name.** It is namespaced now. `/help` shows the current name under the plugin's prefix.
 
@@ -223,7 +223,7 @@ No. `--plugin-dir` loads a directory for one session, and a plugin under `~/.cla
 Not as a plugin component. Project instructions belong to the project. Ship the equivalent guidance as a skill, which loads when relevant rather than every turn.
 
 **How do people get updates?**
-Set `version` in the manifest and bump it, and installed copies update when the marketplace does. Without a `version`, the git commit SHA stands in and every commit reads as a new version.
+Set `version` in the manifest and bump it, and installed copies pick up the new version on `claude plugin update`, or on their own if auto-update is on for that marketplace (it is off by default for marketplaces other than Anthropic's). Without a `version`, the git commit SHA stands in and every commit reads as a new version.
 
 **Can I ship a plugin that installs turned off?**
 Yes. `"defaultEnabled": false` in the manifest installs it disabled, and the user enables it from `/plugin`. This suits anything with a cost worth opting into, such as a plugin that connects to an external service.

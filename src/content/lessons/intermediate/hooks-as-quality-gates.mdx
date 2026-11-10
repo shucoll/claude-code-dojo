@@ -6,7 +6,7 @@ type: "milestone"
 order: 4
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["hooks-as-gates", "migration-guard-hook", "stop-hook-test-gate"]
 prerequisites: ["I8.3"]
 references: ["I4.2", "I4.3"]
@@ -17,7 +17,7 @@ docsSources: ["https://code.claude.com/docs/en/hooks", "https://code.claude.com/
 
 The environment so far records its standards and mostly trusts everyone to follow them. `CLAUDE.md` asks for formatting and passing tests; the permission policy denies the worst edits. What it cannot yet do is *guarantee* any of it. A convention is a request Claude usually honors. This milestone converts three of those requests into machinery that holds every time, whether Claude is paying attention or not.
 
-Three of them are quality gates, each a recipe from <LessonLink id="I4.3" /> aimed at this project: format every edit, freeze the shipped migrations, and refuse to call the work done while a test is red. A fourth hook, a desktop notification, rides along as a personal convenience, and it is here to show where a hook belongs when the standard is yours rather than the team's.
+Three of them are quality gates aimed at this project. Two are recipes from <LessonLink id="I4.3" />, format every edit and freeze the shipped migrations; the third refuses to call the work done while a test is red. A fourth hook, a desktop notification, rides along as a personal convenience, and it is here to show where a hook belongs when the standard is yours rather than the team's.
 
 ## Goal for this stage
 
@@ -214,7 +214,7 @@ The exit codes are the contract from <LessonLink id="I4.2" />: on `Stop`, exit `
 
 Test it by asking Claude to add a feature with a deliberately failing test, then telling it you are done. Watch it be unable to stop: the hook runs the suite, sees red, and sends Claude back to fix it.
 
-One edge to know. If Claude genuinely cannot make the suite pass, this gate can loop. Claude Code overrides a `Stop` hook after it blocks eight times in a row, so the turn ends rather than looping forever. The `Stop` input also carries a `stop_hook_active` flag, set to `true` once the turn is already continuing because of a stop hook; a production version checks that flag and bails out sooner. For this project the suite is small and the loop terminates when it goes green.
+One edge to know. If Claude genuinely cannot make the suite pass, this gate can loop. Claude Code overrides a `Stop` hook after it blocks eight times in a row, but the count resets each time Claude calls a tool, so a Claude that keeps editing in search of a fix can loop until you press `Esc`. The `Stop` input also carries a `stop_hook_active` flag, set to `true` once the turn is already continuing because of a stop hook; a production version checks that flag and bails out sooner. For this project the suite is small and the loop terminates when it goes green.
 
 ### 4. Notify yourself, in your own scope
 

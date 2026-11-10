@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 6
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I2.1"]
 references: ["B3.1"]
 docsSources: ["https://code.claude.com/docs/en/output-styles", "https://code.claude.com/docs/en/prompt-caching"]
@@ -36,11 +36,11 @@ An output style changes the instructions Claude Code gives Claude. The active st
 }
 ```
 
-The standalone `/output-style` command was removed in v2.1.91. If you find it in a tutorial, the tutorial is old.
+`/output-style <style>` switches without the menu, for example `/output-style concise`, and lists the styles when you run it bare. The command was removed in v2.1.91 and returned in v2.1.269, so on versions in between use `/config`.
 
 **A switch lands on your next message.** Claude Code delivers the new style's instructions as a conversation message, so the change applies right away and the cached prefix survives. Before v2.1.251 it waited for `/clear` or a new session. The style *files* are still read at startup, so restart Claude Code after you create or edit one.
 
-**A custom style removes the coding instructions by default.** `keep-coding-instructions` defaults to `false`, so a custom style drops Claude Code's built-in software engineering instructions: how to scope changes, write comments, verify work. That is correct when Claude is not doing software engineering. It is a silent downgrade when you only wanted a different voice. Set it to `true` whenever you are still coding.
+**A custom style removes the coding instructions by default.** `keep-coding-instructions` defaults to `false`, so a custom style drops Claude Code's built-in software engineering instructions: how to scope changes, write comments, verify work. That is correct when Claude is not doing software engineering. It is a silent downgrade when you only wanted a different voice. Set it to `true` whenever you are still coding. That section exists only in the full system prompt. Models newer than Opus 4.7, Sonnet 5, and Haiku 4.5 default to a shorter prompt without it, so there the field changes nothing; `CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=0` selects the full prompt on any model.
 
 **The cost** is small and mostly cached. The added instructions cost input tokens, and prompt caching absorbs that after the first request in a session. Output tokens are the real variable: *Explanatory* and *Learning* produce longer responses by design, *Concise* shorter ones, and a custom style costs whatever you told it to produce.
 
@@ -95,9 +95,9 @@ The four frontmatter fields:
 
 1. Run `/config` and set Output style to **Explanatory**.
 2. Ask Claude something with a real answer: `Walk me through how this project handles configuration.` Notice the Insights, and that its actual behavior is unchanged.
-3. Create `.claude/output-styles/diagrams-first.md` with the example above. Restart Claude Code so it reads the new file, then select it in `/config`.
+3. Create `.claude/output-styles/diagrams-first.md` with the example above. Restart Claude Code with `CLAUDE_CODE_SIMPLE_SYSTEM_PROMPT=0 claude` so it reads the new file and uses the full system prompt, then select it in `/config`.
 4. Ask the same question. You should get a diagram first.
-5. Now delete the `keep-coding-instructions: true` line, restart Claude Code, and ask Claude to make a small code change.
+5. Now delete the `keep-coding-instructions: true` line, restart Claude Code the same way, and ask Claude to make a small code change.
 
 **Success looks like:** step 5 feels subtly worse. Claude still codes, but the built-in guidance about scoping changes and verifying work is gone. Put the line back.
 

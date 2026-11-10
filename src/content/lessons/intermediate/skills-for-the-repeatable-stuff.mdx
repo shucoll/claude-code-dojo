@@ -6,7 +6,7 @@ type: "milestone"
 order: 3
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["skills-on-mcp", "skill-arguments", "supporting-file-template"]
 prerequisites: ["I8.2"]
 references: ["I3.2", "I3.3"]
@@ -108,6 +108,8 @@ The `$days` argument degrades quietly, the behavior from <LessonLink id="I3.2">I
 
 ### 3. Run both, and watch the argument and the server
 
+If `.claude/skills/` did not exist when this session started, Claude Code is not watching it yet, so run `/reload-skills` first, and again after any later edit to these skills.
+
 Invoke each by command so you control when it fires, and pass the argument:
 
 ```prompt
@@ -118,7 +120,7 @@ Invoke each by command so you control when it fires, and pass the argument:
 /standup-summary 3
 ```
 
-Two things to confirm in the output. The tool calls are labelled `github` and carry the `mcp__github__` prefix, which is the connection from <LessonLink id="I8.2">I8.2</LessonLink> doing the work. And the argument landed: the release notes cover only pull requests merged since the date you passed, and the standup spans the number of days you gave it. Run `/release-notes` with no argument to see the empty-window message rather than a fabricated one.
+Two things to confirm in the output. The tool calls are labelled `github` and carry the `mcp__github__` prefix, which is the connection from <LessonLink id="I8.2">I8.2</LessonLink> doing the work. And the argument landed: the release notes cover only pull requests merged since the date you passed, and the standup spans the number of days you gave it. Run `/release-notes` with a future date to see the empty-window message rather than a fabricated one.
 
 ### 4. Commit and push
 

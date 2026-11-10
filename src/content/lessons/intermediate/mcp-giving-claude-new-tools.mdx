@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I1.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/mcp"]
@@ -172,7 +172,7 @@ A browser window opens and you watch it work, with tool calls labelled `playwrig
 - You would be connecting it speculatively. Every server is a process or connection that can fail at startup, another auth to renew, and more tools competing for Claude's attention when it picks one.
 - You have not read what the server does. A server's output enters your context, which makes a third-party server part of your trust boundary. <LessonLink id="I5.3" /> closes on that.
 
-The cost is real but rarely where people expect it. It is not primarily context, because tool search keeps the startup footprint small. It is startup latency, one more moving part in your setup, and, for servers you did not write, trust.
+The cost is real but rarely where people expect it. It is not primarily context, because tool search keeps the startup footprint small. It is a connection that can fail, one more moving part in your setup, and, for servers you did not write, trust.
 
 ## Pitfalls
 
@@ -182,7 +182,7 @@ The cost is real but rarely where people expect it. It is not primarily context,
 
 - **You hand-write a JSON entry with a `url` but no `type`.** Claude Code reads a typeless entry as a stdio server and skips it, reporting that the entry needs `"type": "http"`. Always set `type` on remote servers.
 
-- **You edit `.mcp.json` and nothing changes.** That file is read at session start. Restart the session. If the servers still do not appear, run `/mcp` and look for a parse warning, since malformed entries are skipped quietly.
+- **You edit `.mcp.json` and nothing changes.** That file is read at session start. Restart the session. If the servers still do not appear, run `claude mcp list` and look for a parse warning, since malformed entries are skipped and the warning names the offending field.
 
 - **A server connects but exposes no tools.** Usually a missing environment variable, such as an API key. Pass it with `--env KEY=value` at add time, or in the entry's `env` field, and check the server's docs for what it expects.
 

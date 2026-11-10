@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I3.1"]
 references: ["I1.2"]
 docsSources: ["https://code.claude.com/docs/en/skills"]
@@ -61,7 +61,7 @@ Wrap multi-word arguments in quotes to keep them together: `/migrate "search bar
 
 ### The command name, and three ways to run it
 
-The folder name is the command, the rule from <LessonLink id="I3.1" />. A skill at `.claude/skills/conventional-commit/` is `/conventional-commit`. From there it runs one of three ways, and building the skill is partly deciding which you want:
+Without a `name` field, the folder name is the command, the rule from <LessonLink id="I3.1" />. A skill at `.claude/skills/conventional-commit/` is `/conventional-commit`. From there it runs one of three ways, and building the skill is partly deciding which you want:
 
 1. **Claude decides.** Your request matches the description and Claude loads the skill on its own. Best for skills that are safe to fire whenever they are relevant.
 2. **You name it.** You mention the skill in plain words (*use the conventional-commit skill*). Same path as the first, with an unambiguous signal instead of leaving the match to chance.
@@ -197,7 +197,7 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 **Over-granting `allowed-tools`.** The symptom is a skill that can do far more than its job. `allowed-tools: Bash(git *)` to run one `git commit` hands the skill every `git` subcommand, including destructive ones. List the commands the skill actually calls. Note also that `allowed-tools` only *pre-approves*, it does not restrict: to take a tool away, use `disallowed-tools` or a deny rule from <LessonLink id="I1.2" />.
 
-**An injected command your rules do not allow.** The symptom is a skill that aborts with `Shell command permission check failed for pattern "..."` and a body Claude never sees. Injected commands never prompt you: if the permission check on a line like `` !`git diff --cached` `` returns anything other than allow, Claude Code drops the whole invocation. Pre-approve the injected commands with `allowed-tools` when your rules are restrictive, and note that a matching ask or deny rule aborts the run regardless of that list.
+**An injected command your rules do not allow.** The symptom is a skill that aborts with `Shell command permission check failed for pattern "..."` and a body Claude never sees. Injected commands never prompt you: outside auto mode, if the permission check on a line like `` !`git diff --cached` `` returns anything other than allow, Claude Code drops the whole invocation. In auto mode, a command that would need your approval loads the skill anyway, with an instruction for Claude to run that command first through auto mode's usual checks. Pre-approve the injected commands with `allowed-tools` when your rules are restrictive, and note that a matching deny rule aborts the run regardless of that list, as does a matching ask rule outside auto mode.
 
 **A side-effecting skill left auto-invocable.** The symptom is a commit or a deploy you did not ask for, because your request read as ready. Add `disable-model-invocation: true` to anything that changes state.
 
@@ -209,7 +209,7 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 1. Build the drafter: create the folder, `SKILL.md`, and `reference.md` from the walkthrough.
 2. Stage a real change with `git add`, then invoke the skill all three ways: a plain-language request, naming the skill, and `/conventional-commit` with a scope. Confirm you get a Conventional Commits message each time and that the scope you passed shows up.
-3. Run `/context` and find the skill. Note that `reference.md` is not in it until a message gets written that follows the link.
+3. Run `/context all` and find the skill. Note that `reference.md` is not in it until a message gets written that follows the link.
 4. Add `allowed-tools: Bash(git add *) Bash(git commit *) Bash(git status *)` and `disable-model-invocation: true` to the frontmatter. Run `/conventional-commit` again and let it commit.
 
 **Success looks like:** step 4 commits without prompting you for each `git` call, and asking Claude in plain words to "commit this" no longer triggers the skill, because you took its automatic invocation away.
@@ -218,7 +218,7 @@ The cost to weigh: `SKILL.md` and any injected command output load every time th
 
 **Named arguments or positional?** Positional (`$0`, `$1`) is fine for one or two. Declare `arguments: [issue, branch]` in frontmatter when there are several and `$issue` reads clearer than `$0`. Both draw from the same typed arguments.
 
-**How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: they are executed, not read into context, so a bundled script does its work without ever costing tokens.
+**How does a supporting file get loaded?** Claude reads it when the `SKILL.md` body points at it and the task calls for it, the same on-demand loading as a skill body itself. Describe what each file holds so Claude knows when to open it. Scripts are different: they are executed, not read into context, so a bundled script's code never enters context, only the output it prints.
 
 **Does `allowed-tools` restrict the skill to those tools?** No. It pre-approves them for the turn so you are not prompted; every other tool is still available and still governed by your normal <LessonLink id="I1.2">permission rules</LessonLink>. To remove a tool, deny it, do not rely on leaving it off the allow list.
 

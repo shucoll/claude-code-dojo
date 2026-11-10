@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-15"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B2.1"]
 teaches: ["context-window", "compaction", "usage-check"]
 references: ["B1.1"]
@@ -117,7 +117,7 @@ The fix is rarely "start over." It is usually to finish the current milestone, w
 
 **Why does Claude "forget"?** Because the window filled and compaction ran. It cleared tool output, then replaced the conversation with a summary. Detail from early in the session, including instructions you gave, may not have survived.
 
-**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads, plus a re-read of up to five recently touched files. Lost are most raw file contents, tool output, exact wording, and early instructions. One quiet exception: skill descriptions do not reload, so only skills you actually invoked are preserved.
+**What is compaction, and what survives it?** Automatic housekeeping when the window fills: older tool output is cleared first, then the conversation is summarized. Surviving are your requests, key decisions, important code, and all of startup, which reloads, plus a re-read of up to five recently touched files. Lost are most raw file contents, tool output, exact wording, and early instructions.
 
 **How do I check how full my session is?** Run `/context`. It breaks the window down by category, so you can see what is really eating it, and it flags context-heavy tools and bloated memory files.
 

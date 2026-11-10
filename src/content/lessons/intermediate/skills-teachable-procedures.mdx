@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I2.1"]
 references: ["B2.3", "I2.1"]
 docsSources: ["https://code.claude.com/docs/en/skills"]
@@ -63,7 +63,7 @@ The **body** is the procedure. It is plain markdown, the same instructions you w
 
 ### The folder name is the command
 
-A skill lives in a directory, and the directory name is what you type to run it. A skill at `.claude/skills/summarize-changes/SKILL.md` is invoked with `/summarize-changes`. The frontmatter `name` field, if you set one, is only a display label for listings; it does not change the command. The command comes from the folder.
+A skill lives in a directory, and the directory name is what you type to run it. A skill at `.claude/skills/summarize-changes/SKILL.md` is invoked with `/summarize-changes`. The frontmatter `name` field, if you set one, becomes the command the `/` menu shows, and typing the folder name still works too. Without `name`, the command comes from the folder.
 
 That connects to a change from <LessonLink id="B2.3" />. Custom slash commands and skills are now the same system. A file at `.claude/commands/deploy.md` and a skill at `.claude/skills/deploy/SKILL.md` both give you `/deploy` and behave the same way. Old `commands/` files keep working; skills are the richer form, because a folder can also hold supporting files and frontmatter that a bare command file cannot.
 
@@ -83,7 +83,7 @@ Personal skills follow you everywhere. Project skills ride in the repo, so a tea
 
 A skill runs one of two ways. Claude loads it automatically when your request matches the description, or you invoke it directly by typing `/name`. The two invocation paths, and a third, get their full treatment in <LessonLink id="I3.2" />.
 
-Editing takes effect immediately. Claude Code watches your skill directories, so a change to a `SKILL.md` is live in the current session without a restart. The one exception is creating a top-level skills directory that did not exist when the session started; that needs a restart so the new directory can be watched.
+Editing takes effect immediately. Claude Code watches your skill directories, so a change to a `SKILL.md` is live in the current session without a restart. The one exception is creating a top-level skills directory that did not exist when the session started; Claude Code is not watching it, so run `/reload-skills` to pick up what you put there, and again after each later change.
 
 ## Walkthrough
 
@@ -95,7 +95,7 @@ Take the skill from the anatomy section and follow what actually loads, and when
 
 **When you type `/summarize-changes`.** Same body, same behavior, but you skipped the relevance judgment by naming the skill outright. Useful when you know you want it and would rather not phrase a request that happens to match.
 
-**Confirm it for yourself.** Run `/context` in that session. The skill shows up as a small entry in the Skills row before you invoke it, and the row reflects the listing, not the bodies. Invoke the skill, and the body enters the conversation as a message that stays for the rest of the session. A skill you never trigger never leaves the listing.
+**Confirm it for yourself.** Run `/context all` in that session. The skill shows up as a small entry in the Skills row before you invoke it, and the row reflects the listing, not the bodies. Invoke the skill, and the body enters the conversation as a message that stays for the rest of the session. A skill you never trigger never leaves the listing.
 
 ## Use-case scenarios
 
@@ -146,7 +146,7 @@ risks you notice such as missing error handling, hardcoded values, or tests
 that need updating. If the diff is empty, say there are no uncommitted changes.
 ```
 
-3. In that repo, make a small edit to any file, start `claude`, and run `/context` before typing anything. Find the skill in the Skills row and note how small it is.
+3. In that repo, make a small edit to any file, start `claude`, and run `/context all` before typing anything. Find the skill in the Skills row and note how small it is.
 4. Ask, in plain words:
 
 ```prompt
@@ -155,7 +155,7 @@ What did I change?
 
 Claude should load the skill on its own and answer with a summary and a short risk list.
 
-5. Run `/context` again. The skill's body is now in the conversation, on top of the listing entry that was there at rest.
+5. Run `/context all` again. The skill's body is now in the conversation, on top of the listing entry that was there at rest.
 
 **Success looks like:** you can point to the moment the skill went from one line in a listing to a loaded procedure, and it happened because your request matched the description, not because you named the skill.
 
@@ -163,7 +163,7 @@ Claude should load the skill on its own and answer with a summary and a short ri
 
 **What is the smallest possible skill?** One folder, one `SKILL.md`, one `description` line, and a body. Everything else, arguments, tool permissions, supporting files, is optional and additive.
 
-**Do I have to restart after editing a skill?** No for edits. Changing a `SKILL.md` is live in the current session. Yes only when you create a brand-new top-level skills directory that did not exist at startup, so Claude Code can begin watching it.
+**Do I have to restart after editing a skill?** No for edits. Changing a `SKILL.md` is live in the current session. The one gap is a brand-new top-level skills directory that did not exist at startup: Claude Code is not watching it, so run `/reload-skills` after each change there.
 
 **Then what is the difference between a skill and a slash command now?** Mechanically, little. Custom commands were merged into skills, so both produce a `/name` you can type. A skill is the fuller form: a folder that can carry supporting files, arguments, and frontmatter, and that Claude can also load on its own from the description. Which of skill, `CLAUDE.md`, and command a given instruction belongs in is <LessonLink id="I3.4" />.
 

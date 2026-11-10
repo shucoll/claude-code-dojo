@@ -1,7 +1,8 @@
 An isolated, Anthropic-managed virtual machine, one per session. A network
 proxy enforces an allowlist, and a separate proxy holds your GitHub token
 outside the sandbox while issuing scoped credentials for repository access
-inside it. Git pushes are restricted to the working branch and session VMs are
+inside it. The GitHub proxy rejects branch deletions and non-branch pushes such
+as tags but does not limit which branches a push updates. Session VMs are
 reclaimed after inactivity.
 
 **Isolates:** a full operating system, with no infrastructure to provision.

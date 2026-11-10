@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 20
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-22"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A3.1"]
 teaches: ["isolation-ladder", "filesystem-network-isolation", "auto-allow-mode", "sandbox-limits"]
 references: ["A2.4", "I1.2", "A3.1"]
@@ -40,13 +40,14 @@ It restricts every Bash, PowerShell, and Monitor command Claude runs, and every 
 
 ### Sandbox runtime
 
-The `@anthropic-ai/sandbox-runtime` package wraps an entire process in the same Seatbelt or bubblewrap primitives, so launching Claude Code through it puts every tool, hook, and MCP server inside the boundary, with no Docker:
+The `@anthropic-ai/sandbox-runtime` package wraps an entire process in the same Seatbelt or bubblewrap primitives, so launching Claude Code through it puts every tool, hook, and MCP server inside the boundary, with no Docker. On Linux and WSL2 it needs `bubblewrap`, `socat`, and `ripgrep` on your PATH; macOS needs nothing extra. Install it under a prefix outside every path you allow writes to, then launch Claude Code with its `srt` command:
 
 ```bash
-npx @anthropic-ai/sandbox-runtime claude
+npm install -g @anthropic-ai/sandbox-runtime
+srt claude
 ```
 
-This is the direct answer to the gap <LessonLink id="A3.1" /> found, where a repository's `SessionStart` hook runs on your host in a folder you never trusted. Configure it first, in `~/.srt-settings.json`: by default it denies network access and confines writes to a few built-in runtime paths, and it starts anyway when the settings file is missing or invalid. A clean start proves nothing about whether your settings loaded. It is a beta research preview and its configuration format may change.
+This is the direct answer to the gap <LessonLink id="A3.1" /> found, where a repository's `SessionStart` hook runs on your host in a folder you never trusted. Configure it first, in `~/.srt-settings.json`: by default it denies network access and confines writes to a few built-in runtime paths, and it starts anyway when the settings file is missing, though a file that exists but is invalid stops it from starting. A clean start proves nothing about whether your settings loaded. It is a beta research preview and its configuration format may change.
 
 ### Dev container
 
@@ -64,7 +65,7 @@ Its own kernel, and in cloud or microVM deployments its own virtualized hardware
 
 ### Cloud session
 
-An isolated, Anthropic-managed VM per session, with a network proxy enforcing an allowlist and a separate proxy holding your GitHub token outside the sandbox while issuing scoped credentials inside it. Pushes are restricted to the working branch and VMs are reclaimed after inactivity. Network access takes one of four levels: **None**, **Trusted** (package registries, GitHub, cloud SDKs), **Full**, or a **Custom** allowlist. The Anthropic API stays reachable even at **None**, because Claude Code's own requests take a different path.
+An isolated, Anthropic-managed VM per session, with a network proxy enforcing an allowlist and a separate proxy holding your GitHub token outside the sandbox while issuing scoped credentials inside it. That proxy rejects branch deletions and non-branch pushes such as tags but does not limit which branches a push updates, and VMs are reclaimed after inactivity. Network access takes one of four levels: **None**, **Trusted** (package registries, GitHub, cloud SDKs), **Full**, or a **Custom** allowlist. The Anthropic API stays reachable even at **None**, because Claude Code's own requests take a different path.
 
 Sessions an organization routes to a self-hosted environment run on infrastructure you provision, where isolation and egress are your deployment's responsibility.
 
@@ -74,7 +75,7 @@ The bottom rung is the one you configure by hand, and its defaults are where the
 
 ### Filesystem isolation
 
-Writes default to the current working directory and its subdirectories, any directory added with `--add-dir` or `permissions.additionalDirectories`, and the session temp directory that `$TMPDIR` points to. Shell configuration files and system binaries are outside that set.
+Writes default to the current working directory and its subdirectories, any directory added with `--add-dir` or `permissions.additionalDirectories`, and the per-user temp directory that `$TMPDIR` points to. Shell configuration files and system binaries are outside that set.
 
 Reads default to the entire computer. That default includes `~/.aws/credentials` and `~/.ssh/`: turning the sandbox on does not put your secrets behind it. The fix is a dedicated block:
 
@@ -108,7 +109,7 @@ The reason is the persistence attack from <LessonLink id="A3.1" />. A command th
 
 A proxy running outside the sandbox controls network access, and **no domains are pre-allowed**. The first time a command needs a new host, Claude Code prompts; choosing "Yes, and don't ask again" writes a `WebFetch(domain:...)` allow rule to your local settings. You can pre-allow hosts with `allowedDomains` to skip the prompt entirely.
 
-Two settings turn the allowlist into a wall rather than a prompt. `strictAllowlist` denies any host outside the list instead of asking, and `allowManagedDomainsOnly` does the same while honoring only managed-settings entries. Both are read from user, managed, or CLI `--settings` only: setting `strictAllowlist` in a repository's `.claude/settings.json` has no effect, which is <LessonLink id="A3.1" />'s fail-closed principle applied to the network layer.
+Two settings turn the allowlist into a wall rather than a prompt. `strictAllowlist` denies any host outside the list instead of asking, and `allowManagedDomainsOnly` does the same while honoring only managed-settings entries. `strictAllowlist` is read from user, managed, or CLI `--settings` only, and `allowManagedDomainsOnly` from managed settings alone: setting `strictAllowlist` in a repository's `.claude/settings.json` has no effect, which is <LessonLink id="A3.1" />'s fail-closed principle applied to the network layer.
 
 In auto mode with sandboxing on, Claude names the hosts a command needs on the command itself instead of triggering an approval per connection. The classifier reviews the hosts together with the command, and an approved list opens those hosts for that one command, for as long as it runs. Nothing is written to your settings, and the next command names its own hosts. A per-command list only widens what the sandbox denies by default: `deniedDomains` still blocks, and a locked allowlist makes Claude Code refuse per-command lists outright.
 
@@ -116,7 +117,7 @@ In auto mode with sandboxing on, Claude names the hosts a command needs on the c
 
 Both modes enforce the same filesystem and network restrictions. The difference is how a sandboxed command gets approved.
 
-In **auto-allow mode**, a command that can be sandboxed runs and is approved automatically. A command that cannot be sandboxed falls back to the regular permission flow. This works independently of your permission mode, so sandboxed Bash commands that modify files run without prompting even in Manual mode, where the file edit tools would prompt. Four things still hold: `deny` rules, `rm` and `rmdir` against a critical path, content-scoped `ask` rules such as `Bash(git push *)`, and plan mode, which does not let auto-allow widen approvals.
+In **auto-allow mode**, a command that can be sandboxed runs and is approved automatically. A command that cannot be sandboxed falls back to the regular permission flow. This works independently of your permission mode, so sandboxed Bash commands that modify files run without prompting even in Manual mode, where the file edit tools would prompt. Five things still hold: `deny` rules, `rm` and `rmdir` against a critical path, content-scoped `ask` rules such as `Bash(git push *)`, Monitor commands, which need an allow rule to skip the prompt, and plan mode, which does not let auto-allow widen approvals.
 
 In **regular permissions mode**, every Bash command goes through the permission flow even when sandboxed.
 
@@ -155,8 +156,7 @@ Then write the policy down, so it survives the session and reaches your teammate
   "sandbox": {
     "enabled": true,
     "network": {
-      "allowedDomains": ["registry.npmjs.org", "api.github.com"],
-      "strictAllowlist": true
+      "allowedDomains": ["registry.npmjs.org", "api.github.com"]
     },
     "credentials": {
       "files": [{ "path": "~/.ssh", "mode": "deny" }],
@@ -167,7 +167,7 @@ Then write the policy down, so it survives the session and reaches your teammate
 }
 ```
 
-That configuration says: every command Claude runs is sandboxed, it can reach two hosts and no others without asking, and it cannot read your SSH keys or see your GitHub token. Ask Claude to run the test suite and it works. Ask it to fetch from an unlisted host and the connection is refused with the host named in the result.
+That configuration says: every command Claude runs is sandboxed, it can reach two hosts and no others without asking, and it cannot read your SSH keys or see your GitHub token. Ask Claude to run the test suite and it works. Ask it to fetch from an unlisted host and, in auto mode, the connection is refused unless Claude named the host and the classifier approved it; in Manual mode you get a prompt instead.
 
 Give it back the host it actually needs rather than widening the list:
 
@@ -176,7 +176,7 @@ That failed on a blocked host. Add just that domain to
 sandbox.network.allowedDomains in .claude/settings.json and try again.
 ```
 
-`strictAllowlist` belongs in your user settings rather than the repository's, since project settings cannot set it.
+`strictAllowlist` turns every unlisted host into a refusal in every mode, but only from your user settings, since project settings cannot set it. Once it is on there, Claude Code also ignores the repository's `allowedDomains`, so the hosts this file lists have to move into your user settings with it.
 
 ## Use-case scenarios
 
@@ -200,7 +200,7 @@ Leave it out when you are on native Windows without WSL2, where the Bash sandbox
 
 ## Limitations
 
-Sandboxing reduces risk without being a complete isolation boundary. Five limits are documented, and each one is a configuration you might reach for without reading this list first.
+Sandboxing reduces risk without being a complete isolation boundary. Seven limits are documented, and each one is a configuration you might reach for without reading this list first.
 
 **TLS is not terminated by default.** The built-in proxy decides from the client-supplied hostname and does not inspect encrypted traffic, so code inside the sandbox can potentially use domain fronting to reach hosts outside the allowlist. A broad entry such as `github.com` is therefore a data-exfiltration path. The experimental `network.tlsTerminate` setting terminates TLS at the proxy for credential masking without adding content filtering; a custom proxy that inspects traffic, with its CA certificate installed inside the sandbox, is the answer when your threat model needs one.
 
@@ -211,6 +211,10 @@ Sandboxing reduces risk without being a complete isolation boundary. Five limits
 **`enableWeakerNestedSandbox` is what its name says.** It exists so the Linux sandbox works inside Docker without privileged namespaces, and it considerably weakens security. Use it only where another boundary is doing the real work.
 
 **`allowAppleEvents` removes code-execution isolation on macOS.** It lets `open` and `osascript` work, and it also lets sandboxed commands launch other applications unsandboxed with no prompt. Claude Code honors it from user, managed, or CLI settings alone; project settings cannot turn it on.
+
+**`allowMachLookup` reaches past the boundary on macOS.** Sandboxed commands can reach each Mach or XPC service listed in `network.allowMachLookup`, and the sandbox does not confine what those services do for them.
+
+**`allowNestedUserNamespaces` turns off a boundary on Linux and WSL2.** Sandboxed commands cannot create user namespaces by default; setting it to `true` means code from a sandboxed command can end up running outside the sandbox.
 
 Effective sandboxing needs both halves. Without network isolation, a compromised session can exfiltrate files it can read. Without filesystem isolation, it can backdoor a system resource to get network access. When you widen a default, check that the new `allowWrite` path, `allowedDomains` entry, or `excludedCommands` exception does not undo a restriction on the other side.
 

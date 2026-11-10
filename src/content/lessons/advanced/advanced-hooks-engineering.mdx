@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 22
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["hook-handler-types", "async-hooks", "hook-event-catalog", "hook-scoping", "hook-security"]
 references: ["I4.2", "I4.4", "A1.1", "A1.4", "A3.3", "A6.1"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
@@ -27,7 +27,7 @@ docsSources: ["https://code.claude.com/docs/en/hooks"]
 
 Accepted and useful are different things in three places. A prompt or agent hook on `PermissionDenied` runs and its output is discarded, because the only field that event reads is `retry`, which a model-backed hook cannot set. A prompt hook on `PermissionRequest` that returns `ok: false` has no effect; denying from that event takes a command or HTTP hook returning `decision.behavior: "deny"`. And because an `mcp_tool` hook on `SessionStart` is skipped at launch, anything the session needs from its first turn belongs in a command hook.
 
-Timeouts depend on both the handler and the event. The defaults are 600 seconds for `command`, `http`, and `mcp_tool`, 30 for `prompt`, and 60 for `agent`. On `UserPromptSubmit`, `PreModelSwitch`, and `PostModelSwitch` the first three drop to 30, on `MessageDisplay` to 10, and every `SessionEnd` hook shares a single 1.5-second budget, so cleanup that needs longer than that belongs somewhere other than `SessionEnd`.
+Timeouts depend on both the handler and the event. The defaults are 600 seconds for `command`, `http`, and `mcp_tool`, 30 for `prompt`, and 60 for `agent`. On `UserPromptSubmit`, `PreModelSwitch`, and `PostModelSwitch` the first three drop to 30, on `MessageDisplay` to 10, and every `SessionEnd` hook shares a single 1.5-second budget. A longer per-hook `timeout` in your settings files raises that budget to match, up to 60 seconds, and `CLAUDE_CODE_SESSIONEND_HOOKS_TIMEOUT_MS` overrides it outright.
 
 ## Command hooks: exec form and shell form
 
@@ -73,7 +73,7 @@ The response contract has no equivalent of exit code 2:
 | Connection failure | Non-blocking error, execution continues |
 | Timeout | The hook is canceled |
 
-To block a tool call or deny a permission, the endpoint has to answer 2xx with a JSON decision. A `403` does not block, and neither does a `500`, a refused connection, or a service that is down. The service's uptime is therefore part of whatever policy it enforces.
+To block a tool call or deny a permission, the endpoint has to answer 2xx with a JSON decision. By default a `403` does not block, and neither does a `500`, a refused connection, or a service that is down. Setting `"onFailure": "block"` on the hook turns each of those into a block instead. Either way, the service's uptime is part of whatever policy it enforces.
 
 ## Running a hook in the background
 
@@ -137,7 +137,7 @@ Thirty-three events, grouped by where they sit in the lifecycle. The matcher col
 
 | Event | Fires | Matcher filters | Exit 2 |
 |---|---|---|---|
-| `UserPromptSubmit` | When you submit a prompt, before Claude processes it | No matcher | Blocks and erases the prompt |
+| `UserPromptSubmit` | When you submit a prompt, before Claude processes it | No matcher | Blocks the prompt before it reaches Claude |
 | `UserPromptExpansion` | When a typed command expands into a prompt | Command name | Blocks the expansion |
 | `MessageDisplay` | While assistant text is displayed | No matcher | The original text displays |
 | `Stop` | When Claude finishes responding | No matcher | Claude keeps working |
@@ -198,7 +198,7 @@ The last three are the quality gates from <LessonLink id="A1.4" />.
 | Event | Fires | Matcher filters | Exit 2 |
 |---|---|---|---|
 | `WorktreeCreate` | When a worktree is created for `--worktree`, `isolation: "worktree"`, or a background session | No matcher | Any non-zero exit fails creation |
-| `WorktreeRemove` | When a worktree is removed | No matcher | Any non-zero exit fails removal if the directory remains |
+| `WorktreeRemove` | When a worktree that a `WorktreeCreate` hook created is removed | No matcher | Any non-zero exit fails removal if the directory remains |
 
 `WorktreeCreate` replaces the default git behavior, which is the escape hatch <LessonLink id="A1.1" /> pointed at for repositories that are not git. The worktree events are also the two where exit 1 matters, since any non-zero code counts.
 
@@ -266,6 +266,8 @@ Most failures in a hook let the action through, which is the right default for a
 - A `command`, `http`, or `mcp_tool` hook on `PreToolUse` that hits its timeout does not block, and the call continues through normal permissions. `PreModelSwitch` is the exception, where a timed-out hook blocks the switch.
 - Every HTTP failure short of a 2xx decision lets the action proceed.
 - `if` runs the hook whenever it cannot resolve the command, so it narrows cost without narrowing enforcement.
+
+Setting `"onFailure": "block"` on a `command` or `http` hook reverses the failure cases above. A script that cannot start, an exit code other than 0 or 2, a timeout, or a failed request then does what exit 2 does on that event, and denies on `PermissionRequest`. The field has no effect on `async` and `asyncRewake` hooks, or on `Stop`, `SubagentStop`, `TaskCompleted`, and `TeammateIdle`.
 
 Hooks are the right layer for behavior you want nearly always. A rule that must hold every time belongs in permissions, where a deny is evaluated by Claude Code itself.
 
@@ -348,7 +350,7 @@ Ask Claude to run `ls`, then `touch a.txt && rm a.txt`, then `echo $(rm -f b.txt
 
 Look for `stop.log`. It should not exist, however many turns have ended, because `if` on a non-tool event means the handler never runs.
 
-Finally, ask Claude to write a short `notes.txt`, then type nothing. Within a few seconds Claude should respond on its own to the background failure message, with no prompt from you. For the stretch, change `asyncRewake` to `async`, repeat, and confirm the message now waits for your next prompt.
+Finally, ask Claude to write a short `notes.txt`, then type nothing. Within a few seconds Claude should respond on its own to the background failure message, with no prompt from you. For the stretch, change `asyncRewake` to `async`. An `async` hook delivers only its JSON output, so also change the `command` to `"sleep 5; echo '{\"systemMessage\": \"Background check failed for the file you just wrote\"}'"`. Repeat, and confirm the message now waits for your next prompt.
 
 ## FAQ
 

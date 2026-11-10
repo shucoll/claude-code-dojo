@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 16
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-25"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A4.1"]
 teaches: ["opentelemetry", "cost-attribution", "telemetry-redaction", "audit-events"]
 references: ["I2.1", "A3.3", "A3.4", "A4.4", "A7.5"]
@@ -40,7 +40,7 @@ export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
 export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer your-token"
 ```
 
-`OTEL_METRICS_EXPORTER` accepts `otlp`, `prometheus`, `console`, or `none`, and `OTEL_LOGS_EXPORTER` accepts `otlp`, `console`, or `none`, both comma-separated for more than one destination. The protocol is `grpc`, `http/json`, or `http/protobuf`. Metrics export every 60 seconds and logs every 5 by default, adjustable with `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_LOGS_EXPORT_INTERVAL`. Each signal can override the endpoint, protocol, and headers on its own with the `OTEL_EXPORTER_OTLP_METRICS_*` and `OTEL_EXPORTER_OTLP_LOGS_*` forms.
+`OTEL_METRICS_EXPORTER` accepts `otlp`, `prometheus`, `console`, or `none`, and `OTEL_LOGS_EXPORTER` accepts `otlp`, `console`, or `none`, both comma-separated for more than one destination. The protocol is `grpc`, `http/json`, or `http/protobuf`. Metrics export every 60 seconds and logs every 5 by default, adjustable with `OTEL_METRIC_EXPORT_INTERVAL` and `OTEL_LOGS_EXPORT_INTERVAL`. Each signal can override the endpoint and protocol on its own with the `OTEL_EXPORTER_OTLP_METRICS_*` and `OTEL_EXPORTER_OTLP_LOGS_*` forms, and per-signal headers are merged with the shared `OTEL_EXPORTER_OTLP_HEADERS` rather than replacing them.
 
 Distributed tracing is in beta behind a second flag, `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1` plus `OTEL_TRACES_EXPORTER`, and its spans carry W3C trace context headers.
 
@@ -50,7 +50,7 @@ Distributed tracing is in beta behind a second flag, `CLAUDE_CODE_ENHANCED_TELEM
 |---|---|---|
 | `claude_code.session.count` | count | `start_type` |
 | `claude_code.token.usage` | tokens | `type`, `model`, `query_source`, `speed`, `effort`, and the feature attributes below |
-| `claude_code.cost.usage` | USD | the same set as token usage |
+| `claude_code.cost.usage` | USD | the same set as token usage, minus `type` |
 | `claude_code.lines_of_code.count` | count | `type`, `model` |
 | `claude_code.commit.count` | count | standard attributes |
 | `claude_code.pull_request.count` | count | standard attributes |
@@ -63,14 +63,14 @@ Distributed tracing is in beta behind a second flag, `CLAUDE_CODE_ENHANCED_TELEM
 |---|---|
 | `claude_code.user_prompt` | `prompt_length`, `command_name`, `command_source`, and `prompt` when you turn text on |
 | `claude_code.assistant_response` | `response_length`, `model`, `request_id`, `query_source`, and `response` when you turn text on |
-| `claude_code.tool_result` | `tool_name`, `tool_use_id`, `success`, `result_tokens`, `skill.name`, `plugin.name` |
-| `claude_code.tool_decision` | `tool_name`, `tool_use_id`, `decision`, `source`, `language` |
-| `claude_code.api_request` | `model`, `endpoint`, `request_id`, `client_request_id`, `speed` |
-| `claude_code.api_error` | `model`, `endpoint`, `status_code`, `error`, `client_request_id` |
-| `claude_code.api_refusal` | `refusal_reason`, `model`, `request_id`, `message.uuid` |
-| `claude_code.managed_settings_resolved` | `redacted_settings` and `settings_sha256_digest`, both only with `OTEL_LOG_MANAGED_SETTINGS` |
+| `claude_code.tool_result` | `tool_name`, `tool_use_id`, `success`, `duration_ms`, `tool_result_size_bytes` |
+| `claude_code.tool_decision` | `tool_name`, `tool_use_id`, `decision`, `source`, and `tool_parameters` when you turn tool details on |
+| `claude_code.api_request` | `model`, `cost_usd`, `request_id`, `client_request_id`, `speed` |
+| `claude_code.api_error` | `model`, `attempt`, `status_code`, `error`, `client_request_id` |
+| `claude_code.api_refusal` | `model`, `request_id`, `has_category`, and `category` when you turn tool details on |
+| `claude_code.managed_settings_resolved` | `managed_settings.settings` and `managed_settings.resolved_sha256`, both only with `OTEL_LOG_MANAGED_SETTINGS` |
 
-Every event also carries `prompt.id`, a UUID linking all the events produced by one user prompt, along with `event.sequence` for ordering and `message.uuid` for matching back to a transcript message. A single prompt's full causal chain is reconstructable from `prompt.id` alone.
+Every event also carries `prompt.id`, a UUID linking all the events produced by one user prompt, along with `event.sequence` for ordering, and prompt and response events add `message.uuid` for matching back to a transcript message. A single prompt's full causal chain is reconstructable from `prompt.id` alone.
 
 ### Where attribution comes from
 
@@ -92,7 +92,7 @@ Team and cost-center dimensions come from `OTEL_RESOURCE_ATTRIBUTES`, which you 
 export OTEL_RESOURCE_ATTRIBUTES="team=payments,cost_center=eng-4471"
 ```
 
-Six toggles control which of these ride along on metrics, because each distinct value multiplies your time series. `OTEL_METRICS_INCLUDE_SESSION_ID` and `OTEL_METRICS_INCLUDE_ACCOUNT_UUID` default to on; `OTEL_METRICS_INCLUDE_VERSION`, `OTEL_METRICS_INCLUDE_ENTRYPOINT`, and `OTEL_METRICS_INCLUDE_REPOSITORY` default to off; `OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES` defaults to on. Turning session id off is the usual first move when a collector bill gets uncomfortable, since it is the highest-cardinality attribute in the set and events keep it regardless.
+Six toggles control which of these ride along on metrics and events, because each distinct value multiplies your time series. `OTEL_METRICS_INCLUDE_SESSION_ID` and `OTEL_METRICS_INCLUDE_ACCOUNT_UUID` default to on; `OTEL_METRICS_INCLUDE_VERSION`, `OTEL_METRICS_INCLUDE_ENTRYPOINT`, and `OTEL_METRICS_INCLUDE_REPOSITORY` default to off; `OTEL_METRICS_INCLUDE_RESOURCE_ATTRIBUTES` defaults to on. Turning session id off is the usual first move when a collector bill gets uncomfortable, since it is the highest-cardinality attribute in the set, but despite the `METRICS` in its name the toggle strips `session.id` from events too.
 
 ## Walkthrough
 
@@ -150,7 +150,7 @@ Descriptor:
 NumberDataPoints #0
 Data point attributes:
      -> model: Str(claude-sonnet-5)
-     -> agent.name: Str(log-summarizer)
+     -> agent.name: Str(Explore)
      -> team: Str(payments)
      -> user.account_uuid: Str(...)
 Value: 0.0143
@@ -175,7 +175,7 @@ Prompts, responses, and tool details are withheld unless you turn them on. Each 
 
 `CLAUDE_CODE_OTEL_CONTENT_MAX_LENGTH` caps the size of any logged content, defaulting to 61440 UTF-16 code units, roughly 60 KB.
 
-One gate reaches further than its name suggests. `skill.name` on the cost and token metrics reports built-in, bundled, user-defined, and official-marketplace skill names verbatim, while a third-party plugin's skill names arrive as `third-party` until `OTEL_LOG_TOOL_DETAILS` is set. Attribution across skills you did not write is a content decision rather than a metrics one.
+One gate reaches further than its name suggests. `skill.name` on the cost and token metrics reports built-in, bundled, user-defined, and official-marketplace skill names verbatim, while a third-party plugin's skill names arrive as `third-party` until `OTEL_LOG_TOOL_DETAILS` is set. `agent.name`, `mcp_server.name`, and `mcp_tool.name` go further and report your own subagents and user-configured MCP servers as `custom` under the same gate. Attribution across skills you did not write, and across subagents and servers you did, is a content decision rather than a metrics one.
 
 An audit trail that can answer "who approved the `Bash` call that touched production" needs `OTEL_LOG_TOOL_DETAILS`, because `claude_code.tool_decision` without it tells you a decision was made and not what was decided about. Turning it on means your collector now holds the commands developers ran. That is a data-handling decision in the sense <LessonLink id="A3.4" /> means, made about a system your organization operates rather than about Anthropic's retention, and it should be made with the same people in the room.
 
@@ -203,7 +203,7 @@ Reach for the dashboards when the question is adoption or a rough ROI story for 
 
 **Telemetry set per developer.** Adoption looks like whoever remembered to export the variables, and cost attribution has holes shaped like your most cost-sensitive teams. Deliver the configuration through managed settings, where the endpoint and credential locks apply.
 
-**Cardinality from `session.id`.** Your collector bill climbs faster than your Claude Code bill, because every session creates a new time series on every metric. Set `OTEL_METRICS_INCLUDE_SESSION_ID=false`; events still carry `session.id`, so per-session investigation still works.
+**Cardinality from `session.id`.** Your collector bill climbs faster than your Claude Code bill, because every session creates a new time series on every metric. Set `OTEL_METRICS_INCLUDE_SESSION_ID=false`, knowing that it removes `session.id` from events too, so per-session investigation goes with it.
 
 **An audit trail with nothing in it.** `claude_code.tool_decision` arrives for every permission decision, and without `OTEL_LOG_TOOL_DETAILS` it records that a `Bash` call was allowed without recording the command. Decide whether you want the detail before an incident asks for it.
 
@@ -240,7 +240,7 @@ Run the same work again. The tool events now carry the parameters. Decide, befor
 
 ## FAQ
 
-**Does telemetry work on Amazon Bedrock and the other cloud providers?** Yes, and it is the only option there. Claude Code does not send metrics from a cloud provider back to Anthropic, so the analytics dashboards and the Claude Code Analytics API do not cover that usage. The exporter runs on the developer's machine and is unaffected.
+**Does telemetry work on Amazon Bedrock and the other cloud providers?** Yes, and apart from routing traffic through a gateway, it is the only option there. Claude Code does not send metrics from a cloud provider back to Anthropic, so the analytics dashboards and the Claude Code Analytics API do not cover that usage. The exporter runs on the developer's machine and is unaffected.
 
 **Can I get per-user cost without OpenTelemetry?** Partly. Team and Enterprise organizations can export a spend report CSV listing token usage and estimated spend per user and per model, updated daily, and Console organizations have the Console dashboard and the Claude Code Analytics API. OpenTelemetry is the only one that streams in near real time and the only one that breaks cost down by skill, plugin, or MCP server.
 
@@ -248,7 +248,7 @@ Run the same work again. The tool events now carry the parameters. Decide, befor
 
 **Are contribution metrics available under Zero Data Retention?** No. An organization with ZDR enabled sees usage metrics only on the dashboard. <LessonLink id="A3.4" /> covers the wider set of features ZDR removes.
 
-**How do I separate automation spend from interactive work?** `query_source` on the cost and token metrics distinguishes where a request came from, and `app.entrypoint` records the launch method, including `cli`, `sdk-ts`, and `sdk-py`. Enable `OTEL_METRICS_INCLUDE_ENTRYPOINT` to get the latter on metrics as well as events.
+**How do I separate automation spend from interactive work?** `query_source` on the cost and token metrics distinguishes where a request came from, and `app.entrypoint` records the launch method, including `cli`, `sdk-ts`, and `sdk-py`. Enable `OTEL_METRICS_INCLUDE_ENTRYPOINT` to get the latter, which is off by default on metrics and events alike.
 
 ## Where next
 

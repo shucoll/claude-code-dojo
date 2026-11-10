@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["tool-belt", "risk-tiers", "reading-transcripts"]
 references: ["B1.1", "B2.3"]
 docsSources: ["https://code.claude.com/docs/en/tools-reference", "https://code.claude.com/docs/en/permissions"]
@@ -71,7 +71,7 @@ No prompt appeared because nothing changed. One nuance to carry forward: Read, G
 
 ### Writes files: the first gate
 
-These change files on disk, so each one asks before it acts (in manual mode; in auto mode a classifier answers instead of you).
+These change files on disk, so each one asks before it acts (in manual mode; auto mode approves edits inside your working directory without asking).
 
 - **`Edit`** does an exact find-and-replace inside one file. It is literal, not fuzzy: the text it is replacing must match character for character and appear exactly once. Claude normally has to have read the file first, though newer models can skip that when reading it would not have prompted anyway. What it can break is the file it edits, if the replacement is wrong.
 - **`Write`** creates a new file or overwrites an existing one with entire new contents. It does not merge or append. Overwriting an existing file follows the same read-first rule as `Edit`, and for notebooks and partially read files the read is always required.
@@ -112,23 +112,23 @@ The first command read state and ran silently; the second has consequences and s
 
 ### Leaves your machine: the network tier
 
-- **`WebFetch`** takes a URL and a question, fetches the page, and answers the question using a small fast model. It is **lossy by design**: Claude receives the model's answer, not the raw page. It prompts the first time it reaches a new domain (a preapproved set of documentation sites is exempt).
+- **`WebFetch`** takes a URL and a question, fetches the page, and answers the question using a small fast model. It is **lossy by design**: Claude receives the model's answer, not the raw page. It prompts before each fetch unless your rules already allow the domain (a preapproved set of documentation sites is exempt).
 - **`WebSearch`** runs a web search and returns result titles and URLs. It does not read the pages; Claude follows up with `WebFetch` to read one.
 
 ```text
-⏺ WebFetch(https://code.claude.com/docs/en/hooks)
-  ⎿ Claude wants to fetch code.claude.com
+⏺ WebFetch(https://example.com/changelog)
+  ⎿ Claude wants to fetch example.com
 
      ❯ 1. Yes
-       2. Yes, and don't ask again for code.claude.com
+       2. Yes, and don't ask again for example.com
        3. No
 ```
 
-The prompt names the domain, not the full URL, because approval is granted per domain.
+The "don't ask again" option names the domain, not the full URL, because that approval covers the whole domain.
 
 ### Delegation: the tool that hides a whole session
 
-**`Agent`** hands a task to a subagent that runs in its own separate context window and returns a single result. Launching it does not prompt. The subagent then uses these same tools, and *its* calls are checked against your rules as they happen. The catch for reading transcripts: you see the launch and the final result, never the subagent's intermediate work. A short `Agent(...)` line can represent a great deal of activity you did not watch. Subagents get <LessonLink id="I6.1">their own module</LessonLink> later; for now, know that an `Agent` line is a closed door, not an idle one.
+**`Agent`** hands a task to a subagent that runs in its own separate context window and returns a single result. Launching it does not prompt. The subagent then uses these same tools, and *its* calls are checked against your rules as they happen. The catch for reading transcripts: you see the launch and the final result, not the subagent's intermediate work, which stays in its own transcript. A short `Agent(...)` line can represent a great deal of activity you did not watch. Subagents get <LessonLink id="I6.1">their own module</LessonLink> later; for now, know that an `Agent` line is a closed door, not an idle one.
 
 ### The long tail
 
@@ -180,7 +180,7 @@ These are all misreadings of a transcript, and each one sends people chasing a p
 1. Start Claude and ask, `What tools do you have access to?` Read the answer and sort the names into the four tiers in your head. Anything you cannot place is probably a session-control tool from the long tail.
 2. Ask Claude to find something: `Where is the main entry point defined?` Watch the transcript. Which tool fired: `Grep`, `Glob`, or a `grep`/`find` search through `Bash`? Did it prompt? (It should not.)
 3. Ask it to run a read-only command like `git status`, then something with a side effect like running the test suite. Confirm the first ran silently and the second named `Bash` in a prompt.
-4. Ask it to fetch a documentation URL. Confirm the prompt names the **domain**, not the full URL.
+4. Ask it to fetch a page from a site that is not a documentation site (many documentation sites are preapproved and fetch without asking). Confirm the "don't ask again" option names the **domain**, not the full URL.
 
 **Success criteria:** for any tool call you saw, you can state its tier, and before Claude takes its next step you can predict whether it will prompt.
 

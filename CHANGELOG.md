@@ -6,19 +6,56 @@ content revisions).
 
 ## 2026-11-09
 
+### Fixed
+
+- The hook decision-control lesson's npm auto-approve hook no longer approves a
+  chained command such as `npm test && …`; anything with a shell operator falls
+  through to the normal permission prompt.
+- The headless mode lesson's CI risk gate stops the build when a run returns no
+  structured result, instead of letting it through.
+- The sandboxing walkthrough no longer relies on `strictAllowlist` in project
+  settings, where Claude Code ignores it, and explains what changes when you set
+  it in user settings.
+- The autonomous maintenance workflow keeps the GitHub token out of the test
+  step's reach, refuses to run test scripts the job changed, and treats a run
+  that reports an error as a failure.
+- The cost and observability walkthrough sets the telemetry variables in user
+  settings, since Claude Code ignores them in a repository's settings files.
+
 ### Lessons
 
 - Refreshed against current Claude Code documentation:
-  - Beginner: Install and authenticate; Permission modes and plan mode.
-  - Intermediate: Prompt-based and agent-based hooks; MCP in practice (and its
-    costs); Delegation patterns; Plugins and marketplaces; Agent teams:
-    preview; Package it.
-  - Advanced: Agent view and dispatch; Cross-session messaging; Agent teams
-    (deep dive); Dynamic workflows; Claude Code in CI; Automated code review,
-    layered; Scheduled and autonomous operation; Org-scale controls; Data
-    handling; Model strategy and effort; Plugin development; Marketplaces and
-    distribution; Building a custom agent; Deploying agents safely; Parallel
-    sprint with an agent team; CI integration; Governance pack; SDK capstone.
+  - Beginner: From chat to agent; What Claude Code is and where it lives; What
+    Claude can see and touch; Install and authenticate; Your first working
+    session; The context window; The essential command belt; CLAUDE.md vs auto
+    memory; Permission modes and plan mode; Checkpoints: your undo button; Plan
+    mode vs "make a plan" vs just prompting; Git and Claude Code.
+  - Intermediate: The built-in tool belt; Permission rules; What loads at
+    startup (and what it costs); CLAUDE.md at scale: rules and imports; Output
+    styles; Skills: teachable procedures; Building and invoking skills; Skill
+    patterns; Hooks: deterministic automation; Hook input, output, and decision
+    control; Hook recipes; Prompt-based and agent-based hooks; MCP: giving
+    Claude new tools; MCP scopes, auth, and team sharing; MCP in practice (and
+    its costs); Subagents: context isolation and delegation; Custom subagents;
+    Delegation patterns; Plugins and marketplaces; Packaging your setup as a
+    plugin; How it all layers; Agent teams: preview; Connect GitHub via MCP;
+    Skills for the repeatable stuff; Hooks as quality gates; Subagent review
+    board; Package it.
+  - Advanced: Worktrees and parallel sessions; Agent view and dispatch;
+    Cross-session messaging; Agent teams (deep dive); Dynamic workflows;
+    Headless mode; Claude Code in CI; Automated code review, layered; Scheduled
+    and autonomous operation; Sandboxing; Org-scale controls; Data handling;
+    Prompt caching: why session hygiene is money; Model strategy and effort;
+    Monitoring and observability; Plugin development; Marketplaces and
+    distribution; Advanced hooks engineering; When to graduate from Claude Code
+    to the SDK; Building a custom agent; Deploying agents safely; Parallel
+    sprint with an agent team; CI integration; Autonomous maintenance;
+    Governance pack; Cost and observability; SDK capstone.
+- Interactive charts and their pop-up cards were checked with their lessons and
+  updated where they had drifted: the Claude Code system map, the startup cost
+  ledger, the context window simulator, the permission rule shapes, the cache
+  invalidation board, and the pop-ups behind the agentic loop, automation
+  spectrum, command belt, hook lifecycle, and sandbox layers charts.
 
 ## 1.0.0 (2026-09-27)
 

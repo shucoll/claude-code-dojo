@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 14
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I6.1"]
 references: ["I1.2", "I1.4", "I3.1", "I5.1"]
 docsSources: ["https://code.claude.com/docs/en/sub-agents"]
@@ -181,7 +181,6 @@ name: code-reviewer
 description: Expert code review specialist. Reviews changes for quality, security, and maintainability. Use proactively immediately after writing or modifying code.
 tools: Read, Grep, Glob, Bash
 model: inherit
-memory: project
 ---
 
 You are a senior code reviewer for this codebase.
@@ -189,8 +188,7 @@ You are a senior code reviewer for this codebase.
 When invoked:
 1. Run `git diff` to see what changed
 2. Focus only on modified files
-3. Check your memory for issues this team has hit before
-4. Begin the review immediately, without asking what to look at
+3. Begin the review immediately, without asking what to look at
 
 Review for:
 - Error handling on every path that can fail
@@ -203,11 +201,9 @@ Report findings in three groups: Critical (must fix), Warnings
 (should fix), Suggestions (consider). Give a specific fix for each.
 
 You do not modify files. If a fix is obvious, describe it.
-
-After the review, add any recurring pattern you noticed to your memory.
 ```
 
-Every line of frontmatter is doing work. `tools` has no Write or Edit, so "you do not modify files" is enforced rather than requested. `model: inherit` keeps review judgment on whatever you chose for the session. `memory: project` lets the reviewer accumulate the team's recurring mistakes, committed alongside the agent that learns them. The `description` says "proactively" and "immediately after writing code," which is what gets it invoked without you asking.
+Every line of frontmatter is doing work. `tools` has no Write or Edit, so "you do not modify files" is enforced rather than requested. `model: inherit` keeps review judgment on whatever you chose for the session. There is no `memory` line, since memory would switch Write and Edit back on. The `description` says "proactively" and "immediately after writing code," which is what gets it invoked without you asking.
 
 Make some changes, then:
 
@@ -232,8 +228,6 @@ What returns is the review, not the diff it read:
 
   Suggestions (1)
   - `doWork` in src/lib/queue.ts:12 says nothing about what it does.
-
-  Memory updated: unhandled rejection on refresh paths, third occurrence.
 ```
 
 The eleven tool calls and the diff never entered your window.
@@ -274,7 +268,7 @@ Writing tests means writing files, so Write and Edit are in. "Do not modify the 
 
 ## Use-case scenarios
 
-**You want reviews that get stricter over time.** Give the reviewer `memory: project` and tell it to record recurring issues. Six weeks in, it opens each review already knowing the three mistakes your team keeps making, and that knowledge is in version control rather than in one person's head.
+**You want reviews that get stricter over time.** Give the reviewer `memory: project`, accepting the Write and Edit that come with it, and tell it to record recurring issues. Six weeks in, it opens each review already knowing the three mistakes your team keeps making, and that knowledge is in version control rather than in one person's head.
 
 **You want a delegate that cannot touch production.** Build a read-only investigator: `tools: Read, Grep, Glob` and nothing else. No Bash means no `curl`, no deploy script, no `psql`. Isolation limits what it costs you; the tool list limits what it can do.
 

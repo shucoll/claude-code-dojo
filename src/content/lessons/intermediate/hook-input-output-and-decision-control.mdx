@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 15
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I4.1"]
 references: ["I1.1", "I1.2"]
 docsSources: ["https://code.claude.com/docs/en/hooks"]
@@ -66,9 +66,9 @@ If a hook just exits, the exit code is its whole answer:
 |---|---|
 | `0` | Success. If the hook printed JSON on stdout, Claude Code parses it (below); plain text is logged. |
 | `2` | Blocking error. Whatever the hook wrote to **stderr** is fed back to Claude, and the event is blocked. |
-| anything else | Non-blocking error. stderr is shown in the transcript as a hook error, and execution continues. |
+| anything else | Non-blocking error. stderr is shown in the transcript as a hook error, and execution continues, unless the hook sets `"onFailure": "block"`. |
 
-Exit `2` is the quick way to block. What "blocked" means depends on the event: on `PreToolUse` the tool call is refused, on `Stop` the turn is not allowed to end (Claude keeps working), on `UserPromptSubmit` the prompt is dropped. In every case, the stderr text becomes Claude's explanation of what happened, so even the blunt channel can carry one line of reason.
+Exit `2` is the quick way to block. What "blocked" means depends on the event: on `PreToolUse` the tool call is refused, on `Stop` the turn is not allowed to end (Claude keeps working), on `UserPromptSubmit` the prompt is dropped. On `PreToolUse` and `Stop`, the stderr text becomes Claude's explanation of what happened, so even the blunt channel can carry one line of reason. A blocked prompt never reaches Claude, so its stderr is shown to you instead.
 
 ### Output channel two: structured JSON
 
@@ -76,7 +76,6 @@ When exit `2` is too blunt, print a JSON object on stdout and exit `0`. There ar
 
 - `continue: false` stops Claude entirely, with `stopReason` as the message.
 - `systemMessage` shows the user a warning line.
-- `suppressOutput: true` hides the hook's stdout from the transcript.
 
 The real control lives under `hookSpecificOutput`, keyed by the event. For `PreToolUse`, this is the richest set in the system:
 
@@ -99,7 +98,7 @@ The real control lives under `hookSpecificOutput`, keyed by the event. For `PreT
 | `"ask"` | the user gets the normal permission dialog |
 | `"defer"` | the call is paused so a `claude -p` integration can collect input and resume it later; ignored in interactive sessions |
 
-`permissionDecisionReason` is the sentence Claude reads when you deny, which is the difference that matters: an exit-`2` block tells Claude only that something stopped it, while a JSON deny with a reason tells it *why*, so it can adjust its approach instead of retrying blindly. Two more fields sharpen it further: `additionalContext` injects a note into the conversation alongside any decision except `defer`, and `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path), turning the hook from a gate into an editor. `updatedInput` replaces the entire input object rather than patching it, so echo back every field you are not changing alongside the ones you are, or the omitted fields are dropped. Claude Code then evaluates permission rules and a Bash command's auto-background eligibility against the input your hook returned, not the one Claude sent.
+`permissionDecisionReason` is the sentence Claude reads when you deny, which is the difference that matters: an exit-`2` block with an empty stderr tells Claude only that something stopped it, while a JSON deny with a reason tells it *why*, so it can adjust its approach instead of retrying blindly. Two more fields sharpen it further: `additionalContext` injects a note into the conversation alongside any decision except `defer`, and `updatedInput` rewrites the tool's arguments before it runs (force a flag, redirect a path), turning the hook from a gate into an editor. `updatedInput` replaces the entire input object rather than patching it, so echo back every field you are not changing alongside the ones you are, or the omitted fields are dropped. Claude Code then evaluates permission rules and a Bash command's auto-background eligibility against the input your hook returned, not the one Claude sent.
 
 Other events expose their own `hookSpecificOutput`. `PermissionRequest` (the dialog itself) takes a `decision.behavior` of `allow` or `deny`, which is how a hook answers a permission prompt for you. `SessionStart` takes `additionalContext` to load state. The pattern is constant: name the event in `hookEventName`, then set that event's decision fields.
 
@@ -165,7 +164,7 @@ Make it executable (`chmod +x .claude/hooks/protect-files.sh`), then register it
 
 Now walk the exchange. Claude tries to edit `.env`. Before the tool runs, Claude Code sends the script the `PreToolUse` JSON with `tool_input.file_path` set to the `.env` path. The script reads stdin, matches `.env`, and prints a `deny` with a reason. The edit never happens, and Claude receives the reason, so instead of trying again it can say "that file is protected" and route around it.
 
-The script could have skipped the JSON and just done `echo "protected" >&2; exit 2`. That also blocks the edit. The reason to prefer the JSON version is the sentence in `permissionDecisionReason`: it is what makes the block legible to Claude instead of an opaque failure it might retry.
+The script could have skipped the JSON and just done `echo "protected" >&2; exit 2`. That also blocks the edit, and Claude reads the stderr line as the reason. The JSON version is worth learning because the same object can also allow, ask, rewrite the input, or add context, which an exit code cannot.
 
 ### Example two: auto-approve a known-safe prompt
 
@@ -176,6 +175,12 @@ The opposite problem. `npm test` is safe, but the permission dialog interrupts y
 # auto-approve-npm.sh: approve safe npm subcommands, defer the rest
 input=$(cat)
 command=$(echo "$input" | jq -r '.tool_input.command')
+
+# defer anything compound or redirected, so `npm test && …` cannot ride along
+case "$command" in
+  *[';&|<>$`']*|*$'\n'*) exit 0 ;;
+esac
+
 subcommand=$(echo "$command" | awk '{print $2}')
 
 case "$subcommand" in
@@ -230,7 +235,7 @@ Register it on `PermissionRequest`, with an `if` clause so it is only consulted 
 
 ## When to use / when not to use
 
-Use the **exit code** when the answer is a plain allow or block and you have nothing to say about it: a quick gate, a fire-and-exit side effect. Use **structured JSON** the moment you need more than yes or no: a reason Claude should read, an approval on a `PermissionRequest`, context injected with `additionalContext`, or arguments rewritten with `updatedInput`. Reaching for JSON when an exit code would do is harmless but verbose; reaching for an exit code when you needed to give Claude a reason is the actual mistake, because the block lands with no explanation.
+Use the **exit code** when the answer is a plain allow or block: a quick gate, a fire-and-exit side effect. On `PreToolUse` and `Stop` an exit-`2` block can still carry one line of reason in stderr. Use **structured JSON** the moment you need more than yes or no: an approval on a `PermissionRequest`, an `ask`, context injected with `additionalContext`, or arguments rewritten with `updatedInput`. Reaching for JSON when an exit code would do is harmless but verbose; reaching for an exit code when you needed one of those is the actual mistake, because an exit code can only block.
 
 Do not use decision output for anything requiring judgment the script cannot compute. If deciding needs the model to read and weigh (is this refactor risky, is this message clear), a shell hook is the wrong shape and the escalation is <LessonLink id="I4.4" />.
 
@@ -246,7 +251,7 @@ The cost is the same as any hook: execution time on the event, and now the added
 
 **Expecting a second hook to loosen a deny.** The symptom is an `allow` hook that seems to do nothing because another hook on the same event denies. Most-restrictive-wins is not overridable; you cannot add a hook to permit what another hook blocks. Fix the hook that denies, or scope its matcher so it does not fire on the case you want allowed.
 
-**`jq` is not installed.** The symptom is every decision hook erroring out. The Bash examples parse JSON with `jq`; install it (`brew install jq`, `apt-get install jq`) or the hooks cannot read their input.
+**`jq` is not installed.** The symptom is hooks that never block or approve anything: each `jq` call fails, the scripts read an empty string, and they fall through to `exit 0`. The Bash examples parse JSON with `jq`; install it (`brew install jq`, `apt-get install jq`) or the hooks cannot read their input.
 
 ## Try It
 
@@ -263,7 +268,7 @@ The cost is the same as any hook: execution time on the event, and now the added
 
 **What does a hook receive as input?** A JSON object on stdin: common fields (`session_id`, `cwd`, `hook_event_name`, `permission_mode`) plus event-specific fields, for `PreToolUse` the `tool_name` and `tool_input`, for `PostToolUse` also the `tool_response`. Read it with `jq`.
 
-**What do exit codes 0 and 2 mean?** `0` is success, and any stdout is parsed as JSON output. `2` is a blocking error: stderr is fed to Claude and the event is blocked, where "blocked" depends on the event (deny the tool on `PreToolUse`, keep working on `Stop`, drop the prompt on `UserPromptSubmit`). Other codes are non-blocking errors that let execution continue.
+**What do exit codes 0 and 2 mean?** `0` is success, and any stdout is parsed as JSON output. `2` is a blocking error: stderr is fed to Claude and the event is blocked, where "blocked" depends on the event (deny the tool on `PreToolUse`, keep working on `Stop`, drop the prompt on `UserPromptSubmit`). Other codes are non-blocking errors that let execution continue, unless the hook sets `"onFailure": "block"`.
 
 **How does JSON output block, approve, or inject?** Under `hookSpecificOutput`, keyed by `hookEventName`. Block with `permissionDecision: "deny"` and a `permissionDecisionReason`; approve a dialog with `PermissionRequest` and `decision.behavior: "allow"`; inject with `additionalContext`; rewrite arguments by returning the whole input object in `updatedInput`.
 

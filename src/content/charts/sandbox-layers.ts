@@ -16,9 +16,8 @@ const popup = (title: string, content: () => Promise<{ default: ComponentType }>
  * same Seatbelt or bubblewrap primitives. The third rung adds an operating
  * system around the process, and the fourth adds a kernel.
  *
- * A2.4 reuses this chart for the sandboxing non-negotiable, so every popup
- * states what the tier isolates and what it still lets through, readable on
- * its own without the lesson around it.
+ * Every popup states what the tier isolates and what it still lets through,
+ * readable on its own without the lesson around it.
  */
 export const sandboxLayers: ChartDef = {
   id: 'sandbox-layers',

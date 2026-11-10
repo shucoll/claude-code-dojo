@@ -6,7 +6,7 @@ type: "core"
 order: 4
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B2.3"]
 teaches: ["checkpoints", "rewind", "undo"]
 references: ["B2.3", "B2.4"]
@@ -39,7 +39,7 @@ A seatbelt is automatic, always on, and saves you in the specific accident it wa
 
 Two things, and knowing which is which explains everything else.
 
-**Your code**, snapshotted before each prompt that starts a turn. Only changes made through Claude's file-editing tools are tracked.
+**Your code**, snapshotted before each prompt that starts a turn. Only files Claude has edited with its file-editing tools are tracked.
 
 **Your conversation**, at those same points. A message you queue while Claude is already working joins the running turn and gets no checkpoint of its own.
 
@@ -55,7 +55,7 @@ Or press `Esc` twice, which is faster and is the way you will actually do it.
 
 One catch worth knowing before it confuses you: **double-`Esc` only opens the rewind menu when the prompt input is empty.** If you have typed something, the first double-`Esc` clears your draft instead (it is saved to history, so `Up` brings it back). This is the same `Esc Esc` that <LessonLink id="B2.1" /> mentioned and set aside.
 
-The menu lists the prompts you sent this session, minus any message that joined a turn already running. Pick the point you want to return to, then choose what to do with it. There are three restores and two summarizes, and confusing the two families is the most common mistake here.
+The menu lists the prompts you sent this session, and a message that joined a turn already running can show as **No code restore**. Pick the point you want to return to, then choose what to do with it. There are three restores and two summarizes, and confusing the two families is the most common mistake here.
 
 **The restores change state:**
 
@@ -116,7 +116,7 @@ The cost of rewinding is near zero, which is why the temptation is to lean on it
 
 The limitations are not edge cases. They are the difference between a seatbelt and a vehicle, and each one is a real way people lose work.
 
-- **Bash commands are not tracked.** If Claude ran `rm file.txt`, `mv old.txt new.txt`, or a script that rewrote things, rewind will not bring any of it back. Only edits made through Claude's file-editing tools are snapshotted. This is the big one, because a destructive command feels exactly like a destructive edit while you watch it happen.
+- **Bash-only changes are not tracked.** If Claude ran `rm file.txt`, `mv old.txt new.txt`, or a script that rewrote things, rewind will not bring any of it back unless Claude had already edited that file with its file-editing tools. This is the big one, because a destructive command feels exactly like a destructive edit while you watch it happen.
 - **Anything outside your machine is gone for good.** A pushed commit, a deployed change, an API call, a database migration, an email. Rewind restores local files. It cannot un-send. This is why Claude asks before commands with external side effects.
 - **Subagent edits usually are not restored.** A subagent edits with the same file-editing tools, but its work normally lands outside your session's checkpoints, so rewind leaves it in place. Git is the way back from those.
 - **Your own edits are not tracked.** Checkpoints cover files Claude edited in this session. If you changed a file by hand in your editor, rewind does not know about it. Nor does it know about a second Claude session editing the same repo, unless it happens to touch the same files.
@@ -143,7 +143,7 @@ The limitations are not edge cases. They are the difference between a seatbelt a
 
 **How do I rewind?** Run `/rewind`, or press `Esc` twice on an empty prompt. Pick a prompt from the list, then choose to restore code, conversation, or both.
 
-**What does rewind not restore?** Anything Claude changed with a bash command (`rm`, `mv`, scripts), anything with an effect outside your machine (pushes, deploys, API calls), files you edited yourself, edits made by a subagent, and changes from other concurrent sessions.
+**What does rewind not restore?** Files Claude changed only with a bash command (`rm`, `mv`, scripts), anything with an effect outside your machine (pushes, deploys, API calls), files you edited yourself, edits made by a subagent, and changes from other concurrent sessions.
 
 **Is this a replacement for git?** No. Checkpoints are local undo: session-scoped, machine-local, expiring about 30 days after the last snapshot by default, covering only Claude's file edits. Git is permanent, shareable history. Commit before risky work and you have both.
 

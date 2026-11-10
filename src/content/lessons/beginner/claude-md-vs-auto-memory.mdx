@@ -6,7 +6,7 @@ type: "resolver"
 order: 2
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B3.1"]
 teaches: ["auto-memory", "claude-md", "memory-audit"]
 references: ["B3.1", "B2.2"]
@@ -100,7 +100,7 @@ Auto memory is on by default and you can turn it off: toggle it in `/memory`, se
 
 **Environment:** whichever repository you have actually used Claude in the most. This only reads and edits memory files, never your code.
 
-1. Start Claude and run `/context`. Check the list under **Memory files** for which `CLAUDE.md` files actually loaded. If one you expected is missing, that is why its rules were being ignored.
+1. Start Claude and run `/context all`. Check the list under **Memory files** for which `CLAUDE.md` files actually loaded. If one you expected is missing, that is why its rules were being ignored.
 2. Run `/memory` and open the auto memory folder. Read `MEMORY.md`.
 3. Find one entry that is stale, wrong, or that you would be embarrassed to have a teammate inherit. Delete it.
 4. Find one entry that *should* be a team fact. Move it: ask Claude to *"add this to CLAUDE.md,"* then delete the auto memory version so the two cannot disagree.
@@ -119,7 +119,7 @@ Auto memory is on by default and you can turn it off: toggle it in `/memory`, se
 
 **What happens when the two disagree?** Both load as context and Claude may pick either. Resolve it yourself by editing the source of the wrong one.
 
-**How do I inspect or delete what Claude saved?** `/memory` lists your memory file locations and opens the auto memory folder, and `/context` shows which files actually loaded this session. Everything is plain markdown you can read, edit, or delete.
+**How do I inspect or delete what Claude saved?** `/memory` lists your memory file locations and opens the auto memory folder, and `/context all` shows which files actually loaded this session. Everything is plain markdown you can read, edit, or delete.
 
 **Does auto memory bloat my context like a long `CLAUDE.md`?** Much less. Only the first 200 lines (or 25KB) of `MEMORY.md` load at startup; topic files are read on demand. `CLAUDE.md` loads in full.
 

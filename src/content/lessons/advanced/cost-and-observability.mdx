@@ -6,7 +6,7 @@ type: "milestone"
 order: 5
 estimatedMinutes: 50
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-27"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["A7.4"]
 teaches: ["otel-dashboard", "usage-analysis", "cost-optimization-pass"]
 references: ["A4.1", "A4.2", "A4.3", "A7.6"]
@@ -128,7 +128,7 @@ Prometheus keeps fifteen days of data, so a week fits with room to compare it ag
 
 ### 2. Point every session at it
 
-Add the telemetry variables to the `env` block of PulseBoard's `.claude/settings.local.json`, so every session in the repository exports without anyone remembering to:
+Add the telemetry variables to the `env` block of your user settings, `~/.claude/settings.json`, so every session you start exports without anyone remembering to:
 
 ```json
 {
@@ -143,6 +143,8 @@ Add the telemetry variables to the `env` block of PulseBoard's `.claude/settings
 ```
 
 `OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE` is the one line specific to this stack. Claude Code exports delta values by default, and Prometheus expects counters that only grow, so the variable switches Claude Code to cumulative values.
+
+Repository settings will not work for this. Claude Code ignores the variables that turn telemetry on or choose where it goes when they come from a project's `.claude/settings.json` or `.claude/settings.local.json`, so a checked-out repository cannot export your sessions anywhere. User settings reach every session on the machine, so sessions in your other repositories show up on the dashboard too.
 
 Start a session, do a few turns of work, wait a minute, and open Prometheus at `http://localhost:9090`. Querying `claude_code_cost_usage_USD_total` should return series labelled with `model`, `query_source`, and `session_id`. If your collector version names the metrics differently, type `claude_code` into the query box and use the names it suggests throughout the rest of this milestone.
 
@@ -230,7 +232,7 @@ Prompt cache (main) lines from /usage: hit %, misses, named causes
 Three readings matter most for the pass that follows:
 
 - A workload whose cache read share sits well below the others is paying to reprocess its prefix. The `/usage` lines say why for interactive sessions, and <LessonLink id="A4.1" /> names the usual causes: a model or effort switch mid-session, compaction after a long break, or tools loading into the prefix.
-- A large subagent share on the session's own model is the case <LessonLink id="A4.2" /> assigns to `haiku` through `CLAUDE_CODE_SUBAGENT_MODEL`.
+- A large subagent share on the session's own model is the case <LessonLink id="A4.2" /> assigns to `haiku` through `CLAUDE_CODE_SUBAGENT_MODEL`. On its own that variable leaves the built-in Explore and Plan subagents on the session's model, so a pass that moves Explore's work also needs `CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1`.
 - A judgment-light workload on an expensive model, such as the `chores` runs if you had put them on `opus`, is spend buying nothing.
 
 ### 6. Write the optimization pass
@@ -240,7 +242,8 @@ Add the pass under the week's table. Each change gets four lines, and the projec
 ```markdown
 ### Optimization pass
 
-1. Change: run subagents on haiku (CLAUDE_CODE_SUBAGENT_MODEL=haiku in settings)
+1. Change: run subagents on haiku (CLAUDE_CODE_SUBAGENT_MODEL=haiku and
+   CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1 in settings)
    Evidence: subagents were N% of spend; explore used X input, Y output,
    Z cache-read, W cache-write tokens on sonnet this week
    Projected weekly saving: X × (sonnet input − haiku input)

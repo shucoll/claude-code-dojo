@@ -6,7 +6,7 @@ type: "core"
 order: 2
 estimatedMinutes: 9
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I5.1"]
 references: ["I1.3", "I1.4"]
 docsSources: ["https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/mcp-quickstart", "https://code.claude.com/docs/en/managed-mcp"]
@@ -78,6 +78,8 @@ The first time Claude Code sees a project-scoped server it asks you to approve i
 ```bash
 claude mcp reset-project-choices
 ```
+
+A `claude -p` or Agent SDK run cannot show that prompt, so it loads project-scoped servers without asking. List a server in `disabledMcpjsonServers` to keep it out of every run.
 
 `.mcp.json` is read at session start, so edits need a restart before they take effect.
 

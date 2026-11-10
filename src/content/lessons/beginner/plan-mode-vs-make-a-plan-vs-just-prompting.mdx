@@ -6,7 +6,7 @@ type: "resolver"
 order: 5
 estimatedMinutes: 10
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-17"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B3.3"]
 teaches: ["plan-mode", "prompting-strategy", "ceremony-cost"]
 references: ["B3.3", "B2.2"]
@@ -21,7 +21,7 @@ Three things produce something that looks like a plan.
 
 You can enter **plan mode** with `Shift+Tab`, as in <LessonLink id="B3.3" />, and Claude researches and proposes without touching your source.
 
-You can stay in Manual mode and simply **ask for a plan**: *"before you change anything, tell me what you would do."* Claude tells you.
+You can work in Manual mode and simply **ask for a plan**: *"before you change anything, tell me what you would do."* Claude tells you.
 
 Or you can **just prompt**, describe the change, and let Claude do it while you read the diff.
 
@@ -37,7 +37,7 @@ The difference between the three is not what they produce. It is **what stops Cl
 | **Can Claude edit source?** | **No.** Structurally prevented | Yes, if it decides to | Yes, that is the idea |
 | **Guarantee** | Enforced by the mode | Advisory. It is a request | None |
 | **Approval step** | Explicit: you approve, then it executes | None. It just continues | None |
-| **Context cost** | Highest: exploration and the plan both fill the window | Moderate | Lowest |
+| **Context cost** | Highest: the research summary and the plan both land in the window | Moderate | Lowest |
 | **Time cost when all goes well** | An extra read-and-approve cycle | A paragraph to read | Nothing |
 | **What you review** | A plan, then each diff | A plan, then each diff | The diff |
 | **Best for** | Unfamiliar code, many files, expensive mistakes | Familiar code, you want the route first | Small, clear, well-understood changes |
@@ -94,7 +94,7 @@ Plan mode, and slowly. It is not reversible by any tool in this course. Everythi
 **Where plan mode actively slows you down.**
 You are adding log lines to trace a bug. You enter plan mode out of good habit. Claude explores the module, writes a plan describing where it will add three log statements, and asks you to approve it. You approve. It adds three log statements.
 
-You spent an extra cycle, filled your context window with exploration you did not need (<LessonLink id="B2.2" />), and learned nothing. Worse, the habit is self-reinforcing: it *felt* careful. Ceremony is not rigor. Rigor is spending the ceremony where the risk actually is, and skipping it where it is not.
+You spent an extra cycle, filled your context window with a plan you did not need (<LessonLink id="B2.2" />), and learned nothing. Worse, the habit is self-reinforcing: it *felt* careful. Ceremony is not rigor. Rigor is spending the ceremony where the risk actually is, and skipping it where it is not.
 
 **One rung above plan mode.**
 When a feature is large enough that even a plan is thin, ask Claude to interview you first, write the result to a spec file, then start a **fresh session** to implement it against that spec. You get a clean context window for implementation and a written artifact to check against. That is beyond this module, but the ladder does keep going.

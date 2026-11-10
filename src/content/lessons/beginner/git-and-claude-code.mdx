@@ -6,7 +6,7 @@ type: "core"
 order: 3
 estimatedMinutes: 11
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-15"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B2.1"]
 teaches: ["git-with-claude", "commits-branches-prs", "git-recovery"]
 references: ["B3.4", "B4.2"]
@@ -141,7 +141,7 @@ The cost here is not tokens, it is trust. Claude committing is cheap; Claude com
 
 **What if it commits something wrong?** Fix it with git, not `/rewind`. Amend or soft-reset a local commit; `git revert` one that's already pushed. `/rewind` can't touch committed history, per <LessonLink id="B3.4" />.
 
-**Will it push without asking?** It depends on the mode, per <LessonLink id="B3.3" />. Manual mode prompts. Auto mode, where Pro, Max, and Team sessions start, lets a push to the repo you're working in through once the classifier screens it, and blocks force pushes and pushes that would send secrets out. Either way, read what is about to go up, and add an ask rule for `Bash(git push *)` if you want a prompt every time.
+**Will it push without asking?** It depends on the mode, per <LessonLink id="B3.3" />. Manual mode prompts. Auto mode, the built-in starting mode for interactive terminal and VS Code sessions, lets a push to the repo you're working in through once the classifier screens it, and blocks force pushes and pushes that would send secrets out. Either way, read what is about to go up, and add an ask rule for `Bash(git push *)` if you want a prompt every time.
 
 ## Where next
 

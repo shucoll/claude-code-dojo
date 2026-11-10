@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 15
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["B1.4"]
 teaches: ["first-session", "diff-review", "interrupting", "at-mentions", "turns"]
 references: ["B1.1", "B1.3"]
@@ -37,7 +37,7 @@ claude
 
 You will see the prompt with the model and working directory shown above it. If a trust dialog appears, that is the first gate from <LessonLink id="B1.3" />: it is asking permission to work in this folder. Accept it.
 
-Then look at the status bar under the prompt. On Pro, Max, and Team plans a terminal session now starts in **auto mode**, where a classifier approves most actions instead of you, so edits land without stopping. You want the stop for this lesson, so press `Shift+Tab` until the status bar reads `⏸ manual mode on`.
+Then look at the status bar under the prompt. A terminal session now starts in **auto mode** on every plan, where a classifier approves most actions instead of you, so edits land without stopping. You want the stop for this lesson, so press `Shift+Tab` until the status bar reads `⏸ manual mode on`.
 
 ## Move 1: Ask before you touch anything
 
@@ -129,7 +129,7 @@ That `!` runs a shell command directly and drops its output into the session (yo
 
 **Can I give it a URL or a screenshot?** Yes. Paste a URL and Claude can fetch it (it asks first). Paste an image with `Ctrl+V` (`Cmd+V` in iTerm2, `Alt+V` in WSL) and reference the `[Image #N]` chip it inserts.
 
-**Claude edited the file without asking. What happened?** Your session is in auto mode, the starting mode on Pro, Max, and Team plans, where a classifier screens actions instead of you. Press `Shift+Tab` once to drop into Manual mode and the prompts come back. <LessonLink id="B3.3" /> covers the full dial.
+**Claude edited the file without asking. What happened?** Your session is in auto mode, the starting mode for terminal sessions, where a classifier screens actions instead of you. Press `Shift+Tab` once to drop into Manual mode and the prompts come back. <LessonLink id="B3.3" /> covers the full dial.
 
 **How do I know what changed?** Read the diff Claude shows before you accept, and confirm afterward by asking "what did you change?" or running `! git diff`. Never accept an edit you have not looked at.
 

@@ -6,7 +6,7 @@ type: "milestone"
 order: 2
 estimatedMinutes: 25
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 teaches: ["mcp-project-scope", "mcp-vs-cli-in-practice"]
 prerequisites: ["I8.1"]
 references: ["I5.1", "I5.2", "I5.4"]
@@ -96,10 +96,12 @@ The tool call in the output is labelled `github` and its name carries the `mcp__
 
 Claude can now see the repo, so put it to work on the skeleton. This mirrors the scaffold discipline you already know: a prompt with a clear finish line, checked against `CLAUDE.md`. The finish line is a summary view built from live GitHub data, which proves the app's own runtime path works end to end.
 
+Write `.env` yourself before you send the prompt, with your token as `GITHUB_TOKEN` and the repository to chart as `GITHUB_REPO`. Point `GITHUB_REPO` at a repository with real activity so the dashboard has something to show; your own busiest project, or any public repo you follow, works. <LessonLink id="I8.1">I8.1</LessonLink>'s deny rule blocks Claude from reading or writing `.env`, and its `.gitignore` keeps the file on your machine.
+
 <WhenLang is="javascript">
 
 ```prompt
-Read CLAUDE.md. Scaffold the project it describes: an Express server in server.js, a data.js that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the environment and fetches open-issue and open-PR counts through @octokit/rest, caching them in a SQLite table via better-sqlite3. Add a GET /api/summary route that returns those counts, a GET /health route, a public/index.html that shows the two numbers, package.json with the start and test scripts, and one test in tests/ asserting /api/summary returns the two fields. Put GITHUB_TOKEN and GITHUB_REPO in .env. Then run the test.
+Read CLAUDE.md. Scaffold the project it describes: an Express server in server.js, a data.js that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the environment and fetches open-issue and open-PR counts through @octokit/rest, caching them in a SQLite table via better-sqlite3. Add a GET /api/summary route that returns those counts, a GET /health route, a public/index.html that shows the two numbers, package.json with the start and test scripts, and one test in tests/ asserting /api/summary returns the two fields. Load GITHUB_TOKEN and GITHUB_REPO from the .env file I have already written. Then run the test.
 ```
 
 </WhenLang>
@@ -107,12 +109,10 @@ Read CLAUDE.md. Scaffold the project it describes: an Express server in server.j
 <WhenLang is="python">
 
 ```prompt
-Read CLAUDE.md. Scaffold the project it describes: a Flask app in app.py, a data.py that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the environment and fetches open-issue and open-PR counts through the GitHub REST API using requests, caching them in a SQLite table. Add a GET /api/summary route that returns those counts, a GET /health route, a public/index.html that shows the two numbers, a requirements.txt, and one test in tests/ asserting /api/summary returns the two fields. Put GITHUB_TOKEN and GITHUB_REPO in .env. Then run the test.
+Read CLAUDE.md. Scaffold the project it describes: a Flask app in app.py, a data.py that reads GITHUB_TOKEN and a GITHUB_REPO (owner/name) from the environment and fetches open-issue and open-PR counts through the GitHub REST API using requests, caching them in a SQLite table. Add a GET /api/summary route that returns those counts, a GET /health route, a public/index.html that shows the two numbers, a requirements.txt, and one test in tests/ asserting /api/summary returns the two fields. Load GITHUB_TOKEN and GITHUB_REPO from the .env file I have already written. Then run the test.
 ```
 
 </WhenLang>
-
-Point `GITHUB_REPO` at a repository with real activity so the dashboard has something to show; your own busiest project, or any public repo you follow, works. The `.env` Claude writes holds the token and is already covered by <LessonLink id="I8.1">I8.1</LessonLink>'s deny rule and `.gitignore`, so it stays on your machine.
 
 Watch the data-access rule from <LessonLink id="I8.1">I8.1</LessonLink> do its job here. When Claude opens the data layer, the scoped rule loads and the fetch lands in `data.js` or `data.py`, not in a route. Then boot it and confirm real numbers:
 

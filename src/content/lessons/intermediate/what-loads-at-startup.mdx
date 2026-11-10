@@ -6,7 +6,7 @@ type: "core"
 order: 1
 estimatedMinutes: 12
 volatility: "evolving"
-verifiedAgainstDocsAt: "2026-09-14"
+verifiedAgainstDocsAt: "2026-11-09"
 prerequisites: ["I1.3"]
 references: ["B2.2"]
 docsSources: ["https://code.claude.com/docs/en/context-window", "https://code.claude.com/docs/en/costs", "https://code.claude.com/docs/en/mcp", "https://code.claude.com/docs/en/features-overview"]
@@ -31,7 +31,7 @@ Everything in <LessonLink id="I1.3">the `.claude` directory</LessonLink> you tou
 
 Two things make this worth understanding, and neither is the one people expect.
 
-**It is smaller than you think.** A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it. Window size depends on the model: Fable models, Sonnet 5, Opus 4.6 and later, and Sonnet 4.6 run a 1 million token window, where that same startup is under 1%. The percentages in this lesson assume 200,000, so they are the conservative reading.
+**It is smaller than you think.** A representative startup is around 7,850 tokens against a 200,000-token window: under 4%. Four file reads during a single bug investigation cost about as much. If you have been carrying a vague worry that your configuration is eating your context, the numbers do not support it. Window size depends on the model: Fable models, Sonnet 5 and later, Haiku 5.5, Opus 4.6 and later, and Sonnet 4.6 support a 1 million token window, where that same startup is under 1%. The percentages in this lesson assume 200,000, so they are the conservative reading.
 
 **It is the part you chose.** File reads are Claude's decisions, made fresh each time. Startup is your decisions, made once and repeated forever. A `CLAUDE.md` line you wrote in March is in context right now, shaping a task it has nothing to do with.
 
@@ -67,9 +67,9 @@ If you have been rationing your MCP connections, you were following a rule whose
 
 <ChartEmbed id="context-cost-ledger" />
 
-Two thirds of startup is the system prompt and `CLAUDE.md`. The system prompt you cannot touch, which leaves exactly one line worth your attention, and it is the one you write.
+Three quarters of startup is the system prompt and `CLAUDE.md`. The system prompt you cannot touch, which leaves exactly one line worth your attention, and it is the one you write.
 
-Skills and MCP servers, the two features people most expect to be expensive, are the two smallest entries on the board.
+Skills and MCP servers, the two features people most expect to be expensive, add up to less than a tenth of startup.
 
 ## Auditing your own session
 
@@ -85,7 +85,7 @@ In a fresh session, before typing anything else:
 /context
 ```
 
-`/context` breaks down everything occupying the window right now, by category: system prompt, memory files, skills, custom subagents (with the source each loaded from), MCP tools, and conversation messages. In a session where you have not spoken yet, the last category is empty and everything else is your startup.
+`/context` breaks down everything occupying the window right now, by category: system prompt, memory files, skills, custom subagents (with the source each loaded from), MCP tools, and conversation messages. In a session where you have not spoken yet, the last category is empty and everything else is your startup. In fullscreen rendering, `/context` collapses the per-item breakdown; run `/context all` to expand it.
 
 Read it against the ledger and ask three questions:
 
@@ -103,7 +103,7 @@ Then compare against a session that has done some work. Read four or five files 
 
 **Putting a procedure in `CLAUDE.md` instead of a skill.** The symptom is a startup cost that grows every time you teach Claude something new. A skill costs one line until invoked; the same text in `CLAUDE.md` costs its full length in every session, including the ones where it is irrelevant.
 
-**Expecting the skill listing to survive `/compact`.** It does not. Alone among the startup content, the skill index is not re-injected after compaction, and only skills you actually invoked are preserved. A long session that compacts twice is a session where Claude has quietly stopped knowing what skills it has.
+**Expecting invoked skills to survive `/compact` whole.** The skill listing is rebuilt and re-injected after compaction (Claude Code v2.1.304 or later), but the bodies of skills you invoked come back capped at 5,000 tokens each and 25,000 in total, oldest dropped first. A long session that compacts after several large skills is a session where Claude holds only the start of some of them.
 
 **Never running `/context`.** The symptom is arguing from a hunch. Every claim in this lesson is checkable in about ten seconds inside your own project, where the numbers are yours rather than representative.
 
@@ -135,7 +135,7 @@ Read the files involved in how authentication works in this project. Don't chang
 
 **Are these token numbers exact?** No, and they are not meant to be. They are the official docs' own illustrative figures, and yours will differ with your setup. The proportions are the durable part: system prompt and `CLAUDE.md` dominate, listings are cheap, and everything after your first prompt dwarfs all of it.
 
-**Does startup reload after `/compact`?** Yes, with one exception. The system prompt, `CLAUDE.md`, memory, and MCP tools all come back automatically. The skill listing does not.
+**Does startup reload after `/compact`?** Yes. The system prompt, `CLAUDE.md`, memory, and MCP tools all come back automatically, and on Claude Code v2.1.304 or later so does the skill listing.
 
 ## Where next
 
